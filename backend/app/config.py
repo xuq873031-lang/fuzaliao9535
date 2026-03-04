@@ -13,7 +13,12 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [x.strip() for x in self.frontend_origins.split(",") if x.strip()]
+        # 始终包含生产前端域名，避免环境变量遗漏导致跨域失败
+        required_origin = "https://xuq873031-lang.github.io"
+        origins = [x.strip() for x in self.frontend_origins.split(",") if x.strip()]
+        if required_origin not in origins:
+            origins.append(required_origin)
+        return origins
 
 
 settings = Settings()

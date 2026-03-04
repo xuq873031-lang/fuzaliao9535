@@ -1,13 +1,12 @@
 // ============================
-// 全局状态与常量
+// 真实后端对接版（FastAPI + WebSocket）
 // ============================
+
 const STORAGE_KEYS = {
-  users: 'mock_users',
-  token: 'token',
-  currentUserId: 'mock_current_user_id',
-  conversations: 'mock_conversations',
-  theme: 'mock_theme'
+  token: 'chatwave_token',
+  theme: 'chatwave_theme'
 };
+const DEFAULT_API_BASE = 'https://web-production-f9619e.up.railway.app';
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -15,38 +14,53 @@ const DEFAULT_AVATAR =
 
 const EMOJIS = ['😀', '😁', '😂', '😊', '😍', '😎', '🤔', '😭', '👍', '🎉', '❤️', '🔥'];
 
-const MOCK_SEARCH_POOL = [
-  { username: 'alice', email: 'alice@example.com' },
-  { username: 'bob', email: 'bob@example.com' },
-  { username: 'charlie', email: 'charlie@example.com' },
-  { username: 'david', email: 'david@example.com' },
-  { username: 'eva', email: 'eva@example.com' }
-];
-
 let appState = {
   currentUser: null,
-  users: [],
+  friends: [],
+  userMap: {},
   conversations: [],
   activeConversationId: null,
   currentView: 'messagesView',
-  messageInterval: null,
-  editingMessageId: null
+  editingMessageId: null,
+  ws: null,
+  wsReconnectTimer: null,
+  wsReconnectTried: false,
+  pendingAvatarBase64: null,
+  loadingMore: false
 };
 
 // ============================
-// 工具函数（本地存储 + 时间格式化）
+// 工具方法
 // ============================
-function readJSON(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch (e) {
-    return fallback;
-  }
+function getToken() {
+  return localStorage.getItem(STORAGE_KEYS.token);
 }
 
-function writeJSON(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+function setToken(token) {
+  localStorage.setItem(STORAGE_KEYS.token, token);
+}
+
+function clearToken() {
+  localStorage.removeItem(STORAGE_KEYS.token);
+}
+
+function getApiBase() {
+  return (localStorage.getItem('chat_api_base') || DEFAULT_API_BASE).replace(/\/$/, '');
+}
+
+function showLoginBy401(reason) {
+  console.warn('鉴权失败，返回登录页:', reason);
+  clearToken();
+  showAuth();
+  switchAuthPage('login');
+}
+
+function normalizePhone(input) {
+  return (input || '').replace(/[^\d]/g, '');
+}
+
+function phoneToCompatEmail(phone) {
+  return `${phone}@phone.local`;
 }
 
 function formatTime(ts) {
@@ -54,146 +68,27 @@ function formatTime(ts) {
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
-function createId(prefix = 'id') {
-  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`;
-}
-
-function saveUsers() {
-  writeJSON(STORAGE_KEYS.users, appState.users);
-}
-
-function saveConversations() {
-  writeJSON(STORAGE_KEYS.conversations, appState.conversations);
-}
-
-function persistAuth(user) {
-  // TODO: 后端登录/注册
-  // fetch('http://localhost:8000/api/login', { method: 'POST', body: JSON.stringify(data) })
-  // 现在用 mock: localStorage 存 token + 当前用户 ID
-  localStorage.setItem(STORAGE_KEYS.token, `fake-token-${user.id}`);
-  localStorage.setItem(STORAGE_KEYS.currentUserId, user.id);
-}
-
-function clearAuth() {
-  localStorage.removeItem(STORAGE_KEYS.token);
-  localStorage.removeItem(STORAGE_KEYS.currentUserId);
-}
-
-function getToken() {
-  return localStorage.getItem(STORAGE_KEYS.token);
-}
-
-function getCurrentUserId() {
-  return localStorage.getItem(STORAGE_KEYS.currentUserId);
-}
-
-function getOtherUserInPrivateConversation(conv) {
-  const uid = appState.currentUser.id;
-  return appState.users.find((u) => conv.members.includes(u.id) && u.id !== uid) || null;
-}
-
 function getUnreadTotal() {
   return appState.conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 }
 
-// ============================
-// 初始化 mock 数据
-// ============================
-function ensureMockData() {
-  const users = readJSON(STORAGE_KEYS.users, []);
-  const conversations = readJSON(STORAGE_KEYS.conversations, []);
-
-  if (!users.length) {
-    const seedUsers = [
-      {
-        id: 'u_demo',
-        username: 'demo',
-        email: 'demo@example.com',
-        password: '123456',
-        role: 'admin',
-        nickname: '演示用户',
-        signature: '欢迎来到 Mock Chat',
-        avatar: DEFAULT_AVATAR,
-        friends: ['u_alice', 'u_bob']
-      },
-      {
-        id: 'u_alice',
-        username: 'alice',
-        email: 'alice@example.com',
-        password: '123456',
-        role: 'member',
-        nickname: 'Alice',
-        signature: '保持热爱',
-        avatar: DEFAULT_AVATAR,
-        friends: ['u_demo'],
-        online: true
-      },
-      {
-        id: 'u_bob',
-        username: 'bob',
-        email: 'bob@example.com',
-        password: '123456',
-        role: 'member',
-        nickname: 'Bob',
-        signature: '代码改变世界',
-        avatar: DEFAULT_AVATAR,
-        friends: ['u_demo'],
-        online: false
-      }
-    ];
-
-    writeJSON(STORAGE_KEYS.users, seedUsers);
-  }
-
-  if (!conversations.length) {
-    const now = Date.now();
-    const seedConversations = [
-      {
-        id: 'c_demo_alice',
-        type: 'private',
-        name: '',
-        members: ['u_demo', 'u_alice'],
-        unreadCount: 1,
-        messages: [
-          { id: createId('m'), senderId: 'u_alice', text: 'Hi demo，今天写前端吗？', createdAt: now - 1000 * 60 * 45 },
-          { id: createId('m'), senderId: 'u_demo', text: '在写，先做个纯前端聊天。', createdAt: now - 1000 * 60 * 41 },
-          { id: createId('m'), senderId: 'u_alice', text: '不错，记得做响应式。', createdAt: now - 1000 * 60 * 38 }
-        ]
-      },
-      {
-        id: 'c_group_1',
-        type: 'group',
-        name: '前端交流群',
-        members: ['u_demo', 'u_alice', 'u_bob'],
-        unreadCount: 0,
-        messages: [
-          { id: createId('m'), senderId: 'u_bob', text: '大家晚上好！', createdAt: now - 1000 * 60 * 30 },
-          { id: createId('m'), senderId: 'u_demo', text: '晚上好，来讨论 Bootstrap 5。', createdAt: now - 1000 * 60 * 28 }
-        ]
-      }
-    ];
-
-    writeJSON(STORAGE_KEYS.conversations, seedConversations);
-  }
+function normalizeMessage(raw) {
+  return {
+    id: raw.id,
+    senderId: raw.sender_id,
+    text: raw.content,
+    createdAt: new Date(raw.created_at).getTime(),
+    updatedAt: raw.updated_at ? new Date(raw.updated_at).getTime() : null,
+    editedAt: raw.updated_at ? new Date(raw.updated_at).getTime() : null,
+    editedByAdmin: !!raw.edited_by_admin
+  };
 }
 
-function loadStateFromStorage() {
-  appState.users = readJSON(STORAGE_KEYS.users, []);
-  appState.users = appState.users.map((u) => ({ role: 'member', ...u }));
-  appState.conversations = readJSON(STORAGE_KEYS.conversations, []);
-
-  const uid = getCurrentUserId();
-  appState.currentUser = appState.users.find((u) => u.id === uid) || null;
-
-  if (appState.currentUser) {
-    const theme = localStorage.getItem(STORAGE_KEYS.theme) || 'light';
-    setTheme(theme);
-  }
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-bs-theme', theme);
+  localStorage.setItem(STORAGE_KEYS.theme, theme);
 }
 
-// ============================
-// 视图切换（登录页 / 主界面）
-// ============================
 function showAuth() {
   document.getElementById('authContainer').classList.remove('d-none');
   document.getElementById('mainContainer').classList.add('d-none');
@@ -224,83 +119,482 @@ function switchView(viewId) {
 }
 
 // ============================
-// 登录 / 注册逻辑（纯前端 mock）
+// API 请求层
+// ============================
+async function apiFetch(path, options = {}) {
+  const token = getToken();
+  const headers = { ...(options.headers || {}) };
+  const hasJsonBody = !!options.body && typeof options.body === 'string';
+  if (hasJsonBody && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${getApiBase()}${path}`, {
+    ...options,
+    headers
+  });
+
+  if (!res.ok) {
+    let detail = `请求失败(${res.status})`;
+    try {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const err = await res.json();
+        detail = err.detail || detail;
+      } else {
+        const txt = await res.text();
+        detail = txt || detail;
+      }
+    } catch (_) {
+      // ignore parse failure
+    }
+
+    if (res.status === 401) {
+      showLoginBy401(detail);
+    }
+    throw new Error(detail);
+  }
+
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return res.json();
+  return null;
+}
+
+async function apiLogin(phone, password) {
+  const normalizedPhone = normalizePhone(phone);
+  // 兼容当前后端：phone -> username
+  return apiFetch('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: normalizedPhone, password })
+  });
+}
+
+async function apiRegister(phone, password) {
+  const normalizedPhone = normalizePhone(phone);
+  // 兼容当前后端：需 username+email+password
+  return apiFetch('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: normalizedPhone,
+      email: phoneToCompatEmail(normalizedPhone),
+      password
+    })
+  });
+}
+
+async function apiGetMe() {
+  return apiFetch('/api/users/me');
+}
+
+async function apiUpdateMe(payload) {
+  return apiFetch('/api/users/me', {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+async function apiSearchUsers(keyword) {
+  return apiFetch(`/api/users/search?q=${encodeURIComponent(keyword)}`);
+}
+
+async function apiGetFriends() {
+  return apiFetch('/api/friends');
+}
+
+async function apiAddFriend(friendId) {
+  return apiFetch(`/api/friends/${friendId}`, { method: 'POST' });
+}
+
+async function apiRemoveFriend(friendId) {
+  return apiFetch(`/api/friends/${friendId}`, { method: 'DELETE' });
+}
+
+async function apiGetOnlinePresence() {
+  return apiFetch('/api/presence/online');
+}
+
+async function apiGetUserPresence(userId) {
+  return apiFetch(`/api/presence/${userId}`);
+}
+
+async function apiGetRooms() {
+  return apiFetch('/api/rooms');
+}
+
+async function apiCreateRoom(name, memberIds) {
+  return apiFetch('/api/rooms', {
+    method: 'POST',
+    body: JSON.stringify({ name, member_ids: memberIds })
+  });
+}
+
+async function apiGetRoomMessages(roomId, limit = 50) {
+  return apiFetch(`/api/rooms/${roomId}/messages?limit=${limit}`);
+}
+
+async function apiGetRoomMessagesBefore(roomId, beforeId, limit = 50) {
+  return apiFetch(`/api/rooms/${roomId}/messages?before_id=${beforeId}&limit=${limit}`);
+}
+
+async function apiGetUnreadCounts() {
+  return apiFetch('/api/rooms/unread');
+}
+
+async function apiMarkRoomRead(roomId, lastReadMessageId) {
+  return apiFetch(`/api/rooms/${roomId}/read`, {
+    method: 'POST',
+    body: JSON.stringify({ last_read_message_id: lastReadMessageId || null })
+  });
+}
+
+async function apiEditMessage(messageId, content) {
+  return apiFetch(`/api/messages/${messageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content })
+  });
+}
+
+function apiSendMessage(roomId, content) {
+  sendWsMessage({
+    action: 'send_message',
+    room_id: roomId,
+    content
+  });
+  return Promise.resolve({ ok: true });
+}
+
+// ============================
+// 数据同步与转换
+// ============================
+function mergeUserToMap(user) {
+  if (!user) return;
+  appState.userMap[user.id] = {
+    id: user.id,
+    username: user.username,
+    nickname: user.nickname || user.username,
+    email: user.email || '',
+    avatar: user.avatar_base64 || DEFAULT_AVATAR,
+    online: !!user.is_online,
+    role: user.role || 'member'
+  };
+}
+
+function roomToConversation(room) {
+  return {
+    id: room.id,
+    type: room.type || room.room_type || 'group',
+    name: room.name,
+    title: room.title || room.name,
+    members: room.member_ids || [],
+    unreadCount: 0,
+    messages: [],
+    createdBy: room.created_by,
+    memberCount: room.member_count || (room.member_ids || []).length,
+    hasMore: true
+  };
+}
+
+async function refreshFriends() {
+  const friends = await apiGetFriends();
+  appState.friends = friends.map((f) => ({
+    id: f.id,
+    username: f.username,
+    nickname: f.nickname || f.username,
+    online: !!f.is_online,
+    avatar: appState.userMap[f.id]?.avatar || DEFAULT_AVATAR
+  }));
+
+  appState.friends.forEach((f) => {
+    mergeUserToMap({
+      id: f.id,
+      username: f.username,
+      nickname: f.nickname,
+      email: '',
+      avatar_base64: f.avatar,
+      is_online: f.online,
+      role: 'member'
+    });
+  });
+}
+
+async function refreshPresenceOnlineList() {
+  const onlineList = await apiGetOnlinePresence();
+  const onlineSet = new Set(onlineList.map((x) => x.id));
+
+  appState.friends = appState.friends.map((f) => ({ ...f, online: onlineSet.has(f.id) }));
+  Object.keys(appState.userMap).forEach((idStr) => {
+    const uid = Number(idStr);
+    appState.userMap[uid].online = onlineSet.has(uid);
+  });
+}
+
+async function refreshRoomsAndMessages() {
+  const rooms = await apiGetRooms();
+  appState.conversations = rooms.map(roomToConversation);
+
+  await Promise.all(
+    appState.conversations.map(async (conv) => {
+      const msgs = await apiGetRoomMessages(conv.id, 50);
+      // 后端默认倒序（新->旧），前端显示转换为正序（旧->新）
+      conv.messages = msgs.map(normalizeMessage).reverse();
+      conv.hasMore = msgs.length === 50;
+    })
+  );
+
+  // 默认选中最近有消息的会话
+  const sorted = [...appState.conversations].sort((a, b) => {
+    const ta = a.messages.length ? a.messages[a.messages.length - 1].createdAt : 0;
+    const tb = b.messages.length ? b.messages[b.messages.length - 1].createdAt : 0;
+    return tb - ta;
+  });
+
+  if (!appState.activeConversationId && sorted.length) {
+    appState.activeConversationId = sorted[0].id;
+  }
+}
+
+async function refreshUnreadCounts() {
+  const items = await apiGetUnreadCounts();
+  const map = new Map(items.map((x) => [x.room_id, x.unread_count]));
+  appState.conversations.forEach((conv) => {
+    conv.unreadCount = map.get(conv.id) || 0;
+  });
+}
+
+function getVisibleConversations() {
+  return appState.conversations;
+}
+
+function findConversationById(roomId) {
+  return appState.conversations.find((c) => c.id === roomId);
+}
+
+function getOtherUserInPrivateConversation(conv) {
+  const uid = appState.currentUser.id;
+  const otherId = conv.members.find((id) => id !== uid);
+  if (!otherId) return null;
+  return appState.userMap[otherId] || appState.friends.find((f) => f.id === otherId) || null;
+}
+
+function getConversationTitle(conv) {
+  if (conv.type === 'group') return conv.title || conv.name;
+  const other = getOtherUserInPrivateConversation(conv);
+  return other ? (other.nickname || other.username) : conv.title || conv.name || '私聊';
+}
+
+// ============================
+// WebSocket 实时连接
+// ============================
+function connectWebSocket() {
+  const token = getToken();
+  if (!token) return;
+
+  if (appState.ws) {
+    // 主动重连时避免触发旧连接 onclose 的自动重连逻辑
+    appState.ws.onclose = null;
+    appState.ws.close();
+    appState.ws = null;
+  }
+
+  const apiBase = getApiBase();
+  const wsBase = apiBase.replace('http://', 'ws://').replace('https://', 'wss://');
+  const wsUrl = `${wsBase}/ws?token=${encodeURIComponent(token)}`;
+  const ws = new WebSocket(wsUrl);
+  appState.ws = ws;
+
+  ws.onopen = () => {
+    console.log('[WS] connected');
+    appState.wsReconnectTried = false;
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handleWsEvent(data);
+    } catch (err) {
+      console.error('[WS] parse error', err);
+    }
+  };
+
+  ws.onclose = () => {
+    console.warn('[WS] closed');
+    appState.ws = null;
+    // 仅自动重连一次
+    if (!appState.wsReconnectTried && appState.currentUser && getToken()) {
+      appState.wsReconnectTried = true;
+      if (appState.wsReconnectTimer) clearTimeout(appState.wsReconnectTimer);
+      appState.wsReconnectTimer = setTimeout(() => {
+        console.warn('[WS] reconnect once');
+        connectWebSocket();
+      }, 2000);
+    }
+  };
+
+  ws.onerror = (err) => {
+    console.error('[WS] error', err);
+  };
+}
+
+function handleWsEvent(evt) {
+  if (evt.type === 'connected') return;
+
+  if (evt.type === 'presence') {
+    const uid = Number(evt.user_id);
+    if (!Number.isNaN(uid)) {
+      if (appState.userMap[uid]) appState.userMap[uid].online = !!evt.online;
+      appState.friends = appState.friends.map((f) => (f.id === uid ? { ...f, online: !!evt.online } : f));
+      renderFriendList();
+      renderMessages();
+    }
+    return;
+  }
+
+  if (evt.type === 'unread_update') {
+    const roomId = Number(evt.room_id);
+    const conv = findConversationById(roomId);
+    if (conv) {
+      conv.unreadCount = Number(evt.unread_count || 0);
+      renderConversationList();
+      updateUnreadBadges();
+    }
+    return;
+  }
+
+  if (evt.type === 'read_receipt') {
+    // 可选事件：当前版本不展示“谁已读到哪里”，保留入口以便后续扩展
+    return;
+  }
+
+  if (evt.type === 'new_message') {
+    const msg = normalizeMessage(evt.payload);
+    const conv = findConversationById(msg.room_id);
+    if (!conv) return;
+
+    const exists = conv.messages.some((m) => m.id === msg.id);
+    if (!exists) conv.messages.push(msg);
+
+    const isCurrent = appState.activeConversationId === conv.id && appState.currentView === 'messagesView';
+    const isFromOther = msg.senderId !== appState.currentUser.id;
+
+    if (!isCurrent && isFromOther) {
+      conv.unreadCount = (conv.unreadCount || 0) + 1;
+      const sender = appState.userMap[msg.senderId];
+      notifyMessage(sender?.nickname || sender?.username || '新消息', msg.text);
+    }
+
+    renderConversationList();
+    if (appState.activeConversationId === conv.id) renderMessages();
+    updateUnreadBadges();
+    return;
+  }
+
+  if (evt.type === 'message_edited') {
+    const msg = normalizeMessage(evt.payload);
+    const conv = findConversationById(msg.room_id);
+    if (!conv) return;
+
+    const target = conv.messages.find((m) => m.id === msg.id);
+    if (target) {
+      target.text = msg.text;
+      target.updatedAt = msg.updatedAt;
+      target.editedAt = msg.editedAt;
+      target.editedByAdmin = msg.editedByAdmin;
+    }
+
+    renderConversationList();
+    if (appState.activeConversationId === conv.id) renderMessages();
+    return;
+  }
+
+  if (evt.type === 'error') {
+    console.warn('[WS] server error:', evt.payload?.message);
+  }
+}
+
+function sendWsMessage(payload) {
+  if (!appState.ws || appState.ws.readyState !== WebSocket.OPEN) {
+    alert('实时连接未建立，请稍后重试');
+    return;
+  }
+  appState.ws.send(JSON.stringify(payload));
+}
+
+// ============================
+// 登录/注册
 // ============================
 function bindAuthEvents() {
   document.getElementById('toRegisterBtn').addEventListener('click', () => switchAuthPage('register'));
   document.getElementById('toLoginBtn').addEventListener('click', () => switchAuthPage('login'));
 
-  document.getElementById('loginForm').addEventListener('submit', (e) => {
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const username = document.getElementById('loginUsername').value.trim();
+    const phone = document.getElementById('loginPhone').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
 
-    // TODO: 后端登录接口
-    // fetch('http://localhost:8000/api/login', { method: 'POST', body: JSON.stringify({ username, password }) })
-
-    const user = appState.users.find((u) => u.username === username && u.password === password);
-    if (!user) {
-      alert('用户名或密码错误');
-      return;
+    try {
+      const data = await apiLogin(phone, password);
+      setToken(data.token);
+      await bootstrapAfterLogin(data.user);
+    } catch (err) {
+      alert(`登录失败：${err.message}`);
     }
-
-    persistAuth(user);
-    loadStateFromStorage();
-    enterApp();
   });
 
-  document.getElementById('registerForm').addEventListener('submit', (e) => {
+  document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const username = document.getElementById('regUsername').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
+    const phone = document.getElementById('regPhone').value.trim();
     const password = document.getElementById('regPassword').value.trim();
-    const confirm = document.getElementById('regConfirmPassword').value.trim();
 
-    if (password !== confirm) {
-      alert('两次密码不一致');
-      return;
+    try {
+      const data = await apiRegister(phone, password);
+      setToken(data.token);
+      await bootstrapAfterLogin(data.user);
+    } catch (err) {
+      alert(`注册失败：${err.message}`);
     }
-
-    if (appState.users.some((u) => u.username === username)) {
-      alert('用户名已存在');
-      return;
-    }
-
-    const newUser = {
-      id: createId('u'),
-      username,
-      email,
-      password,
-      role: 'member',
-      nickname: username,
-      signature: '这个人很懒，还没有签名',
-      avatar: DEFAULT_AVATAR,
-      friends: [],
-      online: true
-    };
-
-    // TODO: 后端注册接口
-    // fetch('http://localhost:8000/api/register', { method: 'POST', body: JSON.stringify({ username, email, password }) })
-
-    appState.users.push(newUser);
-    saveUsers();
-
-    persistAuth(newUser);
-    loadStateFromStorage();
-    enterApp();
   });
 }
 
 function logout() {
-  clearAuth();
+  clearToken();
   appState.currentUser = null;
-  if (appState.messageInterval) clearInterval(appState.messageInterval);
+  appState.friends = [];
+  appState.userMap = {};
+  appState.conversations = [];
+  appState.activeConversationId = null;
+
+  if (appState.ws) {
+    appState.ws.onclose = null;
+    appState.ws.close();
+    appState.ws = null;
+  }
+  if (appState.wsReconnectTimer) {
+    clearTimeout(appState.wsReconnectTimer);
+    appState.wsReconnectTimer = null;
+  }
+
   showAuth();
   switchAuthPage('login');
 }
 
+async function removeFriend(friendId) {
+  if (!confirm('确定删除该好友吗？')) return;
+  try {
+    await apiRemoveFriend(friendId);
+    await refreshFriends();
+    await refreshRoomsAndMessages();
+    await refreshUnreadCounts();
+    renderFriendList();
+    renderConversationList();
+    renderMessages();
+    updateUnreadBadges();
+  } catch (err) {
+    alert(`删除好友失败：${err.message}`);
+  }
+}
+
 // ============================
-// 导航、个人资料、主题
+// 导航/主题/资料
 // ============================
 function bindNavigationEvents() {
   document.querySelectorAll('[data-view]').forEach((btn) => {
@@ -315,11 +609,6 @@ function bindNavigationEvents() {
   document.getElementById('mobileLogoutBtn').addEventListener('click', logout);
 }
 
-function setTheme(theme) {
-  document.documentElement.setAttribute('data-bs-theme', theme);
-  localStorage.setItem(STORAGE_KEYS.theme, theme);
-}
-
 function bindProfileEvents() {
   const avatarInput = document.getElementById('avatarInput');
   const profileAvatar = document.getElementById('profileAvatar');
@@ -331,35 +620,45 @@ function bindProfileEvents() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const base64 = ev.target.result;
+      appState.pendingAvatarBase64 = base64;
       profileAvatar.src = base64;
-      appState.currentUser.avatar = base64;
-
-      const idx = appState.users.findIndex((u) => u.id === appState.currentUser.id);
-      if (idx >= 0) {
-        appState.users[idx].avatar = base64;
-        saveUsers();
-      }
-
-      renderFriendList();
-      renderConversationList();
-      renderMessages();
     };
     reader.readAsDataURL(file);
   });
 
-  document.getElementById('saveProfileBtn').addEventListener('click', () => {
+  document.getElementById('saveProfileBtn').addEventListener('click', async () => {
     const nickname = document.getElementById('nicknameInput').value.trim();
     const signature = document.getElementById('signatureInput').value.trim();
 
-    appState.currentUser.nickname = nickname || appState.currentUser.username;
-    appState.currentUser.signature = signature || '这个人很懒，还没有签名';
+    try {
+      const updated = await apiUpdateMe({
+        nickname,
+        signature,
+        avatar_base64: appState.pendingAvatarBase64 || undefined
+      });
 
-    const idx = appState.users.findIndex((u) => u.id === appState.currentUser.id);
-    if (idx >= 0) appState.users[idx] = { ...appState.currentUser };
-    saveUsers();
+      mergeUserToMap(updated);
+      appState.currentUser = {
+        id: updated.id,
+        username: updated.username,
+        email: updated.email,
+        nickname: updated.nickname,
+        signature: updated.signature,
+        avatar: updated.avatar_base64 || DEFAULT_AVATAR,
+        role: updated.role,
+        online: updated.is_online
+      };
 
-    updateUserHeader();
-    alert('资料已保存（本地）');
+      appState.pendingAvatarBase64 = null;
+      updateUserHeader();
+      renderProfile();
+      renderFriendList();
+      renderConversationList();
+      renderMessages();
+      alert('资料已保存');
+    } catch (err) {
+      alert(`保存失败：${err.message}`);
+    }
   });
 
   document.getElementById('toggleThemeBtn').addEventListener('click', () => {
@@ -379,14 +678,14 @@ function updateUserHeader() {
 }
 
 // ============================
-// 好友系统（搜索 + 添加 + 列表）
+// 好友系统
 // ============================
 function bindFriendEvents() {
   document.getElementById('friendSearchBtn').addEventListener('click', handleFriendSearch);
 }
 
-function handleFriendSearch() {
-  const keyword = document.getElementById('friendSearchInput').value.trim().toLowerCase();
+async function handleFriendSearch() {
+  const keyword = document.getElementById('friendSearchInput').value.trim();
   const box = document.getElementById('friendSearchResults');
   box.innerHTML = '';
 
@@ -395,122 +694,90 @@ function handleFriendSearch() {
     return;
   }
 
-  // TODO: 后端好友搜索接口
-  // fetch('http://localhost:8000/api/friends/search?q=' + keyword)
-  // 当前使用 mock 搜索池 + 本地用户
-  const localPool = appState.users.map((u) => ({ username: u.username, email: u.email }));
-  const pool = [...MOCK_SEARCH_POOL, ...localPool];
-  const unique = Array.from(new Map(pool.map((p) => [p.username, p])).values());
+  try {
+    const results = await apiSearchUsers(keyword);
+    if (!results.length) {
+      box.innerHTML = '<div class="text-secondary small">无匹配结果</div>';
+      return;
+    }
 
-  const results = unique.filter((u) =>
-    u.username.toLowerCase().includes(keyword) &&
-    u.username !== appState.currentUser.username
-  );
+    results.forEach((item) => {
+      mergeUserToMap({
+        id: item.id,
+        username: item.username,
+        nickname: item.nickname,
+        email: '',
+        avatar_base64: appState.userMap[item.id]?.avatar || DEFAULT_AVATAR,
+        is_online: item.is_online,
+        role: 'member'
+      });
 
-  if (!results.length) {
-    box.innerHTML = '<div class="text-secondary small">无匹配结果</div>';
-    return;
+      const row = document.createElement('div');
+      row.className = 'list-group-item d-flex justify-content-between align-items-center';
+      row.innerHTML = `
+        <div>
+          <div class="fw-semibold">${item.nickname || item.username}</div>
+          <small class="text-secondary">@${item.username}</small>
+        </div>
+        <button class="btn btn-sm btn-outline-primary">添加</button>
+      `;
+      row.querySelector('button').addEventListener('click', () => addFriendById(item.id));
+      box.appendChild(row);
+    });
+  } catch (err) {
+    box.innerHTML = `<div class="text-danger small">搜索失败：${err.message}</div>`;
   }
-
-  results.forEach((item) => {
-    const row = document.createElement('div');
-    row.className = 'list-group-item d-flex justify-content-between align-items-center';
-    row.innerHTML = `
-      <div>
-        <div class="fw-semibold">${item.username}</div>
-        <small class="text-secondary">${item.email}</small>
-      </div>
-      <button class="btn btn-sm btn-outline-primary">添加</button>
-    `;
-
-    row.querySelector('button').addEventListener('click', () => addFriendByUsername(item.username));
-    box.appendChild(row);
-  });
 }
 
-function addFriendByUsername(username) {
-  let friend = appState.users.find((u) => u.username === username);
-
-  if (!friend) {
-    friend = {
-      id: createId('u'),
-      username,
-      email: `${username}@example.com`,
-      password: '123456',
-      nickname: username,
-      signature: '你好，很高兴认识你',
-      avatar: DEFAULT_AVATAR,
-      friends: [appState.currentUser.id],
-      online: Math.random() > 0.5
-    };
-    appState.users.push(friend);
+async function addFriendById(friendId) {
+  try {
+    await apiAddFriend(friendId);
+    await refreshFriends();
+    await refreshRoomsAndMessages();
+    await refreshUnreadCounts();
+    renderFriendList();
+    renderConversationList();
+    renderMessages();
+    renderGroupMemberOptions();
+    connectWebSocket();
+    alert('好友添加成功');
+  } catch (err) {
+    alert(`添加失败：${err.message}`);
   }
-
-  if (!appState.currentUser.friends.includes(friend.id)) {
-    appState.currentUser.friends.push(friend.id);
-  }
-  if (!friend.friends.includes(appState.currentUser.id)) {
-    friend.friends.push(appState.currentUser.id);
-  }
-
-  // 确保存在单聊会话
-  const existing = appState.conversations.find(
-    (c) => c.type === 'private' && c.members.includes(friend.id) && c.members.includes(appState.currentUser.id)
-  );
-
-  if (!existing) {
-    appState.conversations.unshift({
-      id: createId('c'),
-      type: 'private',
-      name: '',
-      members: [appState.currentUser.id, friend.id],
-      unreadCount: 0,
-      messages: []
-    });
-  }
-
-  const meIdx = appState.users.findIndex((u) => u.id === appState.currentUser.id);
-  const friendIdx = appState.users.findIndex((u) => u.id === friend.id);
-  appState.users[meIdx] = { ...appState.currentUser };
-  appState.users[friendIdx] = { ...friend };
-
-  saveUsers();
-  saveConversations();
-  renderFriendList();
-  renderConversationList();
-  renderGroupMemberOptions();
-
-  alert(`已添加 ${username} 为好友（mock）`);
 }
 
 function renderFriendList() {
   const box = document.getElementById('friendList');
   box.innerHTML = '';
 
-  const friends = appState.currentUser.friends
-    .map((fid) => appState.users.find((u) => u.id === fid))
-    .filter(Boolean);
-
-  if (!friends.length) {
+  if (!appState.friends.length) {
     box.innerHTML = '<div class="text-secondary">还没有好友，去搜索添加吧。</div>';
     return;
   }
 
-  friends.forEach((f) => {
+  appState.friends.forEach((f) => {
+    const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
     const item = document.createElement('button');
     item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
     item.innerHTML = `
       <div class="d-flex align-items-center gap-2">
-        <img src="${f.avatar || DEFAULT_AVATAR}" width="32" height="32" class="rounded-circle" alt="avatar" />
+        <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
         <div>
           <div class="fw-semibold">${f.nickname || f.username}</div>
           <small class="text-secondary">@${f.username}</small>
         </div>
       </div>
-      <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
+        <button class="btn btn-sm btn-outline-danger friend-remove-btn" data-fid="${f.id}" type="button">删除</button>
+      </div>
     `;
 
-    item.addEventListener('click', () => openPrivateChatWith(f.id));
+    item.addEventListener('click', (e) => {
+      if (e.target && e.target.classList.contains('friend-remove-btn')) return;
+      openPrivateChatWith(f.id);
+    });
+    item.querySelector('.friend-remove-btn').addEventListener('click', () => removeFriend(f.id));
     box.appendChild(item);
   });
 }
@@ -520,60 +787,50 @@ function openPrivateChatWith(friendId) {
     (c) => c.type === 'private' && c.members.includes(friendId) && c.members.includes(appState.currentUser.id)
   );
 
-  if (!conv) return;
+  if (!conv) {
+    alert('该好友暂无私聊会话，请重新添加后重试');
+    return;
+  }
 
   appState.activeConversationId = conv.id;
   conv.unreadCount = 0;
-  saveConversations();
   switchView('messagesView');
   renderConversationList();
   renderMessages();
   updateUnreadBadges();
+  markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
 }
 
 // ============================
-// 群组系统（创建群 + 列表 + 进入群聊）
+// 群组系统
 // ============================
 function bindGroupEvents() {
-  document.getElementById('createGroupBtn').addEventListener('click', () => {
+  document.getElementById('createGroupBtn').addEventListener('click', async () => {
     const name = document.getElementById('groupNameInput').value.trim();
     if (!name) {
       alert('请输入群名称');
       return;
     }
 
-    const checkedIds = [...document.querySelectorAll('.group-member-check:checked')].map((i) => i.value);
-    const members = Array.from(new Set([appState.currentUser.id, ...checkedIds]));
+    const checkedIds = [...document.querySelectorAll('.group-member-check:checked')].map((i) => Number(i.value));
 
-    const conv = {
-      id: createId('g'),
-      type: 'group',
-      name,
-      members,
-      unreadCount: 0,
-      messages: [
-        {
-          id: createId('m'),
-          senderId: appState.currentUser.id,
-          text: `大家好，欢迎加入 ${name}！`,
-          createdAt: Date.now()
-        }
-      ]
-    };
+    try {
+      await apiCreateRoom(name, checkedIds);
+      await refreshRoomsAndMessages();
+      await refreshUnreadCounts();
+      renderGroupList();
+      renderConversationList();
+      renderMessages();
+      connectWebSocket();
 
-    // TODO: 后端创建群聊接口
-    // fetch('http://localhost:8000/api/groups', { method: 'POST', body: JSON.stringify({ name, members }) })
+      document.getElementById('groupNameInput').value = '';
+      document.querySelectorAll('.group-member-check').forEach((i) => (i.checked = false));
 
-    appState.conversations.unshift(conv);
-    saveConversations();
-    renderGroupList();
-    renderConversationList();
-
-    document.getElementById('groupNameInput').value = '';
-    document.querySelectorAll('.group-member-check').forEach((i) => (i.checked = false));
-
-    const modal = bootstrap.Modal.getInstance(document.getElementById('createGroupModal'));
-    modal.hide();
+      const modal = bootstrap.Modal.getInstance(document.getElementById('createGroupModal'));
+      if (modal) modal.hide();
+    } catch (err) {
+      alert(`创建群聊失败：${err.message}`);
+    }
   });
 
   document.getElementById('createGroupModal').addEventListener('show.bs.modal', renderGroupMemberOptions);
@@ -583,21 +840,18 @@ function renderGroupMemberOptions() {
   const box = document.getElementById('groupMemberOptions');
   box.innerHTML = '';
 
-  const friends = appState.currentUser.friends
-    .map((fid) => appState.users.find((u) => u.id === fid))
-    .filter(Boolean);
-
-  if (!friends.length) {
+  if (!appState.friends.length) {
     box.innerHTML = '<div class="text-secondary small">暂无好友可选</div>';
     return;
   }
 
-  friends.forEach((f) => {
+  appState.friends.forEach((f) => {
+    const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
     const wrap = document.createElement('label');
     wrap.className = 'd-flex align-items-center gap-2 mb-2';
     wrap.innerHTML = `
       <input class="form-check-input group-member-check" type="checkbox" value="${f.id}" />
-      <img src="${f.avatar || DEFAULT_AVATAR}" width="28" height="28" class="rounded-circle" alt="avatar" />
+      <img src="${avatar}" width="28" height="28" class="rounded-circle" alt="avatar" />
       <span>${f.nickname || f.username}</span>
     `;
     box.appendChild(wrap);
@@ -608,10 +862,7 @@ function renderGroupList() {
   const box = document.getElementById('groupList');
   box.innerHTML = '';
 
-  const groups = appState.conversations.filter(
-    (c) => c.type === 'group' && c.members.includes(appState.currentUser.id)
-  );
-
+  const groups = appState.conversations.filter((c) => c.type === 'group');
   if (!groups.length) {
     box.innerHTML = '<div class="text-secondary">还没有群组，先创建一个吧。</div>';
     return;
@@ -619,7 +870,7 @@ function renderGroupList() {
 
   groups.forEach((g) => {
     const names = g.members
-      .map((id) => appState.users.find((u) => u.id === id)?.nickname || '未知用户')
+      .map((id) => appState.userMap[id]?.nickname || appState.userMap[id]?.username || `用户${id}`)
       .join('、');
 
     const item = document.createElement('button');
@@ -637,11 +888,11 @@ function renderGroupList() {
     item.addEventListener('click', () => {
       appState.activeConversationId = g.id;
       g.unreadCount = 0;
-      saveConversations();
       switchView('messagesView');
       renderConversationList();
       renderMessages();
       updateUnreadBadges();
+      markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     });
 
     box.appendChild(item);
@@ -649,7 +900,7 @@ function renderGroupList() {
 }
 
 // ============================
-// 会话与聊天消息渲染
+// 聊天渲染 + 发送 + 编辑
 // ============================
 function bindChatEvents() {
   document.getElementById('sendMessageBtn').addEventListener('click', sendMessage);
@@ -657,6 +908,15 @@ function bindChatEvents() {
     if (e.key === 'Enter') sendMessage();
   });
   document.getElementById('saveEditMessageBtn').addEventListener('click', saveEditedMessage);
+  document.getElementById('loadMoreBtn').addEventListener('click', loadMoreMessages);
+
+  // 上滑到顶部自动触发历史加载
+  document.getElementById('messageList').addEventListener('scroll', () => {
+    const listEl = document.getElementById('messageList');
+    if (listEl.scrollTop <= 10) {
+      loadMoreMessages();
+    }
+  });
 
   const emojiBar = document.getElementById('emojiBar');
   EMOJIS.forEach((emoji) => {
@@ -672,44 +932,84 @@ function bindChatEvents() {
   });
 }
 
+async function loadMoreMessages() {
+  if (appState.loadingMore) return;
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv || !conv.messages.length || conv.hasMore === false) return;
+
+  const oldest = conv.messages[0];
+  if (!oldest) return;
+
+  const listEl = document.getElementById('messageList');
+  const beforeHeight = listEl.scrollHeight;
+  const btn = document.getElementById('loadMoreBtn');
+
+  appState.loadingMore = true;
+  btn.disabled = true;
+  btn.textContent = '加载中...';
+
+  try {
+    const batch = await apiGetRoomMessagesBefore(conv.id, oldest.id, 50);
+    if (!batch.length) {
+      conv.hasMore = false;
+      btn.textContent = '没有更多';
+      return;
+    }
+
+    const normalized = batch.map(normalizeMessage).reverse();
+    const exists = new Set(conv.messages.map((m) => m.id));
+    const toPrepend = normalized.filter((m) => !exists.has(m.id));
+    conv.messages = [...toPrepend, ...conv.messages];
+    conv.hasMore = batch.length === 50;
+
+    renderMessages({ autoScroll: false });
+    const afterHeight = listEl.scrollHeight;
+    listEl.scrollTop = afterHeight - beforeHeight;
+  } catch (err) {
+    console.error('加载历史消息失败', err);
+  } finally {
+    appState.loadingMore = false;
+    btn.disabled = false;
+    btn.textContent = conv.hasMore === false ? '没有更多' : '加载更多';
+  }
+}
+
 function openEditMessageModal(msg) {
   if (appState.currentUser.role !== 'admin') return;
   appState.editingMessageId = msg.id;
-  document.getElementById('editMessageId').value = msg.id;
+  document.getElementById('editMessageId').value = String(msg.id);
   document.getElementById('editMessageText').value = msg.text;
   const modal = new bootstrap.Modal(document.getElementById('editMessageModal'));
   modal.show();
 }
 
-function saveEditedMessage() {
+async function saveEditedMessage() {
   if (appState.currentUser.role !== 'admin') return;
   const messageId = appState.editingMessageId;
   const text = document.getElementById('editMessageText').value.trim();
   if (!messageId || !text) return;
 
-  const conv = getVisibleConversations().find((c) => c.id === appState.activeConversationId);
-  if (!conv) return;
-  const msg = conv.messages.find((m) => m.id === messageId);
-  if (!msg) return;
+  try {
+    const updated = await apiEditMessage(messageId, text);
+    const conv = findConversationById(updated.room_id);
+    if (conv) {
+      const m = conv.messages.find((x) => x.id === updated.id);
+      if (m) {
+        m.text = updated.content;
+        m.updatedAt = updated.updated_at ? new Date(updated.updated_at).getTime() : null;
+        m.editedAt = m.updatedAt;
+        m.editedByAdmin = !!updated.edited_by_admin;
+      }
+    }
 
-  msg.text = text;
-  msg.editedAt = Date.now();
-  saveConversations();
-  renderMessages();
-  renderConversationList();
+    renderMessages();
+    renderConversationList();
 
-  const modal = bootstrap.Modal.getInstance(document.getElementById('editMessageModal'));
-  if (modal) modal.hide();
-}
-
-function getVisibleConversations() {
-  return appState.conversations.filter((c) => c.members.includes(appState.currentUser.id));
-}
-
-function getConversationTitle(conv) {
-  if (conv.type === 'group') return conv.name;
-  const other = getOtherUserInPrivateConversation(conv);
-  return other ? (other.nickname || other.username) : '私聊';
+    const modal = bootstrap.Modal.getInstance(document.getElementById('editMessageModal'));
+    if (modal) modal.hide();
+  } catch (err) {
+    alert(`编辑失败：${err.message}`);
+  }
 }
 
 function renderConversationList() {
@@ -739,9 +1039,9 @@ function renderConversationList() {
     btn.innerHTML = `
       <div class="d-flex justify-content-between align-items-center">
         <div class="text-start">
-          <div class="fw-semibold">${getConversationTitle(conv)}</div>
+          <div class="fw-semibold">${conv.type === 'group' ? '群' : '私'} · ${getConversationTitle(conv)}</div>
           <small class="${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">
-            ${lastMsg ? lastMsg.text.slice(0, 22) : '暂无消息'}
+            ${conv.type === 'group' ? `${conv.memberCount || conv.members.length}人群聊` : '单聊'}${lastMsg ? ` · ${lastMsg.text.slice(0, 18)}` : ''}
           </small>
         </div>
         ${badge}
@@ -751,10 +1051,10 @@ function renderConversationList() {
     btn.addEventListener('click', () => {
       appState.activeConversationId = conv.id;
       conv.unreadCount = 0;
-      saveConversations();
       renderConversationList();
       renderMessages();
       updateUnreadBadges();
+      markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     });
 
     box.appendChild(btn);
@@ -763,19 +1063,37 @@ function renderConversationList() {
   updateUnreadBadges();
 }
 
-function renderMessages() {
+async function markCurrentRoomRead() {
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv) return;
+  const last = conv.messages[conv.messages.length - 1];
+  await apiMarkRoomRead(conv.id, last?.id || null);
+  conv.unreadCount = 0;
+  renderConversationList();
+  updateUnreadBadges();
+}
+
+function renderMessages(options = {}) {
+  const { autoScroll = true } = options;
   const listEl = document.getElementById('messageList');
   const titleEl = document.getElementById('chatTitle');
   const subEl = document.getElementById('chatSubTitle');
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
 
   listEl.innerHTML = '';
 
-  const conv = getVisibleConversations().find((c) => c.id === appState.activeConversationId);
+  const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
     titleEl.textContent = '请选择会话';
     subEl.textContent = '支持单聊和群聊';
+    loadMoreBtn.disabled = true;
+    loadMoreBtn.textContent = '加载更多';
     return;
   }
+  loadMoreBtn.disabled = conv.messages.length === 0;
+  loadMoreBtn.textContent = conv.messages.length === 0
+    ? '暂无历史'
+    : (conv.hasMore === false ? '没有更多' : '加载更多');
 
   titleEl.textContent = getConversationTitle(conv);
   if (conv.type === 'group') {
@@ -787,7 +1105,7 @@ function renderMessages() {
 
   conv.messages.forEach((msg) => {
     const me = msg.senderId === appState.currentUser.id;
-    const sender = appState.users.find((u) => u.id === msg.senderId);
+    const sender = appState.userMap[msg.senderId];
 
     const row = document.createElement('div');
     row.className = `msg-row ${me ? 'me' : 'other'}`;
@@ -795,7 +1113,9 @@ function renderMessages() {
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
 
-    const senderName = !me && conv.type === 'group' ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>` : '';
+    const senderName = !me && conv.type === 'group'
+      ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
+      : '';
     const editedMark = msg.editedAt ? '（已编辑）' : '';
 
     bubble.innerHTML = `
@@ -804,7 +1124,7 @@ function renderMessages() {
       <div class="msg-meta">${formatTime(msg.createdAt)} ${editedMark}</div>
     `;
 
-    // 编辑自己消息：升级为 Bootstrap 弹窗，且仅管理员可见/可操作
+    // 管理员可编辑“自己历史消息”：点击自己的消息触发 Bootstrap 弹窗
     if (me && appState.currentUser.role === 'admin') {
       bubble.title = '管理员可点击编辑消息';
       bubble.style.cursor = 'pointer';
@@ -815,8 +1135,9 @@ function renderMessages() {
     listEl.appendChild(row);
   });
 
-  // 聊天滚动自动到底部
-  listEl.scrollTop = listEl.scrollHeight;
+  if (autoScroll) {
+    listEl.scrollTop = listEl.scrollHeight;
+  }
 }
 
 function sendMessage() {
@@ -824,30 +1145,25 @@ function sendMessage() {
   const text = input.value.trim();
   if (!text) return;
 
-  const conv = getVisibleConversations().find((c) => c.id === appState.activeConversationId);
+  const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
     alert('请先选择一个会话');
     return;
   }
 
-  conv.messages.push({
-    id: createId('m'),
-    senderId: appState.currentUser.id,
-    text,
-    createdAt: Date.now()
+  // TODO: 后端 WebSocket 发送消息
+  // ws.send({ action: 'send_message', room_id, content })
+  sendWsMessage({
+    action: 'send_message',
+    room_id: conv.id,
+    content: text
   });
 
-  // TODO: 后端发送消息接口
-  // fetch('http://localhost:8000/api/messages', { method: 'POST', body: JSON.stringify({ conversationId: conv.id, text }) })
-
   input.value = '';
-  saveConversations();
-  renderConversationList();
-  renderMessages();
 }
 
 // ============================
-// 通知与未读数
+// 通知
 // ============================
 function updateUnreadBadges() {
   const total = getUnreadTotal();
@@ -869,50 +1185,32 @@ function notifyMessage(title, body) {
 }
 
 // ============================
-// 模拟实时新消息（setInterval）
+// 启动流程
 // ============================
-function startMockRealtime() {
-  if (appState.messageInterval) clearInterval(appState.messageInterval);
+async function bootstrapAfterLogin(userFromAuth = null) {
+  const me = userFromAuth || await apiGetMe();
 
-  appState.messageInterval = setInterval(() => {
-    const list = getVisibleConversations();
-    if (!list.length) return;
+  appState.currentUser = {
+    id: me.id,
+    username: me.username,
+    email: me.email,
+    nickname: me.nickname || me.username,
+    signature: me.signature || '',
+    avatar: me.avatar_base64 || DEFAULT_AVATAR,
+    role: me.role || 'member',
+    online: !!me.is_online
+  };
 
-    const conv = list[Math.floor(Math.random() * list.length)];
+  mergeUserToMap(me);
+  await refreshFriends();
+  await refreshPresenceOnlineList();
+  await refreshRoomsAndMessages();
+  await refreshUnreadCounts();
 
-    // 选择一个“非当前用户”的发送者
-    const candidates = conv.members.filter((id) => id !== appState.currentUser.id);
-    if (!candidates.length) return;
-
-    const senderId = candidates[Math.floor(Math.random() * candidates.length)];
-    const fakeTexts = ['收到', '好的', '稍后给你', '这个想法不错', '等会语音聊', '我在看文档'];
-    const text = fakeTexts[Math.floor(Math.random() * fakeTexts.length)];
-
-    conv.messages.push({
-      id: createId('m'),
-      senderId,
-      text,
-      createdAt: Date.now()
-    });
-
-    // 如果不是当前打开会话，累计未读
-    if (appState.activeConversationId !== conv.id || appState.currentView !== 'messagesView') {
-      conv.unreadCount = (conv.unreadCount || 0) + 1;
-    }
-
-    saveConversations();
-    renderConversationList();
-    if (appState.activeConversationId === conv.id) renderMessages();
-    updateUnreadBadges();
-
-    const sender = appState.users.find((u) => u.id === senderId);
-    notifyMessage(sender?.nickname || sender?.username || '新消息', text);
-  }, 5000);
+  connectWebSocket();
+  enterApp();
 }
 
-// ============================
-// 进入主应用流程
-// ============================
 function enterApp() {
   showMain();
   switchView('messagesView');
@@ -925,17 +1223,24 @@ function enterApp() {
   renderMessages();
   renderGroupMemberOptions();
   updateUnreadBadges();
+  markCurrentRoomRead().catch((err) => console.warn('初始化标记已读失败', err.message));
 
   requestNotificationPermission();
-  startMockRealtime();
 }
 
-// ============================
-// 页面启动
-// ============================
-function init() {
-  ensureMockData();
-  loadStateFromStorage();
+async function init() {
+  if (!localStorage.getItem('chat_api_base')) {
+    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+  }
+
+  // 向后兼容：旧版本 token key 为 "token"
+  const legacyToken = localStorage.getItem('token');
+  if (legacyToken && !localStorage.getItem(STORAGE_KEYS.token)) {
+    localStorage.setItem(STORAGE_KEYS.token, legacyToken);
+  }
+
+  const theme = localStorage.getItem(STORAGE_KEYS.theme) || 'light';
+  setTheme(theme);
 
   bindAuthEvents();
   bindNavigationEvents();
@@ -944,12 +1249,49 @@ function init() {
   bindGroupEvents();
   bindChatEvents();
 
-  if (getToken() && appState.currentUser) {
-    enterApp();
-  } else {
+  const token = getToken();
+  if (!token) {
+    showAuth();
+    switchAuthPage('login');
+    return;
+  }
+
+  try {
+    await bootstrapAfterLogin();
+  } catch (err) {
+    console.warn('token 失效，回到登录页：', err.message);
+    clearToken();
     showAuth();
     switchAuthPage('login');
   }
+
+  localStorage.removeItem('token');
+  localStorage.removeItem('mock_users');
+  localStorage.removeItem('mock_conversations');
+  localStorage.removeItem('mock_messages');
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init().catch((err) => {
+    console.error(err);
+    alert(`初始化失败：${err.message}`);
+  });
+});
+
+window.__api = {
+  apiFetch,
+  apiLogin,
+  apiRegister,
+  apiGetMe,
+  apiSearchUsers,
+  apiGetFriends,
+  apiAddFriend,
+  apiRemoveFriend,
+  apiGetRooms,
+  apiCreateRoom,
+  apiGetRoomMessages,
+  apiGetUnreadCounts,
+  apiMarkRoomRead,
+  apiEditMessage,
+  apiSendMessage
+};

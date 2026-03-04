@@ -42,3 +42,10 @@ class ConnectionManager:
     async def broadcast_to_room(self, room_id: int, payload: dict):
         for uid in list(self.room_subscribers.get(room_id, set())):
             await self.send_json_to_user(uid, payload)
+
+    async def broadcast_global(self, payload: dict):
+        for uid in list(self.user_sockets.keys()):
+            await self.send_json_to_user(uid, payload)
+
+    def connection_count(self, user_id: int) -> int:
+        return len(self.user_sockets.get(user_id, []))

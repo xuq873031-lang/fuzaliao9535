@@ -29,6 +29,7 @@ class UserOut(BaseModel):
     avatar_base64: str | None = None
     role: str
     is_online: bool
+    last_seen_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -45,12 +46,40 @@ class CreateRoomIn(BaseModel):
     member_ids: list[int] = Field(default_factory=list)
 
 
+class CreateGroupRoomIn(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    member_ids: list[int] = Field(default_factory=list)
+    avatar: str | None = None
+
+
 class RoomOut(BaseModel):
     id: int
     name: str
     room_type: str
+    type: str | None = None
+    title: str | None = None
+    avatar: str | None = None
     created_by: int
     member_ids: list[int]
+    member_count: int | None = None
+
+
+class AddRoomMemberIn(BaseModel):
+    user_id: int
+
+
+class RoomMemberOut(BaseModel):
+    room_id: int
+    user_id: int
+    username: str
+    nickname: str
+    role: str
+    joined_at: datetime | None = None
+
+
+class RoomUnreadOut(BaseModel):
+    room_id: int
+    unread_count: int
 
 
 class MessageOut(BaseModel):
@@ -72,6 +101,21 @@ class SearchUserOut(BaseModel):
     username: str
     nickname: str
     is_online: bool
+
+
+class PresenceOnlineUserOut(BaseModel):
+    id: int
+    username: str
+
+
+class PresenceStatusOut(BaseModel):
+    user_id: int
+    online: bool
+    last_seen_at: datetime | None
+
+
+class MarkRoomReadIn(BaseModel):
+    last_read_message_id: int | None = None
 
 
 class WsMessageIn(BaseModel):

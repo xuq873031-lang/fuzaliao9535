@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: chat-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./chat_app.db
+      - key: FRONTEND_ORIGINS
+        value: https://<your-github-pages-domain>
+      - key: ACCESS_TOKEN_EXPIRE_HOURS
+        value: "72"
