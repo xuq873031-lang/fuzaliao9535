@@ -64,8 +64,17 @@ function phoneToCompatEmail(phone) {
 }
 
 function formatTime(ts) {
-  const d = new Date(ts);
-  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(ts));
+  } catch (_) {
+    return '';
+  }
 }
 
 function getUnreadTotal() {
@@ -116,6 +125,10 @@ function switchView(viewId) {
   document.querySelectorAll('.mobile-tab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.view === viewId);
   });
+
+  if (viewId === 'messagesView') {
+    renderMessages();
+  }
 }
 
 // ============================
@@ -341,16 +354,7 @@ async function refreshRoomsAndMessages() {
     })
   );
 
-  // 默认选中最近有消息的会话
-  const sorted = [...appState.conversations].sort((a, b) => {
-    const ta = a.messages.length ? a.messages[a.messages.length - 1].createdAt : 0;
-    const tb = b.messages.length ? b.messages[b.messages.length - 1].createdAt : 0;
-    return tb - ta;
-  });
-
-  if (!appState.activeConversationId && sorted.length) {
-    appState.activeConversationId = sorted[0].id;
-  }
+  // 交互要求：不自动选中会话，必须用户主动点好友/会话进入聊天
 }
 
 async function refreshUnreadCounts() {
@@ -380,6 +384,16 @@ function getConversationTitle(conv) {
   if (conv.type === 'group') return conv.title || conv.name;
   const other = getOtherUserInPrivateConversation(conv);
   return other ? (other.nickname || other.username) : conv.title || conv.name || '私聊';
+}
+
+function isDmConversation(conv) {
+  return ['dm', 'direct', 'private'].includes(conv.type || conv.room_type);
+}
+
+function getDmConversationWithFriend(friendId) {
+  return appState.conversations.find(
+    (c) => isDmConversation(c) && c.members.includes(friendId) && c.members.includes(appState.currentUser.id)
+  );
 }
 
 // ============================
@@ -580,10 +594,14 @@ function logout() {
 async function removeFriend(friendId) {
   if (!confirm('确定删除该好友吗？')) return;
   try {
+    const current = findConversationById(appState.activeConversationId);
+    const shouldResetCurrent = !!(current && isDmConversation(current) && current.members.includes(friendId));
+
     await apiRemoveFriend(friendId);
     await refreshFriends();
     await refreshRoomsAndMessages();
     await refreshUnreadCounts();
+    if (shouldResetCurrent) appState.activeConversationId = null;
     renderFriendList();
     renderConversationList();
     renderMessages();
@@ -773,22 +791,43 @@ function renderFriendList() {
       </div>
     `;
 
-    item.addEventListener('click', (e) => {
+    item.addEventListener('click', async (e) => {
       if (e.target && e.target.classList.contains('friend-remove-btn')) return;
-      openPrivateChatWith(f.id);
+      await openPrivateChatWith(f.id);
     });
     item.querySelector('.friend-remove-btn').addEventListener('click', () => removeFriend(f.id));
     box.appendChild(item);
   });
 }
 
-function openPrivateChatWith(friendId) {
-  const conv = appState.conversations.find(
-    (c) => c.type === 'private' && c.members.includes(friendId) && c.members.includes(appState.currentUser.id)
-  );
+async function ensureDirectRoomWithFriend(friendId) {
+  let conv = getDmConversationWithFriend(friendId);
+  if (conv) return conv;
 
-  if (!conv) {
-    alert('该好友暂无私聊会话，请重新添加后重试');
+  const friend = appState.friends.find((f) => f.id === friendId) || appState.userMap[friendId];
+  const roomName = `${friend?.nickname || friend?.username || '好友'}-私聊`;
+  try {
+    await apiCreateRoom(roomName, [friendId]);
+  } catch (_) {
+    await apiFetch('/api/rooms/group', {
+      method: 'POST',
+      body: JSON.stringify({ title: roomName, member_ids: [friendId] })
+    });
+  }
+
+  await refreshRoomsAndMessages();
+  await refreshUnreadCounts();
+  conv = getDmConversationWithFriend(friendId);
+  if (!conv) throw new Error('创建/获取单聊房间失败');
+  return conv;
+}
+
+async function openPrivateChatWith(friendId) {
+  let conv;
+  try {
+    conv = await ensureDirectRoomWithFriend(friendId);
+  } catch (err) {
+    alert(`进入聊天失败：${err.message}`);
     return;
   }
 
@@ -903,15 +942,21 @@ function renderGroupList() {
 // 聊天渲染 + 发送 + 编辑
 // ============================
 function bindChatEvents() {
-  document.getElementById('sendMessageBtn').addEventListener('click', sendMessage);
-  document.getElementById('messageInput').addEventListener('keydown', (e) => {
+  const sendBtn = document.getElementById('sendMessageBtn');
+  const msgInput = document.getElementById('messageInput');
+  const saveEditBtn = document.getElementById('saveEditMessageBtn');
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
+  const msgList = document.getElementById('messageList');
+
+  if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+  if (msgInput) msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendMessage();
   });
-  document.getElementById('saveEditMessageBtn').addEventListener('click', saveEditedMessage);
-  document.getElementById('loadMoreBtn').addEventListener('click', loadMoreMessages);
+  if (saveEditBtn) saveEditBtn.addEventListener('click', saveEditedMessage);
+  if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMoreMessages);
 
   // 上滑到顶部自动触发历史加载
-  document.getElementById('messageList').addEventListener('scroll', () => {
+  if (msgList) msgList.addEventListener('scroll', () => {
     const listEl = document.getElementById('messageList');
     if (listEl.scrollTop <= 10) {
       loadMoreMessages();
@@ -1022,8 +1067,6 @@ function renderConversationList() {
     return tb - ta;
   });
 
-  if (!appState.activeConversationId && list.length) appState.activeConversationId = list[0].id;
-
   if (!list.length) {
     box.innerHTML = '<div class="p-3 text-secondary">暂无会话，请先添加好友或创建群组。</div>';
     renderMessages();
@@ -1079,17 +1122,22 @@ function renderMessages(options = {}) {
   const titleEl = document.getElementById('chatTitle');
   const subEl = document.getElementById('chatSubTitle');
   const loadMoreBtn = document.getElementById('loadMoreBtn');
+  const composer = document.getElementById('chatComposer');
+  if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
 
   listEl.innerHTML = '';
 
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
-    titleEl.textContent = '请选择会话';
-    subEl.textContent = '支持单聊和群聊';
-    loadMoreBtn.disabled = true;
-    loadMoreBtn.textContent = '加载更多';
+    titleEl.textContent = '未选择会话';
+    subEl.textContent = '请选择好友开始聊天';
+    loadMoreBtn.classList.add('d-none');
+    composer.classList.add('d-none');
+    listEl.innerHTML = '<div class="h-100 d-flex align-items-center justify-content-center text-secondary">请选择好友开始聊天</div>';
     return;
   }
+  loadMoreBtn.classList.remove('d-none');
+  composer.classList.remove('d-none');
   loadMoreBtn.disabled = conv.messages.length === 0;
   loadMoreBtn.textContent = conv.messages.length === 0
     ? '暂无历史'
@@ -1116,7 +1164,8 @@ function renderMessages(options = {}) {
     const senderName = !me && conv.type === 'group'
       ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
       : '';
-    const editedMark = msg.editedAt ? '（已编辑）' : '';
+    const isEdited = !!(msg.updatedAt && new Date(msg.updatedAt) > new Date(msg.createdAt));
+    const editedMark = isEdited ? `（已编辑 ${formatTime(msg.updatedAt)}）` : '';
 
     bubble.innerHTML = `
       ${senderName}
