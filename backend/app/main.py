@@ -8,12 +8,14 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
 from .manager import ConnectionManager
-from .models import ChatRoom, Message, RoomRead, User, friends, room_members
+from .models import ChatRoom, FriendRequest, Message, RoomRead, User, friends, room_members
 from .schemas import (
     AddRoomMemberIn,
     CreateGroupRoomIn,
+    CreateFriendRequestIn,
     CreateRoomIn,
     EditMessageIn,
+    FriendRequestOut,
     LoginIn,
     MarkRoomReadIn,
     MessageOut,
@@ -313,17 +315,23 @@ def search_users(
     return [SearchUserOut(id=u.id, username=u.username, nickname=u.nickname, is_online=u.is_online) for u in rows]
 
 
-@app.post("/api/friends/{friend_id}")
-def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if friend_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot add yourself")
+def _is_friend(db: Session, user_id: int, friend_id: int) -> bool:
+    row = db.execute(
+        select(friends.c.user_id).where(
+            and_(friends.c.user_id == user_id, friends.c.friend_id == friend_id)
+        )
+    ).first()
+    return row is not None
 
+
+def _ensure_friendship_and_dm(db: Session, user_id: int, friend_id: int):
+    user = db.get(User, user_id)
     friend = db.get(User, friend_id)
-    if not friend:
+    if not user or not friend:
         raise HTTPException(status_code=404, detail="User not found")
 
     # 双向好友关系
-    for uid, fid in [(current_user.id, friend_id), (friend_id, current_user.id)]:
+    for uid, fid in [(user_id, friend_id), (friend_id, user_id)]:
         exists = db.execute(
             select(friends.c.user_id).where(and_(friends.c.user_id == uid, friends.c.friend_id == fid))
         ).first()
@@ -331,7 +339,7 @@ def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User
             db.execute(insert(friends).values(user_id=uid, friend_id=fid))
 
     # 自动创建单聊房间（如果不存在）
-    my_room_ids = set(get_room_ids_for_user(db, current_user.id))
+    my_room_ids = set(get_room_ids_for_user(db, user_id))
     friend_room_ids = set(get_room_ids_for_user(db, friend_id))
     shared = my_room_ids.intersection(friend_room_ids)
     private_room = None
@@ -341,24 +349,195 @@ def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User
         ).scalars().first()
 
     if not private_room:
-        title = f"{current_user.username}-{friend.username}"
+        title = f"{user.username}-{friend.username}"
         room = ChatRoom(
             name=title,
             title=title,
             room_type="private",
             type="dm",
-            created_by=current_user.id,
+            created_by=user_id,
         )
         db.add(room)
         db.commit()
         db.refresh(room)
-        db.execute(insert(room_members).values(room_id=room.id, user_id=current_user.id, role="owner", joined_at=datetime.utcnow()))
-        db.execute(insert(room_members).values(room_id=room.id, user_id=friend.id, role="member", joined_at=datetime.utcnow()))
+        db.execute(insert(room_members).values(room_id=room.id, user_id=user_id, role="owner", joined_at=datetime.utcnow()))
+        db.execute(insert(room_members).values(room_id=room.id, user_id=friend_id, role="member", joined_at=datetime.utcnow()))
 
     db.commit()
-
-    manager.refresh_user_rooms(current_user.id, get_room_ids_for_user(db, current_user.id))
+    manager.refresh_user_rooms(user_id, get_room_ids_for_user(db, user_id))
     manager.refresh_user_rooms(friend_id, get_room_ids_for_user(db, friend_id))
+
+
+@app.post("/api/friend-requests", response_model=FriendRequestOut)
+def create_friend_request(
+    payload: CreateFriendRequestIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    to_user_id = payload.to_user_id
+    if to_user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot send friend request to yourself")
+
+    to_user = db.get(User, to_user_id)
+    if not to_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if _is_friend(db, current_user.id, to_user_id):
+        raise HTTPException(status_code=400, detail="Already friends")
+
+    existing_pending = db.execute(
+        select(FriendRequest).where(
+            FriendRequest.from_user_id == current_user.id,
+            FriendRequest.to_user_id == to_user_id,
+            FriendRequest.status == "pending",
+        )
+    ).scalar_one_or_none()
+    if existing_pending:
+        return FriendRequestOut(
+            id=existing_pending.id,
+            from_user_id=existing_pending.from_user_id,
+            to_user_id=existing_pending.to_user_id,
+            status=existing_pending.status,
+            created_at=existing_pending.created_at,
+            responded_at=existing_pending.responded_at,
+        )
+
+    incoming_pending = db.execute(
+        select(FriendRequest).where(
+            FriendRequest.from_user_id == to_user_id,
+            FriendRequest.to_user_id == current_user.id,
+            FriendRequest.status == "pending",
+        )
+    ).scalar_one_or_none()
+    if incoming_pending:
+        raise HTTPException(status_code=409, detail="This user has already sent you a friend request")
+
+    req = FriendRequest(from_user_id=current_user.id, to_user_id=to_user_id, status="pending")
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return FriendRequestOut(
+        id=req.id,
+        from_user_id=req.from_user_id,
+        to_user_id=req.to_user_id,
+        status=req.status,
+        created_at=req.created_at,
+        responded_at=req.responded_at,
+    )
+
+
+@app.get("/api/friend-requests/incoming", response_model=list[FriendRequestOut])
+def get_incoming_friend_requests(
+    status_filter: str | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(FriendRequest).where(FriendRequest.to_user_id == current_user.id)
+    if status_filter:
+        stmt = stmt.where(FriendRequest.status == status_filter)
+    rows = db.execute(stmt.order_by(desc(FriendRequest.created_at))).scalars().all()
+    return [
+        FriendRequestOut(
+            id=r.id,
+            from_user_id=r.from_user_id,
+            to_user_id=r.to_user_id,
+            status=r.status,
+            created_at=r.created_at,
+            responded_at=r.responded_at,
+        )
+        for r in rows
+    ]
+
+
+@app.get("/api/friend-requests/outgoing", response_model=list[FriendRequestOut])
+def get_outgoing_friend_requests(
+    status_filter: str | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(FriendRequest).where(FriendRequest.from_user_id == current_user.id)
+    if status_filter:
+        stmt = stmt.where(FriendRequest.status == status_filter)
+    rows = db.execute(stmt.order_by(desc(FriendRequest.created_at))).scalars().all()
+    return [
+        FriendRequestOut(
+            id=r.id,
+            from_user_id=r.from_user_id,
+            to_user_id=r.to_user_id,
+            status=r.status,
+            created_at=r.created_at,
+            responded_at=r.responded_at,
+        )
+        for r in rows
+    ]
+
+
+@app.post("/api/friend-requests/{request_id}/accept", response_model=FriendRequestOut)
+def accept_friend_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    req = db.get(FriendRequest, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    if req.to_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No permission to accept this request")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Friend request is not pending")
+
+    req.status = "accepted"
+    req.responded_at = datetime.utcnow()
+    _ensure_friendship_and_dm(db, req.from_user_id, req.to_user_id)
+    db.refresh(req)
+    return FriendRequestOut(
+        id=req.id,
+        from_user_id=req.from_user_id,
+        to_user_id=req.to_user_id,
+        status=req.status,
+        created_at=req.created_at,
+        responded_at=req.responded_at,
+    )
+
+
+@app.post("/api/friend-requests/{request_id}/reject", response_model=FriendRequestOut)
+def reject_friend_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    req = db.get(FriendRequest, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    if req.to_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No permission to reject this request")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Friend request is not pending")
+
+    req.status = "rejected"
+    req.responded_at = datetime.utcnow()
+    db.commit()
+    db.refresh(req)
+    return FriendRequestOut(
+        id=req.id,
+        from_user_id=req.from_user_id,
+        to_user_id=req.to_user_id,
+        status=req.status,
+        created_at=req.created_at,
+        responded_at=req.responded_at,
+    )
+
+
+@app.post("/api/friends/{friend_id}")
+def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if friend_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot add yourself")
+
+    friend = db.get(User, friend_id)
+    if not friend:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    _ensure_friendship_and_dm(db, current_user.id, friend_id)
     return {"ok": True}
 
 

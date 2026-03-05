@@ -103,6 +103,19 @@ class SearchUserOut(BaseModel):
     is_online: bool
 
 
+class CreateFriendRequestIn(BaseModel):
+    to_user_id: int
+
+
+class FriendRequestOut(BaseModel):
+    id: int
+    from_user_id: int
+    to_user_id: int
+    status: str
+    created_at: datetime
+    responded_at: datetime | None = None
+
+
 class PresenceOnlineUserOut(BaseModel):
     id: int
     username: str
