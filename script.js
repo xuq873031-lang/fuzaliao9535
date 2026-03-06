@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   theme: 'chatwave_theme'
 };
 const DEFAULT_API_BASE = 'https://web-production-f9619e.up.railway.app';
+const LEGACY_API_BASES = ['https://web-production-afb64.up.railway.app'];
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -26,7 +27,9 @@ let appState = {
   wsReconnectTimer: null,
   wsReconnectTried: false,
   pendingAvatarBase64: null,
-  loadingMore: false
+  loadingMore: false,
+  roomPollTimer: null,
+  roomPollInFlight: false
 };
 
 // ============================
@@ -46,6 +49,18 @@ function clearToken() {
 
 function getApiBase() {
   return (localStorage.getItem('chat_api_base') || DEFAULT_API_BASE).replace(/\/$/, '');
+}
+
+function ensureApiBase() {
+  const current = (localStorage.getItem('chat_api_base') || '').replace(/\/$/, '');
+  if (!current) {
+    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+    return;
+  }
+  if (current !== DEFAULT_API_BASE || LEGACY_API_BASES.includes(current)) {
+    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+    console.info('API base updated');
+  }
 }
 
 function showLoginBy401(reason) {
@@ -75,6 +90,26 @@ function formatTime(ts) {
   } catch (_) {
     return '';
   }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function renderMessageContent(text) {
+  const raw = String(text || '');
+  const match = raw.match(/^!\[img\]\(([^)]+)\)$/);
+  if (match) {
+    const url = match[1].trim();
+    const safeUrl = escapeHtml(url);
+    return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer"><img src="${safeUrl}" class="msg-image" alt="image" /></a>`;
+  }
+  return escapeHtml(raw).replaceAll('\n', '<br>');
 }
 
 function getUnreadTotal() {
@@ -114,6 +149,9 @@ function switchAuthPage(page) {
 }
 
 function switchView(viewId) {
+  if (viewId === 'messagesView' && !appState.activeConversationId) {
+    viewId = 'friendsView';
+  }
   appState.currentView = viewId;
   document.querySelectorAll('.view-section').forEach((el) => el.classList.add('d-none'));
   document.getElementById(viewId).classList.remove('d-none');
@@ -128,6 +166,9 @@ function switchView(viewId) {
 
   if (viewId === 'messagesView') {
     renderMessages();
+    startRoomPolling(appState.activeConversationId);
+  } else {
+    stopRoomPolling();
   }
 }
 
@@ -267,6 +308,15 @@ async function apiEditMessage(messageId, content) {
   });
 }
 
+async function apiUploadImage(file) {
+  const form = new FormData();
+  form.append('file', file);
+  return apiFetch('/api/uploads/images', {
+    method: 'POST',
+    body: form
+  });
+}
+
 function apiSendMessage(roomId, content) {
   sendWsMessage({
     action: 'send_message',
@@ -355,6 +405,13 @@ async function refreshRoomsAndMessages() {
   );
 
   // 交互要求：不自动选中会话，必须用户主动点好友/会话进入聊天
+  if (appState.activeConversationId && !findConversationById(appState.activeConversationId)) {
+    appState.activeConversationId = null;
+    stopRoomPolling();
+    if (appState.currentView === 'messagesView') {
+      switchView('friendsView');
+    }
+  }
 }
 
 async function refreshUnreadCounts() {
@@ -394,6 +451,56 @@ function getDmConversationWithFriend(friendId) {
   return appState.conversations.find(
     (c) => isDmConversation(c) && c.members.includes(friendId) && c.members.includes(appState.currentUser.id)
   );
+}
+
+function stopRoomPolling() {
+  if (appState.roomPollTimer) {
+    clearInterval(appState.roomPollTimer);
+    appState.roomPollTimer = null;
+  }
+  appState.roomPollInFlight = false;
+}
+
+async function pollActiveRoomMessages() {
+  if (appState.roomPollInFlight) return;
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv) return;
+
+  appState.roomPollInFlight = true;
+  try {
+    const batch = await apiGetRoomMessages(conv.id, 20);
+    const normalized = batch.map(normalizeMessage).reverse();
+    const existing = new Set(conv.messages.map((m) => m.id));
+    let hasNew = false;
+
+    normalized.forEach((msg) => {
+      if (!existing.has(msg.id)) {
+        conv.messages.push(msg);
+        hasNew = true;
+      }
+    });
+
+    if (hasNew) {
+      renderConversationList();
+      if (appState.currentView === 'messagesView' && appState.activeConversationId === conv.id) {
+        renderMessages();
+      }
+      updateUnreadBadges();
+      await markCurrentRoomRead();
+    }
+  } catch (err) {
+    console.warn('轮询消息失败:', err.message);
+  } finally {
+    appState.roomPollInFlight = false;
+  }
+}
+
+function startRoomPolling(roomId) {
+  stopRoomPolling();
+  if (!roomId) return;
+  appState.roomPollTimer = setInterval(() => {
+    pollActiveRoomMessages();
+  }, 2000);
 }
 
 // ============================
@@ -586,6 +693,7 @@ function logout() {
     clearTimeout(appState.wsReconnectTimer);
     appState.wsReconnectTimer = null;
   }
+  stopRoomPolling();
 
   showAuth();
   switchAuthPage('login');
@@ -601,7 +709,10 @@ async function removeFriend(friendId) {
     await refreshFriends();
     await refreshRoomsAndMessages();
     await refreshUnreadCounts();
-    if (shouldResetCurrent) appState.activeConversationId = null;
+    if (shouldResetCurrent) {
+      appState.activeConversationId = null;
+      switchView('friendsView');
+    }
     renderFriendList();
     renderConversationList();
     renderMessages();
@@ -836,6 +947,8 @@ async function openPrivateChatWith(friendId) {
   switchView('messagesView');
   renderConversationList();
   renderMessages();
+  startRoomPolling(conv.id);
+  pollActiveRoomMessages().catch((err) => console.warn('首次轮询失败', err.message));
   updateUnreadBadges();
   markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
 }
@@ -930,6 +1043,8 @@ function renderGroupList() {
       switchView('messagesView');
       renderConversationList();
       renderMessages();
+      startRoomPolling(g.id);
+      pollActiveRoomMessages().catch((err) => console.warn('首次轮询失败', err.message));
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     });
@@ -947,6 +1062,8 @@ function bindChatEvents() {
   const saveEditBtn = document.getElementById('saveEditMessageBtn');
   const loadMoreBtn = document.getElementById('loadMoreBtn');
   const msgList = document.getElementById('messageList');
+  const uploadImageBtn = document.getElementById('uploadImageBtn');
+  const imageInput = document.getElementById('imageInput');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -954,6 +1071,10 @@ function bindChatEvents() {
   });
   if (saveEditBtn) saveEditBtn.addEventListener('click', saveEditedMessage);
   if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMoreMessages);
+  if (uploadImageBtn && imageInput) {
+    uploadImageBtn.addEventListener('click', () => imageInput.click());
+    imageInput.addEventListener('change', handleImageUpload);
+  }
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
@@ -975,6 +1096,30 @@ function bindChatEvents() {
     });
     emojiBar.appendChild(b);
   });
+}
+
+async function handleImageUpload(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv) {
+    alert('请先选择一个会话');
+    return;
+  }
+
+  try {
+    const uploaded = await apiUploadImage(file);
+    if (!uploaded || !uploaded.url) throw new Error('上传返回无效');
+    sendWsMessage({
+      action: 'send_message',
+      room_id: conv.id,
+      content: `![img](${uploaded.url})`
+    });
+  } catch (err) {
+    alert(`图片发送失败：${err.message}`);
+  }
 }
 
 async function loadMoreMessages() {
@@ -1075,6 +1220,9 @@ function renderConversationList() {
 
   list.forEach((conv) => {
     const lastMsg = conv.messages[conv.messages.length - 1];
+    const lastPreview = lastMsg
+      ? (/^!\[img\]\(([^)]+)\)$/.test(lastMsg.text) ? '[图片]' : lastMsg.text.slice(0, 18))
+      : '';
     const btn = document.createElement('button');
     btn.className = `list-group-item list-group-item-action ${appState.activeConversationId === conv.id ? 'active' : ''}`;
 
@@ -1084,7 +1232,7 @@ function renderConversationList() {
         <div class="text-start">
           <div class="fw-semibold">${conv.type === 'group' ? '群' : '私'} · ${getConversationTitle(conv)}</div>
           <small class="${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">
-            ${conv.type === 'group' ? `${conv.memberCount || conv.members.length}人群聊` : '单聊'}${lastMsg ? ` · ${lastMsg.text.slice(0, 18)}` : ''}
+            ${conv.type === 'group' ? `${conv.memberCount || conv.members.length}人群聊` : '单聊'}${lastPreview ? ` · ${lastPreview}` : ''}
           </small>
         </div>
         ${badge}
@@ -1096,6 +1244,8 @@ function renderConversationList() {
       conv.unreadCount = 0;
       renderConversationList();
       renderMessages();
+      startRoomPolling(conv.id);
+      pollActiveRoomMessages().catch((err) => console.warn('首次轮询失败', err.message));
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     });
@@ -1164,12 +1314,13 @@ function renderMessages(options = {}) {
     const senderName = !me && conv.type === 'group'
       ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
       : '';
-    const isEdited = !!(msg.updatedAt && new Date(msg.updatedAt) > new Date(msg.createdAt));
+    const isEdited = !!(msg.updatedAt && msg.updatedAt > msg.createdAt);
     const editedMark = isEdited ? `（已编辑 ${formatTime(msg.updatedAt)}）` : '';
+    const messageContent = renderMessageContent(msg.text);
 
     bubble.innerHTML = `
       ${senderName}
-      <div>${msg.text}</div>
+      <div>${messageContent}</div>
       <div class="msg-meta">${formatTime(msg.createdAt)} ${editedMark}</div>
     `;
 
@@ -1262,7 +1413,7 @@ async function bootstrapAfterLogin(userFromAuth = null) {
 
 function enterApp() {
   showMain();
-  switchView('messagesView');
+  switchView('friendsView');
 
   updateUserHeader();
   renderProfile();
@@ -1272,15 +1423,12 @@ function enterApp() {
   renderMessages();
   renderGroupMemberOptions();
   updateUnreadBadges();
-  markCurrentRoomRead().catch((err) => console.warn('初始化标记已读失败', err.message));
 
   requestNotificationPermission();
 }
 
 async function init() {
-  if (!localStorage.getItem('chat_api_base')) {
-    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
-  }
+  ensureApiBase();
 
   // 向后兼容：旧版本 token key 为 "token"
   const legacyToken = localStorage.getItem('token');
@@ -1315,9 +1463,6 @@ async function init() {
   }
 
   localStorage.removeItem('token');
-  localStorage.removeItem('mock_users');
-  localStorage.removeItem('mock_conversations');
-  localStorage.removeItem('mock_messages');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1342,5 +1487,6 @@ window.__api = {
   apiGetUnreadCounts,
   apiMarkRoomRead,
   apiEditMessage,
-  apiSendMessage
+  apiSendMessage,
+  apiUploadImage
 };

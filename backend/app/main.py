@@ -1,7 +1,10 @@
 from datetime import datetime
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import and_, delete, desc, func, insert, inspect, select, text
 from sqlalchemy.orm import Session
 
@@ -33,6 +36,9 @@ from .security import create_access_token, hash_password, verify_access_token, v
 
 app = FastAPI(title=settings.app_name)
 manager = ConnectionManager()
+UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
@@ -249,6 +255,32 @@ def on_startup():
 @app.get("/health")
 def health():
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.post("/api/uploads/images")
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    _ = current_user
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image file is allowed")
+
+    ext = Path(file.filename or "").suffix.lower()
+    if not ext:
+        ext = ".png"
+    filename = f"{uuid4().hex}{ext}"
+    target = UPLOAD_DIR / filename
+
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 8MB)")
+
+    target.write_bytes(data)
+    base = str(request.base_url).rstrip("/")
+    return {"url": f"{base}/uploads/{filename}"}
 
 
 @app.post("/api/auth/register", response_model=TokenOut)
