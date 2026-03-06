@@ -7,7 +7,10 @@ const STORAGE_KEYS = {
   theme: 'chatwave_theme'
 };
 const DEFAULT_API_BASE = 'https://web-production-f9619e.up.railway.app';
-const LEGACY_API_BASES = ['https://web-production-afb64.up.railway.app'];
+const API_BASE_CANDIDATES = [
+  'https://web-production-f9619e.up.railway.app',
+  'https://web-production-afb64.up.railway.app'
+];
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -54,16 +57,38 @@ function getApiBase() {
   return (localStorage.getItem('chat_api_base') || DEFAULT_API_BASE).replace(/\/$/, '');
 }
 
-function ensureApiBase() {
+async function isApiBaseAvailable(base) {
+  try {
+    const res = await fetch(`${base}/openapi.json`, { method: 'GET' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const paths = data?.paths || {};
+    return !!(paths['/api/auth/login'] && paths['/api/auth/register'] && paths['/api/users/me']);
+  } catch (_) {
+    return false;
+  }
+}
+
+async function ensureApiBase() {
   const current = (localStorage.getItem('chat_api_base') || '').replace(/\/$/, '');
-  if (!current) {
-    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
-    return;
+  const candidates = [];
+  if (current) candidates.push(current);
+  API_BASE_CANDIDATES.forEach((base) => {
+    if (!candidates.includes(base)) candidates.push(base);
+  });
+
+  for (const base of candidates) {
+    // 启动阶段仅做一次探测，后续请求始终使用单一 base
+    const ok = await isApiBaseAvailable(base);
+    if (ok) {
+      if (current !== base) console.info('API base updated');
+      localStorage.setItem('chat_api_base', base);
+      return;
+    }
   }
-  if (current !== DEFAULT_API_BASE || LEGACY_API_BASES.includes(current)) {
-    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
-    console.info('API base updated');
-  }
+
+  // 候选都不可用时回退默认值，后续请求会报清晰错误
+  localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
 }
 
 function showLoginBy401(reason) {
@@ -1597,7 +1622,7 @@ function enterApp() {
 }
 
 async function init() {
-  ensureApiBase();
+  await ensureApiBase();
 
   // 向后兼容：旧版本 token key 为 "token"
   const legacyToken = localStorage.getItem('token');
