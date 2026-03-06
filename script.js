@@ -52,8 +52,14 @@ function clearToken() {
   localStorage.removeItem(STORAGE_KEYS.token);
 }
 
+function normalizeApiBase(base) {
+  const value = String(base || '').trim().replace(/\/$/, '');
+  if (!value || !/^https?:\/\//i.test(value) || value.includes('/null')) return '';
+  return value;
+}
+
 function getApiBase() {
-  return (localStorage.getItem('chat_api_base') || DEFAULT_API_BASE).replace(/\/$/, '');
+  return normalizeApiBase(localStorage.getItem('chat_api_base')) || DEFAULT_API_BASE;
 }
 
 async function isApiBaseAvailable(base) {
@@ -69,7 +75,7 @@ async function isApiBaseAvailable(base) {
 }
 
 async function ensureApiBase() {
-  const current = (localStorage.getItem('chat_api_base') || '').replace(/\/$/, '');
+  const current = normalizeApiBase(localStorage.getItem('chat_api_base'));
   const candidates = [];
   if (current) candidates.push(current);
   API_BASE_CANDIDATES.forEach((base) => {
@@ -220,11 +226,24 @@ async function apiFetch(path, options = {}) {
   if (hasJsonBody && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
 
   if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${getApiBase()}${path}`, {
+  const request = {
     ...options,
     headers
-  });
+  };
+  let base = getApiBase();
+  let res = await fetch(`${base}${path}`, request);
+
+  // 登录/注册接口如果出现 404，自动切回唯一默认后端重试一次，避免设备残留错误 base
+  if (
+    res.status === 404 &&
+    path.startsWith('/api/auth/') &&
+    base !== DEFAULT_API_BASE
+  ) {
+    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+    console.info('API base updated');
+    base = DEFAULT_API_BASE;
+    res = await fetch(`${base}${path}`, request);
+  }
 
   if (!res.ok) {
     let detail = `请求失败(${res.status})`;
