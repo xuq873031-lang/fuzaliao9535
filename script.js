@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   theme: 'chatwave_theme'
 };
 const DEFAULT_API_BASE = 'https://web-production-be9f.up.railway.app';
+const APP_BUILD = '20260306_3';
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -89,7 +90,7 @@ function renderApiBaseIndicator() {
     el.style.pointerEvents = 'none';
     document.body.appendChild(el);
   }
-  el.textContent = `API: ${host}`;
+  el.textContent = `v${APP_BUILD} | API: ${host}`;
 }
 
 function showLoginBy401(reason) {
