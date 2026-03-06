@@ -7,9 +7,6 @@ const STORAGE_KEYS = {
   theme: 'chatwave_theme'
 };
 const DEFAULT_API_BASE = 'https://web-production-be9f.up.railway.app';
-const API_BASE_CANDIDATES = [
-  'https://web-production-be9f.up.railway.app'
-];
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -34,7 +31,12 @@ let appState = {
   pendingAvatarBase64: null,
   loadingMore: false,
   roomPollTimer: null,
-  roomPollInFlight: false
+  roomPollInFlight: false,
+  roomPollRoomId: null,
+  lastMessageIdByRoom: {},
+  unreadPollTimer: null,
+  baseCorrectedLogged: false,
+  conversationRenderQueued: false
 };
 
 // ============================
@@ -52,48 +54,42 @@ function clearToken() {
   localStorage.removeItem(STORAGE_KEYS.token);
 }
 
-function normalizeApiBase(base) {
-  const value = String(base || '').trim().replace(/\/$/, '');
-  if (!value || !/^https?:\/\//i.test(value) || value.includes('/null')) return '';
-  return value;
-}
-
 function getApiBase() {
-  return normalizeApiBase(localStorage.getItem('chat_api_base')) || DEFAULT_API_BASE;
-}
-
-async function isApiBaseAvailable(base) {
-  try {
-    const res = await fetch(`${base}/openapi.json`, { method: 'GET' });
-    if (!res.ok) return false;
-    const data = await res.json();
-    const paths = data?.paths || {};
-    return !!(paths['/api/auth/login'] && paths['/api/auth/register'] && paths['/api/users/me']);
-  } catch (_) {
-    return false;
+  const stored = String(localStorage.getItem('chat_api_base') || '').trim().replace(/\/$/, '');
+  if (!stored) {
+    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+    return DEFAULT_API_BASE;
   }
-}
-
-async function ensureApiBase() {
-  const current = normalizeApiBase(localStorage.getItem('chat_api_base'));
-  const candidates = [];
-  if (current) candidates.push(current);
-  API_BASE_CANDIDATES.forEach((base) => {
-    if (!candidates.includes(base)) candidates.push(base);
-  });
-
-  for (const base of candidates) {
-    // 启动阶段仅做一次探测，后续请求始终使用单一 base
-    const ok = await isApiBaseAvailable(base);
-    if (ok) {
-      if (current !== base) console.info('API base updated');
-      localStorage.setItem('chat_api_base', base);
-      return;
+  if (stored !== DEFAULT_API_BASE) {
+    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+    localStorage.removeItem(STORAGE_KEYS.token);
+    if (!appState.baseCorrectedLogged) {
+      console.info('API base updated');
+      appState.baseCorrectedLogged = true;
     }
   }
+  return DEFAULT_API_BASE;
+}
 
-  // 候选都不可用时回退默认值，后续请求会报清晰错误
-  localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+function renderApiBaseIndicator() {
+  const host = new URL(getApiBase()).host;
+  let el = document.getElementById('apiBaseIndicator');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'apiBaseIndicator';
+    el.style.position = 'fixed';
+    el.style.right = '10px';
+    el.style.bottom = '10px';
+    el.style.zIndex = '2000';
+    el.style.fontSize = '11px';
+    el.style.padding = '4px 8px';
+    el.style.borderRadius = '10px';
+    el.style.background = 'rgba(0,0,0,0.55)';
+    el.style.color = '#fff';
+    el.style.pointerEvents = 'none';
+    document.body.appendChild(el);
+  }
+  el.textContent = `API: ${host}`;
 }
 
 function showLoginBy401(reason) {
@@ -181,7 +177,12 @@ function switchAuthPage(page) {
   document.getElementById('registerPage').classList.toggle('d-none', page !== 'register');
 }
 
-function switchView(viewId) {
+function switchView(viewId, options = {}) {
+  const keepRoom = !!options.keepRoom;
+  if (viewId === 'messagesView' && !keepRoom) {
+    appState.activeConversationId = null;
+  }
+
   appState.currentView = viewId;
   document.querySelectorAll('.view-section').forEach((el) => el.classList.add('d-none'));
   document.getElementById(viewId).classList.remove('d-none');
@@ -195,8 +196,10 @@ function switchView(viewId) {
   });
 
   if (viewId === 'messagesView') {
+    renderConversationList();
     renderMessages();
-    startRoomPolling(appState.activeConversationId);
+    if (appState.activeConversationId) startRoomPolling(appState.activeConversationId);
+    else stopRoomPolling();
     refreshRoomsAndMessages()
       .then(() => {
         renderConversationList();
@@ -230,20 +233,8 @@ async function apiFetch(path, options = {}) {
     ...options,
     headers
   };
-  let base = getApiBase();
-  let res = await fetch(`${base}${path}`, request);
-
-  // 登录/注册接口如果出现 404，自动切回唯一默认后端重试一次，避免设备残留错误 base
-  if (
-    res.status === 404 &&
-    path.startsWith('/api/auth/') &&
-    base !== DEFAULT_API_BASE
-  ) {
-    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
-    console.info('API base updated');
-    base = DEFAULT_API_BASE;
-    res = await fetch(`${base}${path}`, request);
-  }
+  const base = getApiBase();
+  const res = await fetch(`${base}${path}`, request);
 
   if (!res.ok) {
     let detail = `请求失败(${res.status})`;
@@ -263,7 +254,10 @@ async function apiFetch(path, options = {}) {
     if (res.status === 401) {
       showLoginBy401(detail);
     }
-    throw new Error(detail);
+    const err = new Error(detail);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
   }
 
   const ct = res.headers.get('content-type') || '';
@@ -305,7 +299,16 @@ async function apiUpdateMe(payload) {
 }
 
 async function apiSearchUsers(keyword) {
-  return apiFetch(`/api/users/search?q=${encodeURIComponent(keyword)}`);
+  const q = String(keyword || '').trim();
+  const base = getApiBase();
+  try {
+    const data = await apiFetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+    console.log(`[search] base=${base} q=${q} status=200`);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn(`[search] base=${base} q=${q} status=${err.status || 'ERR'}`);
+    throw err;
+  }
 }
 
 async function apiGetFriends() {
@@ -569,37 +572,57 @@ function getDmConversationWithFriend(friendId) {
   );
 }
 
+function isNearBottom(el, threshold = 80) {
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+}
+
+function updateLastMessageId(roomId, messages) {
+  if (!roomId || !Array.isArray(messages) || !messages.length) return;
+  const maxId = messages.reduce((max, m) => (m.id > max ? m.id : max), 0);
+  if (maxId > 0) appState.lastMessageIdByRoom[roomId] = maxId;
+}
+
 function stopRoomPolling() {
   if (appState.roomPollTimer) {
     clearInterval(appState.roomPollTimer);
     appState.roomPollTimer = null;
   }
+  appState.roomPollRoomId = null;
   appState.roomPollInFlight = false;
 }
 
 async function pollActiveRoomMessages() {
   if (appState.roomPollInFlight) return;
-  const conv = findConversationById(appState.activeConversationId);
+  const roomId = appState.roomPollRoomId || appState.activeConversationId;
+  if (!roomId) return;
+  const conv = findConversationById(roomId);
   if (!conv) return;
 
   appState.roomPollInFlight = true;
   try {
-    const batch = await apiGetRoomMessages(conv.id, 20);
+    const batch = await apiGetRoomMessages(roomId, 20);
+    // 避免请求返回时用户已切房，造成串房间追加
+    if (roomId !== appState.activeConversationId) return;
+
     const normalized = batch.map(normalizeMessage).reverse();
     const existing = new Set(conv.messages.map((m) => m.id));
-    let hasNew = false;
+    const listEl = document.getElementById('messageList');
+    const nearBottom = isNearBottom(listEl);
+    const newlyAdded = [];
 
     normalized.forEach((msg) => {
       if (!existing.has(msg.id)) {
         conv.messages.push(msg);
-        hasNew = true;
+        newlyAdded.push(msg);
       }
     });
 
-    if (hasNew) {
-      renderConversationList();
-      if (appState.currentView === 'messagesView' && appState.activeConversationId === conv.id) {
-        renderMessages();
+    if (newlyAdded.length) {
+      updateLastMessageId(roomId, conv.messages);
+      scheduleConversationListRender();
+      if (appState.currentView === 'messagesView' && appState.activeConversationId === roomId) {
+        appendMessagesToView(conv, newlyAdded, { autoScroll: nearBottom });
       }
       updateUnreadBadges();
       await markCurrentRoomRead();
@@ -614,9 +637,33 @@ async function pollActiveRoomMessages() {
 function startRoomPolling(roomId) {
   stopRoomPolling();
   if (!roomId) return;
+  appState.roomPollRoomId = roomId;
+  const conv = findConversationById(roomId);
+  if (conv) updateLastMessageId(roomId, conv.messages);
+  pollActiveRoomMessages().catch((err) => console.warn('首次轮询失败', err.message));
   appState.roomPollTimer = setInterval(() => {
     pollActiveRoomMessages();
   }, 2000);
+}
+
+function startUnreadPolling() {
+  if (appState.unreadPollTimer) clearInterval(appState.unreadPollTimer);
+  appState.unreadPollTimer = setInterval(async () => {
+    try {
+      await refreshUnreadCounts();
+      renderConversationList();
+      updateUnreadBadges();
+    } catch (err) {
+      console.warn('未读轮询失败:', err.message);
+    }
+  }, 10000);
+}
+
+function stopUnreadPolling() {
+  if (appState.unreadPollTimer) {
+    clearInterval(appState.unreadPollTimer);
+    appState.unreadPollTimer = null;
+  }
 }
 
 // ============================
@@ -773,7 +820,7 @@ function bindAuthEvents() {
       setToken(data.token);
       await bootstrapAfterLogin(data.user);
     } catch (err) {
-      alert(`登录失败：${err.message}`);
+      alert(`登录失败(${err.status || 'ERR'}): ${err.message}`);
     }
   });
 
@@ -787,7 +834,7 @@ function bindAuthEvents() {
       setToken(data.token);
       await bootstrapAfterLogin(data.user);
     } catch (err) {
-      alert(`注册失败：${err.message}`);
+      alert(`注册失败(${err.status || 'ERR'}): ${err.message}`);
     }
   });
 }
@@ -810,6 +857,7 @@ function logout() {
     appState.wsReconnectTimer = null;
   }
   stopRoomPolling();
+  stopUnreadPolling();
 
   showAuth();
   switchAuthPage('login');
@@ -950,6 +998,8 @@ async function handleFriendSearch() {
     }
 
     results.forEach((item) => {
+      const isAdded = appState.friends.some((f) => f.id === item.id);
+      const displayName = appState.friendRemarks[item.id] || item.nickname || item.username;
       mergeUserToMap({
         id: item.id,
         username: item.username,
@@ -964,16 +1014,18 @@ async function handleFriendSearch() {
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
       row.innerHTML = `
         <div>
-          <div class="fw-semibold">${item.nickname || item.username}</div>
+          <div class="fw-semibold">${displayName}</div>
           <small class="text-secondary">@${item.username}</small>
         </div>
-        <button class="btn btn-sm btn-outline-primary">申请</button>
+        <button class="btn btn-sm btn-outline-primary" ${isAdded ? 'disabled' : ''}>${isAdded ? '已添加' : '添加好友'}</button>
       `;
-      row.querySelector('button').addEventListener('click', () => addFriendById(item.id));
+      if (!isAdded) {
+        row.querySelector('button').addEventListener('click', () => addFriendById(item.id));
+      }
       box.appendChild(row);
     });
   } catch (err) {
-    box.innerHTML = `<div class="text-danger small">搜索失败：${err.message}</div>`;
+    box.innerHTML = `<div class="text-danger small">搜索失败: ${err.status || 'ERR'} ${err.message}</div>`;
   }
 }
 
@@ -1149,11 +1201,10 @@ async function openPrivateChatWith(friendId) {
 
   appState.activeConversationId = conv.id;
   conv.unreadCount = 0;
-  switchView('messagesView');
+  switchView('messagesView', { keepRoom: true });
   renderConversationList();
   renderMessages();
   startRoomPolling(conv.id);
-  pollActiveRoomMessages().catch((err) => console.warn('首次轮询失败', err.message));
   updateUnreadBadges();
   markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
 }
@@ -1245,11 +1296,10 @@ function renderGroupList() {
     item.addEventListener('click', () => {
       appState.activeConversationId = g.id;
       g.unreadCount = 0;
-      switchView('messagesView');
+      switchView('messagesView', { keepRoom: true });
       renderConversationList();
       renderMessages();
       startRoomPolling(g.id);
-      pollActiveRoomMessages().catch((err) => console.warn('首次轮询失败', err.message));
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     });
@@ -1327,7 +1377,7 @@ async function handleImageUpload(e) {
       alert('上传接口未部署/路径不一致，请检查后端 /api/uploads/images');
       return;
     }
-    alert(`图片发送失败：${err.message}`);
+    alert(`上传失败(${err.status || 'ERR'}): ${err.message}`);
   }
 }
 
@@ -1422,7 +1472,7 @@ function renderConversationList() {
   });
 
   if (!list.length) {
-    box.innerHTML = '<div class="p-3 text-secondary">暂无会话，请先添加好友或创建群组。</div>';
+    box.innerHTML = '<div class="p-3 text-secondary">暂无会话，去好友页添加好友开始聊天</div>';
     renderMessages();
     return;
   }
@@ -1454,7 +1504,6 @@ function renderConversationList() {
       renderConversationList();
       renderMessages();
       startRoomPolling(conv.id);
-      pollActiveRoomMessages().catch((err) => console.warn('首次轮询失败', err.message));
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     });
@@ -1465,13 +1514,89 @@ function renderConversationList() {
   updateUnreadBadges();
 }
 
+function setChatPaneVisible(visible) {
+  const conversationPane = document.querySelector('.conversation-pane');
+  const chatPane = document.querySelector('.chat-pane');
+  if (!conversationPane || !chatPane) return;
+
+  if (visible) {
+    chatPane.classList.remove('d-none');
+    conversationPane.classList.remove('col-lg-12');
+    if (!conversationPane.classList.contains('col-lg-4')) {
+      conversationPane.classList.add('col-lg-4');
+    }
+    return;
+  }
+
+  chatPane.classList.add('d-none');
+  conversationPane.classList.remove('col-lg-4');
+  if (!conversationPane.classList.contains('col-lg-12')) {
+    conversationPane.classList.add('col-lg-12');
+  }
+}
+
+function scheduleConversationListRender() {
+  if (appState.conversationRenderQueued) return;
+  appState.conversationRenderQueued = true;
+  requestAnimationFrame(() => {
+    appState.conversationRenderQueued = false;
+    renderConversationList();
+  });
+}
+
+function buildMessageRow(msg, conv) {
+  const me = msg.senderId === appState.currentUser.id;
+  const sender = appState.userMap[msg.senderId];
+  const row = document.createElement('div');
+  row.className = `msg-row ${me ? 'me' : 'other'}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+
+  const senderName = !me && conv.type === 'group'
+    ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
+    : '';
+  const isEdited = !!(msg.updatedAt && msg.updatedAt > msg.createdAt);
+  const editedMark = isEdited ? `（已编辑 ${formatTime(msg.updatedAt)}）` : '';
+  const messageContent = renderMessageContent(msg.text);
+
+  bubble.innerHTML = `
+    ${senderName}
+    <div>${messageContent}</div>
+    <div class="msg-meta">${formatTime(msg.createdAt)} ${editedMark}</div>
+  `;
+
+  if (me && appState.currentUser.role === 'admin') {
+    bubble.title = '管理员可点击编辑消息';
+    bubble.style.cursor = 'pointer';
+    bubble.addEventListener('click', () => openEditMessageModal(msg));
+  }
+
+  row.appendChild(bubble);
+  return row;
+}
+
+function appendMessagesToView(conv, messages, options = {}) {
+  const { autoScroll = true } = options;
+  const listEl = document.getElementById('messageList');
+  if (!listEl || !messages.length) return;
+
+  const frag = document.createDocumentFragment();
+  messages.forEach((msg) => frag.appendChild(buildMessageRow(msg, conv)));
+  listEl.appendChild(frag);
+
+  if (autoScroll) {
+    listEl.scrollTop = listEl.scrollHeight;
+  }
+}
+
 async function markCurrentRoomRead() {
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) return;
   const last = conv.messages[conv.messages.length - 1];
   await apiMarkRoomRead(conv.id, last?.id || null);
   conv.unreadCount = 0;
-  renderConversationList();
+  scheduleConversationListRender();
   updateUnreadBadges();
 }
 
@@ -1488,13 +1613,15 @@ function renderMessages(options = {}) {
 
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
+    setChatPaneVisible(false);
     titleEl.textContent = '未选择会话';
-    subEl.textContent = '请选择好友开始聊天';
+    subEl.textContent = '请选择会话';
     loadMoreBtn.classList.add('d-none');
     composer.classList.add('d-none');
-    listEl.innerHTML = '<div class="h-100 d-flex align-items-center justify-content-center text-secondary">请选择好友开始聊天</div>';
+    listEl.innerHTML = '';
     return;
   }
+  setChatPaneVisible(true);
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
   loadMoreBtn.disabled = conv.messages.length === 0;
@@ -1510,43 +1637,9 @@ function renderMessages(options = {}) {
     subEl.textContent = other?.online ? '在线' : '离线';
   }
 
-  conv.messages.forEach((msg) => {
-    const me = msg.senderId === appState.currentUser.id;
-    const sender = appState.userMap[msg.senderId];
+  appendMessagesToView(conv, conv.messages, { autoScroll });
 
-    const row = document.createElement('div');
-    row.className = `msg-row ${me ? 'me' : 'other'}`;
-
-    const bubble = document.createElement('div');
-    bubble.className = 'msg-bubble';
-
-    const senderName = !me && conv.type === 'group'
-      ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
-      : '';
-    const isEdited = !!(msg.updatedAt && msg.updatedAt > msg.createdAt);
-    const editedMark = isEdited ? `（已编辑 ${formatTime(msg.updatedAt)}）` : '';
-    const messageContent = renderMessageContent(msg.text);
-
-    bubble.innerHTML = `
-      ${senderName}
-      <div>${messageContent}</div>
-      <div class="msg-meta">${formatTime(msg.createdAt)} ${editedMark}</div>
-    `;
-
-    // 管理员可编辑“自己历史消息”：点击自己的消息触发 Bootstrap 弹窗
-    if (me && appState.currentUser.role === 'admin') {
-      bubble.title = '管理员可点击编辑消息';
-      bubble.style.cursor = 'pointer';
-      bubble.addEventListener('click', () => openEditMessageModal(msg));
-    }
-
-    row.appendChild(bubble);
-    listEl.appendChild(row);
-  });
-
-  if (autoScroll) {
-    listEl.scrollTop = listEl.scrollHeight;
-  }
+  if (!autoScroll) return;
 }
 
 function sendMessage() {
@@ -1635,12 +1728,14 @@ function enterApp() {
   renderMessages();
   renderGroupMemberOptions();
   updateUnreadBadges();
+  startUnreadPolling();
 
   requestNotificationPermission();
 }
 
 async function init() {
-  await ensureApiBase();
+  getApiBase();
+  renderApiBaseIndicator();
 
   // 向后兼容：旧版本 token key 为 "token"
   const legacyToken = localStorage.getItem('token');
@@ -1668,8 +1763,10 @@ async function init() {
   try {
     await bootstrapAfterLogin();
   } catch (err) {
-    console.warn('token 失效，回到登录页：', err.message);
-    clearToken();
+    if (err.status === 401) {
+      console.warn('token 失效，回到登录页：', err.message);
+      clearToken();
+    }
     showAuth();
     switchAuthPage('login');
   }
@@ -1708,4 +1805,30 @@ window.__api = {
   apiEditMessage,
   apiSendMessage,
   apiUploadImage
+};
+
+window.__env = {
+  async checkAuthEndpoints() {
+    const base = getApiBase();
+    try {
+      const res = await fetch(`${base}/openapi.json`);
+      if (!res.ok) {
+        console.error(`[env] openapi fetch failed: status=${res.status}`);
+        return { ok: false, status: res.status };
+      }
+      const data = await res.json();
+      const paths = data?.paths || {};
+      const hasRegister = !!paths['/api/auth/register'];
+      const hasLogin = !!paths['/api/auth/login'];
+      if (!hasRegister || !hasLogin) {
+        console.error('[env] 后端未提供 /api/auth/register 或 /api/auth/login，或你连错后端');
+        return { ok: false, hasRegister, hasLogin };
+      }
+      console.log(`[env] ok base=${base}`);
+      return { ok: true, base, hasRegister, hasLogin };
+    } catch (err) {
+      console.error(`[env] openapi error: ${err.message}`);
+      return { ok: false, error: err.message };
+    }
+  }
 };
