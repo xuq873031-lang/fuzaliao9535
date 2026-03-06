@@ -90,3 +90,32 @@ class RoomRead(Base):
     room_id = Column(Integer, ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, index=True)
     last_read_message_id = Column(Integer, nullable=True)
     last_read_at = Column(DateTime, nullable=True)
+
+
+class FriendRequest(Base):
+    __tablename__ = "friend_requests"
+    __table_args__ = (
+        Index("ix_friend_requests_to_status", "to_user_id", "status"),
+        Index("ix_friend_requests_from_status", "from_user_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    to_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    responded_at = Column(DateTime, nullable=True)
+
+
+class FriendRemark(Base):
+    __tablename__ = "friend_remarks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "friend_id", name="uq_friend_remark_user_friend"),
+        Index("ix_friend_remarks_user_friend", "user_id", "friend_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    friend_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    remark = Column(String(80), nullable=False, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)

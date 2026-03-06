@@ -18,6 +18,9 @@ const EMOJIS = ['😀', '😁', '😂', '😊', '😍', '😎', '🤔', '😭', 
 let appState = {
   currentUser: null,
   friends: [],
+  incomingRequests: [],
+  outgoingRequests: [],
+  friendRemarks: {},
   userMap: {},
   conversations: [],
   activeConversationId: null,
@@ -149,9 +152,6 @@ function switchAuthPage(page) {
 }
 
 function switchView(viewId) {
-  if (viewId === 'messagesView' && !appState.activeConversationId) {
-    viewId = 'friendsView';
-  }
   appState.currentView = viewId;
   document.querySelectorAll('.view-section').forEach((el) => el.classList.add('d-none'));
   document.getElementById(viewId).classList.remove('d-none');
@@ -167,6 +167,20 @@ function switchView(viewId) {
   if (viewId === 'messagesView') {
     renderMessages();
     startRoomPolling(appState.activeConversationId);
+    refreshRoomsAndMessages()
+      .then(() => {
+        renderConversationList();
+        renderMessages();
+      })
+      .catch((err) => console.warn('刷新会话失败', err.message));
+  } else if (viewId === 'friendsView') {
+    stopRoomPolling();
+    Promise.all([refreshFriends(), refreshFriendRequests(), refreshFriendRemarks()])
+      .then(() => {
+        renderFriendList();
+        renderFriendRequestLists();
+      })
+      .catch((err) => console.warn('刷新好友数据失败', err.message));
   } else {
     stopRoomPolling();
   }
@@ -261,6 +275,40 @@ async function apiAddFriend(friendId) {
 
 async function apiRemoveFriend(friendId) {
   return apiFetch(`/api/friends/${friendId}`, { method: 'DELETE' });
+}
+
+async function apiSendFriendRequest(toUserId) {
+  return apiFetch('/api/friend-requests', {
+    method: 'POST',
+    body: JSON.stringify({ to_user_id: toUserId })
+  });
+}
+
+async function apiGetIncomingFriendRequests(status = 'pending') {
+  return apiFetch(`/api/friend-requests/incoming?status=${encodeURIComponent(status)}`);
+}
+
+async function apiGetOutgoingFriendRequests(status = 'pending') {
+  return apiFetch(`/api/friend-requests/outgoing?status=${encodeURIComponent(status)}`);
+}
+
+async function apiAcceptFriendRequest(requestId) {
+  return apiFetch(`/api/friend-requests/${requestId}/accept`, { method: 'POST' });
+}
+
+async function apiRejectFriendRequest(requestId) {
+  return apiFetch(`/api/friend-requests/${requestId}/reject`, { method: 'POST' });
+}
+
+async function apiGetFriendRemarks() {
+  return apiFetch('/api/friends/remarks');
+}
+
+async function apiSetFriendRemark(friendId, remark) {
+  return apiFetch(`/api/friends/${friendId}/remark`, {
+    method: 'PUT',
+    body: JSON.stringify({ remark })
+  });
 }
 
 async function apiGetOnlinePresence() {
@@ -380,6 +428,23 @@ async function refreshFriends() {
   });
 }
 
+async function refreshFriendRequests() {
+  const [incoming, outgoing] = await Promise.all([
+    apiGetIncomingFriendRequests('pending'),
+    apiGetOutgoingFriendRequests('pending')
+  ]);
+  appState.incomingRequests = incoming || [];
+  appState.outgoingRequests = outgoing || [];
+}
+
+async function refreshFriendRemarks() {
+  const rows = await apiGetFriendRemarks();
+  appState.friendRemarks = {};
+  (rows || []).forEach((r) => {
+    appState.friendRemarks[r.friend_id] = r.remark || '';
+  });
+}
+
 async function refreshPresenceOnlineList() {
   const onlineList = await apiGetOnlinePresence();
   const onlineSet = new Set(onlineList.map((x) => x.id));
@@ -437,10 +502,18 @@ function getOtherUserInPrivateConversation(conv) {
   return appState.userMap[otherId] || appState.friends.find((f) => f.id === otherId) || null;
 }
 
+function getDisplayNameByUserId(userId) {
+  const remark = appState.friendRemarks[userId];
+  if (remark) return remark;
+  const user = appState.userMap[userId] || appState.friends.find((f) => f.id === userId);
+  if (!user) return `用户${userId}`;
+  return user.nickname || user.username || `用户${userId}`;
+}
+
 function getConversationTitle(conv) {
   if (conv.type === 'group') return conv.title || conv.name;
   const other = getOtherUserInPrivateConversation(conv);
-  return other ? (other.nickname || other.username) : conv.title || conv.name || '私聊';
+  return other ? getDisplayNameByUserId(other.id) : conv.title || conv.name || '私聊';
 }
 
 function isDmConversation(conv) {
@@ -707,6 +780,8 @@ async function removeFriend(friendId) {
 
     await apiRemoveFriend(friendId);
     await refreshFriends();
+    await refreshFriendRemarks();
+    await refreshFriendRequests();
     await refreshRoomsAndMessages();
     await refreshUnreadCounts();
     if (shouldResetCurrent) {
@@ -714,6 +789,7 @@ async function removeFriend(friendId) {
       switchView('friendsView');
     }
     renderFriendList();
+    renderFriendRequestLists();
     renderConversationList();
     renderMessages();
     updateUnreadBadges();
@@ -848,7 +924,7 @@ async function handleFriendSearch() {
           <div class="fw-semibold">${item.nickname || item.username}</div>
           <small class="text-secondary">@${item.username}</small>
         </div>
-        <button class="btn btn-sm btn-outline-primary">添加</button>
+        <button class="btn btn-sm btn-outline-primary">申请</button>
       `;
       row.querySelector('button').addEventListener('click', () => addFriendById(item.id));
       box.appendChild(row);
@@ -860,16 +936,10 @@ async function handleFriendSearch() {
 
 async function addFriendById(friendId) {
   try {
-    await apiAddFriend(friendId);
-    await refreshFriends();
-    await refreshRoomsAndMessages();
-    await refreshUnreadCounts();
-    renderFriendList();
-    renderConversationList();
-    renderMessages();
-    renderGroupMemberOptions();
-    connectWebSocket();
-    alert('好友添加成功');
+    await apiSendFriendRequest(friendId);
+    await refreshFriendRequests();
+    renderFriendRequestLists();
+    alert('已发送好友申请，等待对方通过');
   } catch (err) {
     alert(`添加失败：${err.message}`);
   }
@@ -886,29 +956,121 @@ function renderFriendList() {
 
   appState.friends.forEach((f) => {
     const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
+    const displayName = getDisplayNameByUserId(f.id);
     const item = document.createElement('button');
     item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
     item.innerHTML = `
       <div class="d-flex align-items-center gap-2">
         <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
         <div>
-          <div class="fw-semibold">${f.nickname || f.username}</div>
+          <div class="fw-semibold">${displayName}</div>
           <small class="text-secondary">@${f.username}</small>
         </div>
       </div>
       <div class="d-flex align-items-center gap-2">
         <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
+        <button class="btn btn-sm btn-outline-secondary friend-remark-btn" data-fid="${f.id}" type="button">备注</button>
         <button class="btn btn-sm btn-outline-danger friend-remove-btn" data-fid="${f.id}" type="button">删除</button>
       </div>
     `;
 
     item.addEventListener('click', async (e) => {
-      if (e.target && e.target.classList.contains('friend-remove-btn')) return;
+      if (e.target && (e.target.classList.contains('friend-remove-btn') || e.target.classList.contains('friend-remark-btn'))) return;
       await openPrivateChatWith(f.id);
     });
+    item.querySelector('.friend-remark-btn').addEventListener('click', () => editFriendRemark(f.id));
     item.querySelector('.friend-remove-btn').addEventListener('click', () => removeFriend(f.id));
     box.appendChild(item);
   });
+}
+
+async function editFriendRemark(friendId) {
+  const current = appState.friendRemarks[friendId] || '';
+  const remark = prompt('设置好友备注（留空为清除）', current);
+  if (remark === null) return;
+  try {
+    await apiSetFriendRemark(friendId, remark.trim());
+    await refreshFriendRemarks();
+    renderFriendList();
+    renderConversationList();
+    renderMessages();
+  } catch (err) {
+    alert(`保存备注失败：${err.message}`);
+  }
+}
+
+async function handleAcceptRequest(requestId) {
+  try {
+    await apiAcceptFriendRequest(requestId);
+    await Promise.all([refreshFriends(), refreshFriendRequests(), refreshFriendRemarks(), refreshRoomsAndMessages(), refreshUnreadCounts()]);
+    renderFriendList();
+    renderFriendRequestLists();
+    renderConversationList();
+    renderMessages();
+    renderGroupMemberOptions();
+  } catch (err) {
+    alert(`通过失败：${err.message}`);
+  }
+}
+
+async function handleRejectRequest(requestId) {
+  try {
+    await apiRejectFriendRequest(requestId);
+    await refreshFriendRequests();
+    renderFriendRequestLists();
+  } catch (err) {
+    alert(`拒绝失败：${err.message}`);
+  }
+}
+
+function renderFriendRequestLists() {
+  const incomingBox = document.getElementById('incomingRequestList');
+  const outgoingBox = document.getElementById('outgoingRequestList');
+  if (!incomingBox || !outgoingBox) return;
+
+  incomingBox.innerHTML = '';
+  outgoingBox.innerHTML = '';
+
+  if (!appState.incomingRequests.length) {
+    incomingBox.innerHTML = '<div class="text-secondary small">暂无待处理申请</div>';
+  } else {
+    appState.incomingRequests.forEach((req) => {
+      const fromName = getDisplayNameByUserId(req.from_user_id);
+      const row = document.createElement('div');
+      row.className = 'list-group-item d-flex justify-content-between align-items-center';
+      row.innerHTML = `
+        <div>
+          <div class="fw-semibold">${fromName}</div>
+          <small class="text-secondary">用户ID: ${req.from_user_id}</small>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-success req-accept-btn">通过</button>
+          <button class="btn btn-sm btn-outline-secondary req-reject-btn">拒绝</button>
+        </div>
+      `;
+      row.querySelector('.req-accept-btn').addEventListener('click', () => handleAcceptRequest(req.id));
+      row.querySelector('.req-reject-btn').addEventListener('click', () => handleRejectRequest(req.id));
+      incomingBox.appendChild(row);
+    });
+  }
+
+  if (!appState.outgoingRequests.length) {
+    outgoingBox.innerHTML = '<div class="text-secondary small">暂无发出的申请</div>';
+  } else {
+    appState.outgoingRequests.forEach((req) => {
+      const toName = getDisplayNameByUserId(req.to_user_id);
+      const row = document.createElement('div');
+      row.className = 'list-group-item d-flex justify-content-between align-items-center';
+      row.innerHTML = `
+        <div>
+          <div class="fw-semibold">${toName}</div>
+          <small class="text-secondary">等待对方通过</small>
+        </div>
+        <span class="badge text-bg-warning">待处理</span>
+      `;
+      outgoingBox.appendChild(row);
+    });
+  }
 }
 
 async function ensureDirectRoomWithFriend(friendId) {
@@ -1118,6 +1280,10 @@ async function handleImageUpload(e) {
       content: `![img](${uploaded.url})`
     });
   } catch (err) {
+    if ((err.message || '').includes('Not Found')) {
+      alert('上传接口未部署/路径不一致，请检查后端 /api/uploads/images');
+      return;
+    }
     alert(`图片发送失败：${err.message}`);
   }
 }
@@ -1403,6 +1569,8 @@ async function bootstrapAfterLogin(userFromAuth = null) {
 
   mergeUserToMap(me);
   await refreshFriends();
+  await refreshFriendRequests();
+  await refreshFriendRemarks();
   await refreshPresenceOnlineList();
   await refreshRoomsAndMessages();
   await refreshUnreadCounts();
@@ -1413,11 +1581,12 @@ async function bootstrapAfterLogin(userFromAuth = null) {
 
 function enterApp() {
   showMain();
-  switchView('friendsView');
+  switchView('messagesView');
 
   updateUserHeader();
   renderProfile();
   renderFriendList();
+  renderFriendRequestLists();
   renderGroupList();
   renderConversationList();
   renderMessages();
@@ -1481,6 +1650,13 @@ window.__api = {
   apiGetFriends,
   apiAddFriend,
   apiRemoveFriend,
+  apiSendFriendRequest,
+  apiGetIncomingFriendRequests,
+  apiGetOutgoingFriendRequests,
+  apiAcceptFriendRequest,
+  apiRejectFriendRequest,
+  apiGetFriendRemarks,
+  apiSetFriendRemark,
   apiGetRooms,
   apiCreateRoom,
   apiGetRoomMessages,
