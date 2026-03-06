@@ -30,6 +30,7 @@ from .schemas import (
     RoomUnreadOut,
     RoomOut,
     RoomMemberOut,
+    SendMessageIn,
     SearchUserOut,
     TokenOut,
     UserOut,
@@ -907,6 +908,50 @@ def get_room_messages(
         )
         for m in rows
     ]
+
+
+@app.post("/api/rooms/{room_id}/messages", response_model=MessageOut)
+async def post_room_message(
+    room_id: int,
+    payload: SendMessageIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Empty content")
+
+    msg = Message(room_id=room_id, sender_id=current_user.id, content=content)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    # 发送者默认已读到最新消息
+    mark_room_read(db, current_user.id, room_id, msg.id)
+
+    await manager.broadcast_to_room(
+        room_id,
+        {"type": "new_message", "payload": serialize_message(msg)},
+    )
+
+    # 推送每个成员在该房间的最新未读数
+    for uid in get_room_member_ids(db, room_id):
+        unread_count = get_unread_count_for_room(db, uid, room_id)
+        await manager.send_json_to_user(
+            uid,
+            {"type": "unread_update", "room_id": room_id, "unread_count": unread_count},
+        )
+
+    return MessageOut(
+        id=msg.id,
+        room_id=msg.room_id,
+        sender_id=msg.sender_id,
+        content=msg.content,
+        edited_by_admin=msg.edited_by_admin,
+        created_at=msg.created_at,
+        updated_at=msg.updated_at,
+    )
 
 
 @app.patch("/api/messages/{message_id}", response_model=MessageOut)

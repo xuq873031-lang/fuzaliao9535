@@ -92,6 +92,10 @@ class MessageOut(BaseModel):
     updated_at: datetime | None
 
 
+class SendMessageIn(BaseModel):
+    content: str = Field(min_length=1)
+
+
 class EditMessageIn(BaseModel):
     content: str = Field(min_length=1)
 

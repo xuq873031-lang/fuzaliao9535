@@ -412,13 +412,18 @@ async function apiUploadImage(file) {
   });
 }
 
-function apiSendMessage(roomId, content) {
-  sendWsMessage({
+async function apiSendMessage(roomId, content) {
+  const wsSent = sendWsMessage({
     action: 'send_message',
     room_id: roomId,
     content
   });
-  return Promise.resolve({ ok: true });
+  if (wsSent) return { ok: true, via: 'ws' };
+  const message = await apiFetch(`/api/rooms/${roomId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ content })
+  });
+  return { ok: true, via: 'http', message };
 }
 
 // ============================
@@ -798,10 +803,10 @@ function handleWsEvent(evt) {
 
 function sendWsMessage(payload) {
   if (!appState.ws || appState.ws.readyState !== WebSocket.OPEN) {
-    alert('实时连接未建立，请稍后重试');
-    return;
+    return false;
   }
   appState.ws.send(JSON.stringify(payload));
+  return true;
 }
 
 // ============================
@@ -1368,11 +1373,16 @@ async function handleImageUpload(e) {
   try {
     const uploaded = await apiUploadImage(file);
     if (!uploaded || !uploaded.url) throw new Error('上传返回无效');
-    sendWsMessage({
-      action: 'send_message',
-      room_id: conv.id,
-      content: `![img](${uploaded.url})`
-    });
+    const sent = await apiSendMessage(conv.id, `![img](${uploaded.url})`);
+    if (sent.via === 'http' && sent.message) {
+      const msg = normalizeMessage(sent.message);
+      const exists = conv.messages.some((m) => m.id === msg.id);
+      if (!exists) conv.messages.push(msg);
+      appendMessagesToView(conv, [msg], { autoScroll: true });
+      scheduleConversationListRender();
+      updateUnreadBadges();
+      await markCurrentRoomRead();
+    }
   } catch (err) {
     if ((err.message || '').includes('Not Found')) {
       alert('上传接口未部署/路径不一致，请检查后端 /api/uploads/images');
@@ -1643,7 +1653,7 @@ function renderMessages(options = {}) {
   if (!autoScroll) return;
 }
 
-function sendMessage() {
+async function sendMessage() {
   const input = document.getElementById('messageInput');
   const text = input.value.trim();
   if (!text) return;
@@ -1656,11 +1666,21 @@ function sendMessage() {
 
   // TODO: 后端 WebSocket 发送消息
   // ws.send({ action: 'send_message', room_id, content })
-  sendWsMessage({
-    action: 'send_message',
-    room_id: conv.id,
-    content: text
-  });
+  try {
+    const sent = await apiSendMessage(conv.id, text);
+    if (sent.via === 'http' && sent.message) {
+      const msg = normalizeMessage(sent.message);
+      const exists = conv.messages.some((m) => m.id === msg.id);
+      if (!exists) conv.messages.push(msg);
+      appendMessagesToView(conv, [msg], { autoScroll: true });
+      scheduleConversationListRender();
+      updateUnreadBadges();
+      await markCurrentRoomRead();
+    }
+  } catch (err) {
+    alert(`发送失败(${err.status || 'ERR'}): ${err.message}`);
+    return;
+  }
 
   input.value = '';
 }
