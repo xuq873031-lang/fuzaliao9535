@@ -6,10 +6,9 @@ const STORAGE_KEYS = {
   token: 'chatwave_token',
   theme: 'chatwave_theme'
 };
-const DEFAULT_API_BASE = 'https://web-production-f9619e.up.railway.app';
+const DEFAULT_API_BASE = 'https://web-production-be9f.up.railway.app';
 const API_BASE_CANDIDATES = [
-  'https://web-production-f9619e.up.railway.app',
-  'https://web-production-afb64.up.railway.app'
+  'https://web-production-be9f.up.railway.app'
 ];
 
 const DEFAULT_AVATAR =
