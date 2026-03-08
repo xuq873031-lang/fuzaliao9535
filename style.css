@@ -30,6 +30,32 @@ body {
   background: var(--tg-surface);
 }
 
+.auth-card {
+  border: 1px solid rgba(34, 158, 217, 0.12);
+  backdrop-filter: blur(6px);
+}
+
+#authContainer .card-body h2 {
+  letter-spacing: 0.5px;
+}
+
+#authContainer .form-control {
+  border-radius: 12px;
+  border: 1px solid rgba(34, 158, 217, 0.24);
+  min-height: 44px;
+}
+
+#authContainer .form-control:focus {
+  border-color: rgba(34, 158, 217, 0.6);
+  box-shadow: 0 0 0 0.2rem rgba(34, 158, 217, 0.14);
+}
+
+#authContainer .btn-primary,
+#authContainer .btn-success {
+  min-height: 44px;
+  font-weight: 600;
+}
+
 .app-shell {
   min-height: calc(100vh - 2rem);
 }
@@ -258,5 +284,9 @@ body {
 
   .conversation-list {
     max-height: 220px;
+  }
+
+  .chat-pane {
+    min-height: calc(100vh - 210px);
   }
 }

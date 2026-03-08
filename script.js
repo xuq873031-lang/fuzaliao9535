@@ -123,11 +123,23 @@ function showLoginBy401(reason) {
 }
 
 function normalizePhone(input) {
-  return (input || '').replace(/[^\d]/g, '');
+  return String(input || '').trim();
 }
 
 function phoneToCompatEmail(phone) {
-  return `${phone}@phone.local`;
+  const safe = String(phone || '').toLowerCase().replace(/[^a-z0-9._-]/g, '_');
+  return `${safe}@account.local`;
+}
+
+function validateAccount(input) {
+  const account = normalizePhone(input);
+  if (account.length < 6) {
+    throw new Error('账号长度至少 6 位');
+  }
+  if (/\s/.test(account)) {
+    throw new Error('账号不能包含空格');
+  }
+  return account;
 }
 
 function formatTime(ts) {
@@ -192,8 +204,7 @@ function canEditOwnMessage(msg) {
   if (!msg) return false;
   if (msg.senderId !== appState.currentUser?.id) return false;
   if (isImageMessageText(msg.text)) return false;
-  const limitMs = 15 * 60 * 1000;
-  return Date.now() - msg.createdAt <= limitMs;
+  return true;
 }
 
 function getUnreadTotal() {
@@ -346,8 +357,8 @@ async function apiFetch(path, options = {}) {
 }
 
 async function apiLogin(phone, password) {
-  const normalizedPhone = normalizePhone(phone);
-  // 兼容当前后端：phone -> username
+  const normalizedPhone = validateAccount(phone);
+  // 兼容当前后端：account -> username
   return apiFetch('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username: normalizedPhone, password })
@@ -355,7 +366,7 @@ async function apiLogin(phone, password) {
 }
 
 async function apiRegister(phone, password) {
-  const normalizedPhone = normalizePhone(phone);
+  const normalizedPhone = validateAccount(phone);
   // 兼容当前后端：需 username+email+password
   return apiFetch('/api/auth/register', {
     method: 'POST',
@@ -928,6 +939,11 @@ function bindAuthEvents() {
     e.preventDefault();
     const phone = document.getElementById('loginPhone').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
+    const agreed = document.getElementById('loginAgree').checked;
+    if (!agreed) {
+      alert('请先勾选“我已阅读并同意相关协议”');
+      return;
+    }
 
     try {
       const data = await apiLogin(phone, password);
@@ -942,6 +958,11 @@ function bindAuthEvents() {
     e.preventDefault();
     const phone = document.getElementById('regPhone').value.trim();
     const password = document.getElementById('regPassword').value.trim();
+    const agreed = document.getElementById('registerAgree').checked;
+    if (!agreed) {
+      alert('请先勾选“我已阅读并同意相关协议”');
+      return;
+    }
 
     try {
       const data = await apiRegister(phone, password);
@@ -1486,7 +1507,7 @@ function startReplyMessage(msg) {
 
 function startEditOwnMessage(msg) {
   if (!canEditOwnMessage(msg)) {
-    alert('该消息不可编辑（仅自己发送的文本消息，且 15 分钟内）');
+    alert('该消息不可编辑（仅自己发送的文本消息）');
     return;
   }
   appState.replyingToMessage = null;
@@ -1518,6 +1539,7 @@ function bindChatEvents() {
   const clearReplyBtn = document.getElementById('clearReplyBtn');
   const actionReplyBtn = document.getElementById('msgActionReplyBtn');
   const actionEditBtn = document.getElementById('msgActionEditBtn');
+  const mobileBackBtn = document.getElementById('mobileBackToListBtn');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -1545,6 +1567,13 @@ function bindChatEvents() {
     const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
     if (modal) modal.hide();
   });
+  if (mobileBackBtn) mobileBackBtn.addEventListener('click', () => {
+    appState.activeConversationId = null;
+    clearReplyAndEditState({ resetInput: true });
+    stopRoomPolling();
+    renderConversationList();
+    renderMessages({ autoScroll: false });
+  });
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
@@ -1559,6 +1588,8 @@ function bindChatEvents() {
     if (appState.currentView === 'messagesView' && appState.activeConversationId) {
       scrollMessagesToBottom({ force: false });
     }
+    const conv = findConversationById(appState.activeConversationId);
+    setChatPaneVisible(!!conv);
   });
 
   const emojiBar = document.getElementById('emojiBar');
@@ -1760,22 +1791,44 @@ function renderConversationList() {
 function setChatPaneVisible(visible) {
   const conversationPane = document.querySelector('.conversation-pane');
   const chatPane = document.querySelector('.chat-pane');
+  const mobileBackBtn = document.getElementById('mobileBackToListBtn');
   if (!conversationPane || !chatPane) return;
+  const isMobile = window.matchMedia('(max-width: 991.98px)').matches;
 
-  if (visible) {
-    chatPane.classList.remove('d-none');
-    conversationPane.classList.remove('col-lg-12');
-    if (!conversationPane.classList.contains('col-lg-4')) {
-      conversationPane.classList.add('col-lg-4');
+  if (isMobile) {
+    if (visible) {
+      conversationPane.classList.add('d-none');
+      chatPane.classList.remove('d-none');
+      chatPane.classList.add('col-12');
+      if (mobileBackBtn) mobileBackBtn.classList.remove('d-none');
+    } else {
+      conversationPane.classList.remove('d-none');
+      chatPane.classList.add('d-none');
+      if (mobileBackBtn) mobileBackBtn.classList.add('d-none');
     }
     return;
   }
 
+  if (visible) {
+    chatPane.classList.remove('d-none');
+    conversationPane.classList.remove('d-none');
+    chatPane.classList.remove('col-12');
+    conversationPane.classList.remove('col-lg-12');
+    if (!conversationPane.classList.contains('col-lg-4')) {
+      conversationPane.classList.add('col-lg-4');
+    }
+    if (mobileBackBtn) mobileBackBtn.classList.add('d-none');
+    return;
+  }
+
   chatPane.classList.add('d-none');
+  conversationPane.classList.remove('d-none');
+  chatPane.classList.remove('col-12');
   conversationPane.classList.remove('col-lg-4');
   if (!conversationPane.classList.contains('col-lg-12')) {
     conversationPane.classList.add('col-lg-12');
   }
+  if (mobileBackBtn) mobileBackBtn.classList.add('d-none');
 }
 
 function scheduleConversationListRender() {

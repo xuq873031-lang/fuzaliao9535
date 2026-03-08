@@ -985,8 +985,6 @@ async def edit_message(
             raise HTTPException(status_code=400, detail="Image message cannot be edited")
         if new_content.startswith("![img]("):
             raise HTTPException(status_code=400, detail="Image message cannot be edited")
-        if datetime.utcnow() - msg.created_at > timedelta(minutes=15):
-            raise HTTPException(status_code=400, detail="Edit window expired")
 
     msg.content = new_content
     msg.edited_by_admin = bool(is_admin)
@@ -1113,9 +1111,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         continue
                     if data.content.strip().startswith("![img]("):
                         await websocket.send_json({"type": "error", "payload": {"message": "Image message cannot be edited"}})
-                        continue
-                    if datetime.utcnow() - msg.created_at > timedelta(minutes=15):
-                        await websocket.send_json({"type": "error", "payload": {"message": "Edit window expired"}})
                         continue
 
                 msg.content = data.content.strip()

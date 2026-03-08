@@ -32,12 +32,16 @@
                 <h5 class="mb-3">登录</h5>
                 <form id="loginForm" class="needs-validation" novalidate>
                   <div class="mb-3">
-                    <label for="loginPhone" class="form-label">手机号</label>
-                    <input id="loginPhone" class="form-control" required />
+                    <label for="loginPhone" class="form-label">账号</label>
+                    <input id="loginPhone" class="form-control" placeholder="请输入 6 位以上账号" required />
                   </div>
                   <div class="mb-3">
                     <label for="loginPassword" class="form-label">密码</label>
                     <input id="loginPassword" type="password" class="form-control" required />
+                  </div>
+                  <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="loginAgree" />
+                    <label class="form-check-label small text-secondary" for="loginAgree">我已阅读并同意相关协议</label>
                   </div>
                   <button class="btn btn-primary w-100 rounded-3" type="submit">登录</button>
                 </form>
@@ -51,12 +55,16 @@
                 <h5 class="mb-3">注册</h5>
                 <form id="registerForm" class="needs-validation" novalidate>
                   <div class="mb-3">
-                    <label for="regPhone" class="form-label">手机号</label>
-                    <input id="regPhone" class="form-control" required />
+                    <label for="regPhone" class="form-label">账号</label>
+                    <input id="regPhone" class="form-control" placeholder="请输入 6 位以上账号" required />
                   </div>
                   <div class="mb-3">
                     <label for="regPassword" class="form-label">密码</label>
                     <input id="regPassword" type="password" class="form-control" required />
+                  </div>
+                  <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="registerAgree" />
+                    <label class="form-check-label small text-secondary" for="registerAgree">我已阅读并同意相关协议</label>
                   </div>
                   <button class="btn btn-success w-100 rounded-3" type="submit">注册并登录</button>
                 </form>
@@ -130,7 +138,10 @@
                           <small id="chatSubTitle" class="text-secondary">支持单聊和群聊</small>
                         </div>
                       </div>
-                      <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm">加载更多</button>
+                      <div class="d-flex align-items-center gap-2">
+                        <button id="mobileBackToListBtn" class="btn btn-outline-secondary btn-sm d-lg-none d-none">返回</button>
+                        <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm">加载更多</button>
+                      </div>
                     </div>
 
                     <div id="messageList" class="flex-grow-1 p-3 message-list"></div>
