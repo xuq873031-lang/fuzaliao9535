@@ -1789,26 +1789,25 @@ function renderConversationList() {
 }
 
 function setChatPaneVisible(visible) {
+  const messagesView = document.getElementById('messagesView');
   const conversationPane = document.querySelector('.conversation-pane');
   const chatPane = document.querySelector('.chat-pane');
   const mobileBackBtn = document.getElementById('mobileBackToListBtn');
-  if (!conversationPane || !chatPane) return;
+  if (!messagesView || !conversationPane || !chatPane) return;
   const isMobile = window.matchMedia('(max-width: 991.98px)').matches;
 
   if (isMobile) {
     if (visible) {
-      conversationPane.classList.add('d-none');
-      chatPane.classList.remove('d-none');
-      chatPane.classList.add('col-12');
+      messagesView.classList.add('mobile-chat-active');
       if (mobileBackBtn) mobileBackBtn.classList.remove('d-none');
     } else {
-      conversationPane.classList.remove('d-none');
-      chatPane.classList.add('d-none');
+      messagesView.classList.remove('mobile-chat-active');
       if (mobileBackBtn) mobileBackBtn.classList.add('d-none');
     }
     return;
   }
 
+  messagesView.classList.remove('mobile-chat-active');
   if (visible) {
     chatPane.classList.remove('d-none');
     conversationPane.classList.remove('d-none');

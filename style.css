@@ -290,3 +290,23 @@ body {
     min-height: calc(100vh - 210px);
   }
 }
+
+@media (max-width: 991.98px) {
+  #messagesView .conversation-pane {
+    display: block;
+  }
+
+  #messagesView .chat-pane {
+    display: none;
+  }
+
+  #messagesView.mobile-chat-active .conversation-pane {
+    display: none !important;
+  }
+
+  #messagesView.mobile-chat-active .chat-pane {
+    display: flex !important;
+    width: 100%;
+    flex: 1 1 auto;
+  }
+}
