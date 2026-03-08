@@ -7,7 +7,7 @@ const STORAGE_KEYS = {
   theme: 'chatwave_theme'
 };
 const DEFAULT_API_BASE = 'https://web-production-be9f.up.railway.app';
-const APP_BUILD = '20260306_3';
+const APP_BUILD = '20260308_1';
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -91,6 +91,21 @@ function renderApiBaseIndicator() {
     document.body.appendChild(el);
   }
   el.textContent = `v${APP_BUILD} | API: ${host}`;
+}
+
+// PWA 注册：仅做非侵入式增强，失败不影响登录/聊天主流程
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  const isSecure = window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (!isSecure) return;
+
+  const basePath = location.pathname.includes('/fuzaliao9535') ? '/fuzaliao9535' : '';
+  const swUrl = `${basePath}/service-worker.js?v=${APP_BUILD}`;
+  try {
+    await navigator.serviceWorker.register(swUrl, { scope: `${basePath}/` || '/' });
+  } catch (err) {
+    console.warn('[PWA] service worker register failed:', err.message);
+  }
 }
 
 function showLoginBy401(reason) {
@@ -1757,6 +1772,7 @@ function enterApp() {
 async function init() {
   getApiBase();
   renderApiBaseIndicator();
+  registerServiceWorker();
 
   // 向后兼容：旧版本 token key 为 "token"
   const legacyToken = localStorage.getItem('token');
