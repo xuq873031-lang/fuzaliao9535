@@ -37,7 +37,10 @@ let appState = {
   lastMessageIdByRoom: {},
   unreadPollTimer: null,
   baseCorrectedLogged: false,
-  conversationRenderQueued: false
+  conversationRenderQueued: false,
+  userNearBottom: true,
+  lastSoundAt: 0,
+  audioCtx: null
 };
 
 // ============================
@@ -137,6 +140,20 @@ function formatTime(ts) {
   }
 }
 
+function formatConversationTime(ts) {
+  if (!ts) return '';
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(ts));
+  } catch (_) {
+    return '';
+  }
+}
+
 function escapeHtml(str) {
   return String(str)
     .replaceAll('&', '&amp;')
@@ -159,6 +176,28 @@ function renderMessageContent(text) {
 
 function getUnreadTotal() {
   return appState.conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+}
+
+function getUserAvatarById(userId) {
+  const user = appState.userMap[userId] || appState.friends.find((f) => f.id === userId);
+  return user?.avatar || user?.avatar_base64 || DEFAULT_AVATAR;
+}
+
+function getConversationAvatar(conv) {
+  if (conv.type === 'group') return conv.avatar || DEFAULT_AVATAR;
+  const other = getOtherUserInPrivateConversation(conv);
+  if (!other) return DEFAULT_AVATAR;
+  return other.avatar || other.avatar_base64 || DEFAULT_AVATAR;
+}
+
+function updateFriendRequestBadges() {
+  const count = (appState.incomingRequests || []).length;
+  ['friendReqBadgeDesktop', 'friendReqBadgeDrawer', 'friendReqBadgeMobileTab'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = String(count);
+    el.classList.toggle('d-none', count <= 0);
+  });
 }
 
 function normalizeMessage(raw) {
@@ -463,6 +502,7 @@ function roomToConversation(room) {
     type: room.type || room.room_type || 'group',
     name: room.name,
     title: room.title || room.name,
+    avatar: room.avatar || null,
     members: room.member_ids || [],
     unreadCount: 0,
     messages: [],
@@ -479,7 +519,7 @@ async function refreshFriends() {
     username: f.username,
     nickname: f.nickname || f.username,
     online: !!f.is_online,
-    avatar: appState.userMap[f.id]?.avatar || DEFAULT_AVATAR
+    avatar: f.avatar_base64 || appState.userMap[f.id]?.avatar || DEFAULT_AVATAR
   }));
 
   appState.friends.forEach((f) => {
@@ -502,6 +542,7 @@ async function refreshFriendRequests() {
   ]);
   appState.incomingRequests = incoming || [];
   appState.outgoingRequests = outgoing || [];
+  updateFriendRequestBadges();
 }
 
 async function refreshFriendRemarks() {
@@ -598,6 +639,26 @@ function isNearBottom(el, threshold = 80) {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
 }
 
+function scrollMessagesToBottom(options = {}) {
+  const { force = false } = options;
+  const listEl = document.getElementById('messageList');
+  if (!listEl) return;
+  if (!force && !isNearBottom(listEl, 120)) return;
+
+  requestAnimationFrame(() => {
+    listEl.scrollTop = listEl.scrollHeight;
+  });
+
+  const pendingImages = Array.from(listEl.querySelectorAll('img')).filter((img) => !img.complete);
+  pendingImages.forEach((img) => {
+    img.addEventListener('load', () => {
+      if (force || isNearBottom(listEl, 160)) {
+        listEl.scrollTop = listEl.scrollHeight;
+      }
+    }, { once: true });
+  });
+}
+
 function updateLastMessageId(roomId, messages) {
   if (!roomId || !Array.isArray(messages) || !messages.length) return;
   const maxId = messages.reduce((max, m) => (m.id > max ? m.id : max), 0);
@@ -671,9 +732,10 @@ function startUnreadPolling() {
   if (appState.unreadPollTimer) clearInterval(appState.unreadPollTimer);
   appState.unreadPollTimer = setInterval(async () => {
     try {
-      await refreshUnreadCounts();
+      await Promise.all([refreshUnreadCounts(), refreshFriendRequests()]);
       renderConversationList();
       updateUnreadBadges();
+      if (appState.currentView === 'friendsView') renderFriendRequestLists();
     } catch (err) {
       console.warn('未读轮询失败:', err.message);
     }
@@ -785,10 +847,13 @@ function handleWsEvent(evt) {
       conv.unreadCount = (conv.unreadCount || 0) + 1;
       const sender = appState.userMap[msg.senderId];
       notifyMessage(sender?.nickname || sender?.username || '新消息', msg.text);
+      playIncomingSound();
     }
 
     renderConversationList();
-    if (appState.activeConversationId === conv.id) renderMessages();
+    if (appState.activeConversationId === conv.id) {
+      if (!exists) appendMessagesToView(conv, [msg], { autoScroll: appState.userNearBottom });
+    }
     updateUnreadBadges();
     return;
   }
@@ -807,7 +872,7 @@ function handleWsEvent(evt) {
     }
 
     renderConversationList();
-    if (appState.activeConversationId === conv.id) renderMessages();
+    if (appState.activeConversationId === conv.id) renderMessages({ autoScroll: false });
     return;
   }
 
@@ -1026,7 +1091,7 @@ async function handleFriendSearch() {
         username: item.username,
         nickname: item.nickname,
         email: '',
-        avatar_base64: appState.userMap[item.id]?.avatar || DEFAULT_AVATAR,
+        avatar_base64: item.avatar_base64 || appState.userMap[item.id]?.avatar || DEFAULT_AVATAR,
         is_online: item.is_online,
         role: 'member'
       });
@@ -1034,9 +1099,12 @@ async function handleFriendSearch() {
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
       row.innerHTML = `
-        <div>
-          <div class="fw-semibold">${displayName}</div>
-          <small class="text-secondary">@${item.username}</small>
+        <div class="d-flex align-items-center gap-2">
+          <img src="${item.avatar_base64 || DEFAULT_AVATAR}" width="32" height="32" class="rounded-circle" alt="avatar" />
+          <div>
+            <div class="fw-semibold">${displayName}</div>
+            <small class="text-secondary">@${item.username}</small>
+          </div>
         </div>
         <button class="btn btn-sm btn-outline-primary" ${isAdded ? 'disabled' : ''}>${isAdded ? '已添加' : '添加好友'}</button>
       `;
@@ -1224,7 +1292,7 @@ async function openPrivateChatWith(friendId) {
   conv.unreadCount = 0;
   switchView('messagesView', { keepRoom: true });
   renderConversationList();
-  renderMessages();
+  renderMessages({ autoScroll: true, forceBottom: true });
   startRoomPolling(conv.id);
   updateUnreadBadges();
   markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
@@ -1319,7 +1387,7 @@ function renderGroupList() {
       g.unreadCount = 0;
       switchView('messagesView', { keepRoom: true });
       renderConversationList();
-      renderMessages();
+      renderMessages({ autoScroll: true, forceBottom: true });
       startRoomPolling(g.id);
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
@@ -1355,6 +1423,7 @@ function bindChatEvents() {
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
     const listEl = document.getElementById('messageList');
+    appState.userNearBottom = isNearBottom(listEl, 90);
     if (listEl.scrollTop <= 10) {
       loadMoreMessages();
     }
@@ -1508,19 +1577,27 @@ function renderConversationList() {
     const lastPreview = lastMsg
       ? (/^!\[img\]\(([^)]+)\)$/.test(lastMsg.text) ? '[图片]' : lastMsg.text.slice(0, 18))
       : '';
+    const lastTime = lastMsg ? formatConversationTime(lastMsg.createdAt) : '';
+    const avatar = getConversationAvatar(conv);
     const btn = document.createElement('button');
     btn.className = `list-group-item list-group-item-action ${appState.activeConversationId === conv.id ? 'active' : ''}`;
 
     const badge = conv.unreadCount > 0 ? `<span class="badge rounded-pill text-bg-danger">${conv.unreadCount}</span>` : '';
     btn.innerHTML = `
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="text-start">
-          <div class="fw-semibold">${conv.type === 'group' ? '群' : '私'} · ${getConversationTitle(conv)}</div>
-          <small class="${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">
-            ${conv.type === 'group' ? `${conv.memberCount || conv.members.length}人群聊` : '单聊'}${lastPreview ? ` · ${lastPreview}` : ''}
-          </small>
+      <div class="conversation-item">
+        <img src="${avatar}" class="conversation-avatar" alt="avatar" />
+        <div class="conversation-main text-start">
+          <div class="conversation-top">
+            <div class="conversation-name">${getConversationTitle(conv)}</div>
+            <div class="conversation-time ${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">${lastTime}</div>
+          </div>
+          <div class="conversation-bottom">
+            <div class="conversation-preview ${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">
+              ${conv.type === 'group' ? `${conv.memberCount || conv.members.length}人群聊` : '单聊'}${lastPreview ? ` · ${lastPreview}` : ''}
+            </div>
+            ${badge}
+          </div>
         </div>
-        ${badge}
       </div>
     `;
 
@@ -1528,7 +1605,7 @@ function renderConversationList() {
       appState.activeConversationId = conv.id;
       conv.unreadCount = 0;
       renderConversationList();
-      renderMessages();
+      renderMessages({ autoScroll: true, forceBottom: true });
       startRoomPolling(conv.id);
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
@@ -1575,6 +1652,15 @@ function buildMessageRow(msg, conv) {
   const sender = appState.userMap[msg.senderId];
   const row = document.createElement('div');
   row.className = `msg-row ${me ? 'me' : 'other'}`;
+  if (!me) {
+    const avatar = document.createElement('img');
+    avatar.className = 'conversation-avatar me-2';
+    avatar.style.width = '28px';
+    avatar.style.height = '28px';
+    avatar.src = getUserAvatarById(msg.senderId);
+    avatar.alt = 'avatar';
+    row.appendChild(avatar);
+  }
 
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble';
@@ -1611,9 +1697,7 @@ function appendMessagesToView(conv, messages, options = {}) {
   messages.forEach((msg) => frag.appendChild(buildMessageRow(msg, conv)));
   listEl.appendChild(frag);
 
-  if (autoScroll) {
-    listEl.scrollTop = listEl.scrollHeight;
-  }
+  if (autoScroll) scrollMessagesToBottom({ force: false });
 }
 
 async function markCurrentRoomRead() {
@@ -1627,10 +1711,11 @@ async function markCurrentRoomRead() {
 }
 
 function renderMessages(options = {}) {
-  const { autoScroll = true } = options;
+  const { autoScroll = true, forceBottom = false } = options;
   const listEl = document.getElementById('messageList');
   const titleEl = document.getElementById('chatTitle');
   const subEl = document.getElementById('chatSubTitle');
+  const avatarEl = document.getElementById('chatAvatar');
   const loadMoreBtn = document.getElementById('loadMoreBtn');
   const composer = document.getElementById('chatComposer');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
@@ -1642,6 +1727,7 @@ function renderMessages(options = {}) {
     setChatPaneVisible(false);
     titleEl.textContent = '未选择会话';
     subEl.textContent = '请选择会话';
+    if (avatarEl) avatarEl.src = DEFAULT_AVATAR;
     loadMoreBtn.classList.add('d-none');
     composer.classList.add('d-none');
     listEl.innerHTML = '';
@@ -1656,6 +1742,7 @@ function renderMessages(options = {}) {
     : (conv.hasMore === false ? '没有更多' : '加载更多');
 
   titleEl.textContent = getConversationTitle(conv);
+  if (avatarEl) avatarEl.src = getConversationAvatar(conv);
   if (conv.type === 'group') {
     subEl.textContent = `群成员：${conv.members.length} 人`;
   } else {
@@ -1664,8 +1751,10 @@ function renderMessages(options = {}) {
   }
 
   appendMessagesToView(conv, conv.messages, { autoScroll });
-
-  if (!autoScroll) return;
+  if (forceBottom) {
+    appState.userNearBottom = true;
+    scrollMessagesToBottom({ force: true });
+  }
 }
 
 async function sendMessage() {
@@ -1722,6 +1811,42 @@ function notifyMessage(title, body) {
   }
 }
 
+function ensureAudioContext() {
+  if (appState.audioCtx) return appState.audioCtx;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  appState.audioCtx = new AudioCtx();
+  return appState.audioCtx;
+}
+
+function playIncomingSound() {
+  const now = Date.now();
+  if (now - appState.lastSoundAt < 1200) return;
+  appState.lastSoundAt = now;
+
+  const ctx = ensureAudioContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => null);
+  }
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 860;
+    gain.gain.value = 0.0001;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t = ctx.currentTime;
+    gain.gain.exponentialRampToValueAtTime(0.06, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    osc.start(t);
+    osc.stop(t + 0.16);
+  } catch (_) {
+    // ignore audio failures
+  }
+}
+
 // ============================
 // 启动流程
 // ============================
@@ -1759,6 +1884,7 @@ function enterApp() {
   renderProfile();
   renderFriendList();
   renderFriendRequestLists();
+  updateFriendRequestBadges();
   renderGroupList();
   renderConversationList();
   renderMessages();
@@ -1789,6 +1915,8 @@ async function init() {
   bindFriendEvents();
   bindGroupEvents();
   bindChatEvents();
+  document.addEventListener('click', () => ensureAudioContext(), { once: true });
+  document.addEventListener('touchstart', () => ensureAudioContext(), { once: true, passive: true });
 
   const token = getToken();
   if (!token) {

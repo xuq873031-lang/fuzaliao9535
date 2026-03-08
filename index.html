@@ -85,7 +85,9 @@
               <button class="btn nav-btn text-start mb-2 active" data-view="messagesView">
                 消息 <span id="totalUnreadDesktop" class="badge text-bg-danger ms-2">0</span>
               </button>
-              <button class="btn nav-btn text-start mb-2" data-view="friendsView">好友</button>
+              <button class="btn nav-btn text-start mb-2" data-view="friendsView">
+                好友 <span id="friendReqBadgeDesktop" class="badge text-bg-warning ms-2 d-none">0</span>
+              </button>
               <button class="btn nav-btn text-start mb-2" data-view="groupsView">群组</button>
               <button class="btn nav-btn text-start mb-2" data-view="profileView">个人资料</button>
 
@@ -121,9 +123,12 @@
 
                   <div class="col-12 col-lg-8 d-flex flex-column chat-pane">
                     <div id="chatHeader" class="p-3 border-bottom d-flex justify-content-between align-items-center">
-                      <div>
-                        <h6 id="chatTitle" class="mb-1">请选择会话</h6>
-                        <small id="chatSubTitle" class="text-secondary">支持单聊和群聊</small>
+                      <div class="d-flex align-items-center gap-2">
+                        <img id="chatAvatar" class="chat-header-avatar" alt="avatar" />
+                        <div>
+                          <h6 id="chatTitle" class="mb-1">请选择会话</h6>
+                          <small id="chatSubTitle" class="text-secondary">支持单聊和群聊</small>
+                        </div>
                       </div>
                       <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm">加载更多</button>
                     </div>
@@ -235,7 +240,9 @@
           <button class="btn nav-btn text-start active" data-view="messagesView" data-mobile-nav="1">
             消息 <span id="totalUnreadMobile" class="badge text-bg-danger ms-2">0</span>
           </button>
-          <button class="btn nav-btn text-start" data-view="friendsView" data-mobile-nav="1">好友</button>
+          <button class="btn nav-btn text-start" data-view="friendsView" data-mobile-nav="1">
+            好友 <span id="friendReqBadgeDrawer" class="badge text-bg-warning ms-2 d-none">0</span>
+          </button>
           <button class="btn nav-btn text-start" data-view="groupsView" data-mobile-nav="1">群组</button>
           <button class="btn nav-btn text-start" data-view="profileView" data-mobile-nav="1">个人资料</button>
         </div>
@@ -244,7 +251,9 @@
       <!-- 手机底部 tab -->
       <nav class="mobile-tabbar d-md-none">
         <button class="mobile-tab active" data-view="messagesView">消息</button>
-        <button class="mobile-tab" data-view="friendsView">好友</button>
+        <button class="mobile-tab" data-view="friendsView">
+          好友 <span id="friendReqBadgeMobileTab" class="badge text-bg-warning d-none">0</span>
+        </button>
         <button class="mobile-tab" data-view="groupsView">群组</button>
         <button class="mobile-tab" data-view="profileView">我</button>
       </nav>

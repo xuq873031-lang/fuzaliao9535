@@ -105,6 +105,7 @@ class SearchUserOut(BaseModel):
     username: str
     nickname: str
     is_online: bool
+    avatar_base64: str | None = None
 
 
 class CreateFriendRequestIn(BaseModel):

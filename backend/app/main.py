@@ -347,7 +347,16 @@ def search_users(
     current_user: User = Depends(get_current_user),
 ):
     rows = db.execute(select(User).where(User.username.ilike(f"%{q}%"), User.id != current_user.id).limit(20)).scalars().all()
-    return [SearchUserOut(id=u.id, username=u.username, nickname=u.nickname, is_online=u.is_online) for u in rows]
+    return [
+        SearchUserOut(
+            id=u.id,
+            username=u.username,
+            nickname=u.nickname,
+            is_online=u.is_online,
+            avatar_base64=u.avatar_base64,
+        )
+        for u in rows
+    ]
 
 
 def _is_friend(db: Session, user_id: int, friend_id: int) -> bool:
@@ -555,7 +564,16 @@ def get_friends(db: Session = Depends(get_db), current_user: User = Depends(get_
     if not friend_ids:
         return []
     users = db.execute(select(User).where(User.id.in_(friend_ids))).scalars().all()
-    return [SearchUserOut(id=u.id, username=u.username, nickname=u.nickname, is_online=u.is_online) for u in users]
+    return [
+        SearchUserOut(
+            id=u.id,
+            username=u.username,
+            nickname=u.nickname,
+            is_online=u.is_online,
+            avatar_base64=u.avatar_base64,
+        )
+        for u in users
+    ]
 
 
 @app.get("/api/friends/remarks", response_model=list[FriendRemarkOut])
