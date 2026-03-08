@@ -69,6 +69,7 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     room_id = Column(Integer, ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    reply_to_message_id = Column(Integer, nullable=True, index=True)
     content = Column(Text, nullable=False)
     edited_by_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)

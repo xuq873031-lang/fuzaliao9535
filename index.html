@@ -136,6 +136,15 @@
                     <div id="messageList" class="flex-grow-1 p-3 message-list"></div>
 
                     <div id="chatComposer" class="border-top p-2 p-md-3">
+                      <div id="replyPreviewBar" class="alert alert-secondary py-2 px-3 mb-2 d-none">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                          <div>
+                            <div id="replyPreviewTitle" class="fw-semibold small"></div>
+                            <div id="replyPreviewText" class="small text-secondary"></div>
+                          </div>
+                          <button id="clearReplyBtn" class="btn btn-sm btn-outline-secondary" type="button">取消</button>
+                        </div>
+                      </div>
                       <div class="d-flex flex-wrap gap-1 mb-2" id="emojiBar"></div>
                       <div class="input-group">
                         <button id="uploadImageBtn" class="btn btn-outline-secondary" type="button">图片</button>
@@ -301,6 +310,22 @@
             <div class="modal-footer">
               <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
               <button id="saveEditMessageBtn" class="btn btn-primary">保存修改</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 消息操作弹窗：用于回复/编辑（移动端长按、桌面右键/按钮） -->
+      <div class="modal fade" id="messageActionModal" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">消息操作</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body d-grid gap-2">
+              <button id="msgActionReplyBtn" class="btn btn-outline-primary">回复</button>
+              <button id="msgActionEditBtn" class="btn btn-outline-secondary d-none">编辑</button>
             </div>
           </div>
         </div>

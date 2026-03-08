@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -157,15 +157,44 @@ def mark_room_read(db: Session, user_id: int, room_id: int, last_read_message_id
     return get_unread_count_for_room(db, user_id, room_id)
 
 
-def serialize_message(m: Message) -> dict:
+def get_reply_preview(db: Session, reply_to_message_id: int | None) -> tuple[int | None, str | None]:
+    if not reply_to_message_id:
+        return None, None
+    target = db.get(Message, reply_to_message_id)
+    if not target:
+        return None, None
+    return target.sender_id, target.content
+
+
+def build_message_out(db: Session, m: Message) -> MessageOut:
+    reply_sender_id, reply_content = get_reply_preview(db, m.reply_to_message_id)
+    return MessageOut(
+        id=m.id,
+        room_id=m.room_id,
+        sender_id=m.sender_id,
+        reply_to_message_id=m.reply_to_message_id,
+        reply_to_sender_id=reply_sender_id,
+        reply_to_content=reply_content,
+        content=m.content,
+        edited_by_admin=m.edited_by_admin,
+        created_at=m.created_at,
+        updated_at=m.updated_at,
+    )
+
+
+def serialize_message(db: Session, m: Message) -> dict:
+    out = build_message_out(db, m)
     return {
-        "id": m.id,
-        "room_id": m.room_id,
-        "sender_id": m.sender_id,
-        "content": m.content,
-        "edited_by_admin": m.edited_by_admin,
-        "created_at": m.created_at.isoformat(),
-        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+        "id": out.id,
+        "room_id": out.room_id,
+        "sender_id": out.sender_id,
+        "reply_to_message_id": out.reply_to_message_id,
+        "reply_to_sender_id": out.reply_to_sender_id,
+        "reply_to_content": out.reply_to_content,
+        "content": out.content,
+        "edited_by_admin": out.edited_by_admin,
+        "created_at": out.created_at.isoformat(),
+        "updated_at": out.updated_at.isoformat() if out.updated_at else None,
     }
 
 
@@ -185,6 +214,7 @@ def ensure_compatible_schema():
     - users.last_seen_at
     - chat_rooms.type/title/avatar
     - room_members.role/joined_at
+    - messages.reply_to_message_id
     """
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
@@ -223,6 +253,11 @@ def ensure_compatible_schema():
 
             conn.execute(text("UPDATE room_members SET role='member' WHERE role IS NULL"))
             conn.execute(text("UPDATE room_members SET joined_at=CURRENT_TIMESTAMP WHERE joined_at IS NULL"))
+
+        if "messages" in table_names:
+            message_columns = {col["name"] for col in inspector.get_columns("messages")}
+            if "reply_to_message_id" not in message_columns:
+                conn.execute(text("ALTER TABLE messages ADD COLUMN reply_to_message_id INTEGER"))
 
 
 def ensure_message_indexes():
@@ -802,7 +837,7 @@ async def add_room_member(
         db.add(system_msg)
         db.commit()
         db.refresh(system_msg)
-        await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(system_msg)})
+        await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
 
     return {"ok": True}
 
@@ -850,7 +885,7 @@ async def remove_room_member(
     db.add(system_msg)
     db.commit()
     db.refresh(system_msg)
-    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(system_msg)})
+    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
     return {"ok": True}
 
 
@@ -914,18 +949,7 @@ def get_room_messages(
 
     # 默认按时间倒序返回（最新在前）
     rows = db.execute(query.order_by(desc(Message.created_at), desc(Message.id)).limit(limit)).scalars().all()
-    return [
-        MessageOut(
-            id=m.id,
-            room_id=m.room_id,
-            sender_id=m.sender_id,
-            content=m.content,
-            edited_by_admin=m.edited_by_admin,
-            created_at=m.created_at,
-            updated_at=m.updated_at,
-        )
-        for m in rows
-    ]
+    return [build_message_out(db, m) for m in rows]
 
 
 @app.post("/api/rooms/{room_id}/messages", response_model=MessageOut)
@@ -939,8 +963,18 @@ async def post_room_message(
     content = payload.content.strip()
     if not content:
         raise HTTPException(status_code=422, detail="Empty content")
+    reply_to_message_id = payload.reply_to_message_id
+    if reply_to_message_id:
+        target = db.get(Message, reply_to_message_id)
+        if not target or target.room_id != room_id:
+            raise HTTPException(status_code=400, detail="Invalid reply target")
 
-    msg = Message(room_id=room_id, sender_id=current_user.id, content=content)
+    msg = Message(
+        room_id=room_id,
+        sender_id=current_user.id,
+        content=content,
+        reply_to_message_id=reply_to_message_id,
+    )
     db.add(msg)
     db.commit()
     db.refresh(msg)
@@ -950,7 +984,7 @@ async def post_room_message(
 
     await manager.broadcast_to_room(
         room_id,
-        {"type": "new_message", "payload": serialize_message(msg)},
+        {"type": "new_message", "payload": serialize_message(db, msg)},
     )
 
     # 推送每个成员在该房间的最新未读数
@@ -961,49 +995,48 @@ async def post_room_message(
             {"type": "unread_update", "room_id": room_id, "unread_count": unread_count},
         )
 
-    return MessageOut(
-        id=msg.id,
-        room_id=msg.room_id,
-        sender_id=msg.sender_id,
-        content=msg.content,
-        edited_by_admin=msg.edited_by_admin,
-        created_at=msg.created_at,
-        updated_at=msg.updated_at,
-    )
+    return build_message_out(db, msg)
 
 
 @app.patch("/api/messages/{message_id}", response_model=MessageOut)
-async def admin_edit_message(
+async def edit_message(
     message_id: int,
     payload: EditMessageIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only admin can edit messages")
-
     msg = db.get(Message, message_id)
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    msg.content = payload.content
-    msg.edited_by_admin = True
+    is_admin = current_user.role == "admin"
+    is_owner = msg.sender_id == current_user.id
+    if not is_admin and not is_owner:
+        raise HTTPException(status_code=403, detail="No permission")
+
+    new_content = payload.content.strip()
+    if not new_content:
+        raise HTTPException(status_code=422, detail="Empty content")
+
+    # 文本编辑限制：普通用户只能编辑自己的文本消息且在时间窗内
+    if is_owner and not is_admin:
+        if msg.content.startswith("![img]("):
+            raise HTTPException(status_code=400, detail="Image message cannot be edited")
+        if new_content.startswith("![img]("):
+            raise HTTPException(status_code=400, detail="Image message cannot be edited")
+        if datetime.utcnow() - msg.created_at > timedelta(minutes=15):
+            raise HTTPException(status_code=400, detail="Edit window expired")
+
+    msg.content = new_content
+    msg.edited_by_admin = bool(is_admin)
     msg.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(msg)
 
-    payload_ws = {"type": "message_edited", "payload": serialize_message(msg)}
+    payload_ws = {"type": "message_edited", "payload": serialize_message(db, msg)}
     await manager.broadcast_to_room(msg.room_id, payload_ws)
 
-    return MessageOut(
-        id=msg.id,
-        room_id=msg.room_id,
-        sender_id=msg.sender_id,
-        content=msg.content,
-        edited_by_admin=msg.edited_by_admin,
-        created_at=msg.created_at,
-        updated_at=msg.updated_at,
-    )
+    return build_message_out(db, msg)
 
 
 @app.websocket("/ws")
@@ -1064,7 +1097,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     await websocket.send_json({"type": "error", "payload": {"message": "No room access"}})
                     continue
 
-                msg = Message(room_id=data.room_id, sender_id=user_id, content=data.content.strip())
+                reply_to_message_id = data.reply_to_message_id
+                if reply_to_message_id:
+                    target = db.get(Message, reply_to_message_id)
+                    if not target or target.room_id != data.room_id:
+                        await websocket.send_json({"type": "error", "payload": {"message": "Invalid reply target"}})
+                        continue
+
+                msg = Message(
+                    room_id=data.room_id,
+                    sender_id=user_id,
+                    content=data.content.strip(),
+                    reply_to_message_id=reply_to_message_id,
+                )
                 db.add(msg)
                 db.commit()
                 db.refresh(msg)
@@ -1074,7 +1119,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
                 await manager.broadcast_to_room(
                     data.room_id,
-                    {"type": "new_message", "payload": serialize_message(msg)},
+                    {"type": "new_message", "payload": serialize_message(db, msg)},
                 )
 
                 # 推送每个成员在该房间的最新未读数
@@ -1087,9 +1132,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 continue
 
             if data.action == "edit_message":
-                if user.role != "admin":
-                    await websocket.send_json({"type": "error", "payload": {"message": "Only admin can edit"}})
-                    continue
                 if not data.message_id or not data.content:
                     await websocket.send_json({"type": "error", "payload": {"message": "message_id/content required"}})
                     continue
@@ -1099,15 +1141,31 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     await websocket.send_json({"type": "error", "payload": {"message": "Message not found"}})
                     continue
 
+                is_admin = user.role == "admin"
+                is_owner = msg.sender_id == user_id
+                if not is_admin and not is_owner:
+                    await websocket.send_json({"type": "error", "payload": {"message": "No permission"}})
+                    continue
+                if is_owner and not is_admin:
+                    if msg.content.startswith("![img]("):
+                        await websocket.send_json({"type": "error", "payload": {"message": "Image message cannot be edited"}})
+                        continue
+                    if data.content.strip().startswith("![img]("):
+                        await websocket.send_json({"type": "error", "payload": {"message": "Image message cannot be edited"}})
+                        continue
+                    if datetime.utcnow() - msg.created_at > timedelta(minutes=15):
+                        await websocket.send_json({"type": "error", "payload": {"message": "Edit window expired"}})
+                        continue
+
                 msg.content = data.content.strip()
                 msg.updated_at = datetime.utcnow()
-                msg.edited_by_admin = True
+                msg.edited_by_admin = bool(is_admin)
                 db.commit()
                 db.refresh(msg)
 
                 await manager.broadcast_to_room(
                     data.room_id,
-                    {"type": "message_edited", "payload": serialize_message(msg)},
+                    {"type": "message_edited", "payload": serialize_message(db, msg)},
                 )
                 continue
 

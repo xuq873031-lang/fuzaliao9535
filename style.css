@@ -144,6 +144,7 @@ body {
   font-size: 14px;
   word-break: break-word;
   cursor: default;
+  position: relative;
 }
 
 .msg-row.me .msg-bubble {
@@ -166,6 +167,33 @@ body {
   margin-top: 4px;
   font-size: 11px;
   opacity: 0.75;
+}
+
+.msg-reply-preview {
+  border-left: 3px solid rgba(255, 255, 255, 0.65);
+  padding-left: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.msg-row.other .msg-reply-preview {
+  border-left-color: rgba(0, 0, 0, 0.25);
+}
+
+.msg-action-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.msg-action-btn:hover {
+  opacity: 1;
 }
 
 .msg-image {

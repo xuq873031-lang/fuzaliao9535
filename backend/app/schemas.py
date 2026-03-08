@@ -86,6 +86,9 @@ class MessageOut(BaseModel):
     id: int
     room_id: int
     sender_id: int
+    reply_to_message_id: int | None = None
+    reply_to_sender_id: int | None = None
+    reply_to_content: str | None = None
     content: str
     edited_by_admin: bool
     created_at: datetime
@@ -94,6 +97,7 @@ class MessageOut(BaseModel):
 
 class SendMessageIn(BaseModel):
     content: str = Field(min_length=1)
+    reply_to_message_id: int | None = None
 
 
 class EditMessageIn(BaseModel):
@@ -150,6 +154,7 @@ class WsMessageIn(BaseModel):
     room_id: int
     content: str | None = None
     message_id: int | None = None
+    reply_to_message_id: int | None = None
 
 
 class WsMessageOut(BaseModel):

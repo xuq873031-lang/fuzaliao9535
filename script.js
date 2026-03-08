@@ -26,6 +26,9 @@ let appState = {
   activeConversationId: null,
   currentView: 'messagesView',
   editingMessageId: null,
+  editingOwnMessageId: null,
+  replyingToMessage: null,
+  actionTargetMessage: null,
   ws: null,
   wsReconnectTimer: null,
   wsReconnectTried: false,
@@ -174,6 +177,24 @@ function renderMessageContent(text) {
   return escapeHtml(raw).replaceAll('\n', '<br>');
 }
 
+function isImageMessageText(text) {
+  return /^!\[img\]\(([^)]+)\)$/.test(String(text || ''));
+}
+
+function summarizeMessageText(text) {
+  const raw = String(text || '');
+  if (isImageMessageText(raw)) return '[图片]';
+  return raw.replace(/\s+/g, ' ').slice(0, 36);
+}
+
+function canEditOwnMessage(msg) {
+  if (!msg) return false;
+  if (msg.senderId !== appState.currentUser?.id) return false;
+  if (isImageMessageText(msg.text)) return false;
+  const limitMs = 15 * 60 * 1000;
+  return Date.now() - msg.createdAt <= limitMs;
+}
+
 function getUnreadTotal() {
   return appState.conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 }
@@ -204,6 +225,9 @@ function normalizeMessage(raw) {
   return {
     id: raw.id,
     senderId: raw.sender_id,
+    replyToMessageId: raw.reply_to_message_id || null,
+    replyToSenderId: raw.reply_to_sender_id || null,
+    replyToContent: raw.reply_to_content || null,
     text: raw.content,
     createdAt: new Date(raw.created_at).getTime(),
     updatedAt: raw.updated_at ? new Date(raw.updated_at).getTime() : null,
@@ -466,16 +490,18 @@ async function apiUploadImage(file) {
   });
 }
 
-async function apiSendMessage(roomId, content) {
+async function apiSendMessage(roomId, content, extra = {}) {
+  const replyToMessageId = extra.replyToMessageId || null;
   const wsSent = sendWsMessage({
     action: 'send_message',
     room_id: roomId,
-    content
+    content,
+    reply_to_message_id: replyToMessageId
   });
   if (wsSent) return { ok: true, via: 'ws' };
   const message = await apiFetch(`/api/rooms/${roomId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content, reply_to_message_id: replyToMessageId })
   });
   return { ok: true, via: 'http', message };
 }
@@ -1290,6 +1316,7 @@ async function openPrivateChatWith(friendId) {
 
   appState.activeConversationId = conv.id;
   conv.unreadCount = 0;
+  clearReplyAndEditState();
   switchView('messagesView', { keepRoom: true });
   renderConversationList();
   renderMessages({ autoScroll: true, forceBottom: true });
@@ -1385,6 +1412,7 @@ function renderGroupList() {
     item.addEventListener('click', () => {
       appState.activeConversationId = g.id;
       g.unreadCount = 0;
+      clearReplyAndEditState();
       switchView('messagesView', { keepRoom: true });
       renderConversationList();
       renderMessages({ autoScroll: true, forceBottom: true });
@@ -1400,6 +1428,77 @@ function renderGroupList() {
 // ============================
 // 聊天渲染 + 发送 + 编辑
 // ============================
+function renderComposerState() {
+  const bar = document.getElementById('replyPreviewBar');
+  const title = document.getElementById('replyPreviewTitle');
+  const text = document.getElementById('replyPreviewText');
+  const sendBtn = document.getElementById('sendMessageBtn');
+  if (!bar || !title || !text || !sendBtn) return;
+
+  if (appState.editingOwnMessageId) {
+    const conv = findConversationById(appState.activeConversationId);
+    const msg = conv?.messages.find((m) => m.id === appState.editingOwnMessageId);
+    bar.classList.remove('d-none');
+    title.textContent = '编辑消息';
+    text.textContent = summarizeMessageText(msg?.text || '');
+    sendBtn.textContent = '保存';
+    return;
+  }
+
+  if (appState.replyingToMessage) {
+    const m = appState.replyingToMessage;
+    bar.classList.remove('d-none');
+    title.textContent = `回复 ${getDisplayNameByUserId(m.senderId)}`;
+    text.textContent = summarizeMessageText(m.text);
+    sendBtn.textContent = '发送';
+    return;
+  }
+
+  bar.classList.add('d-none');
+  sendBtn.textContent = '发送';
+}
+
+function clearReplyAndEditState() {
+  appState.replyingToMessage = null;
+  appState.editingOwnMessageId = null;
+  renderComposerState();
+}
+
+function startReplyMessage(msg) {
+  appState.editingOwnMessageId = null;
+  appState.replyingToMessage = {
+    id: msg.id,
+    senderId: msg.senderId,
+    text: msg.text
+  };
+  renderComposerState();
+  const input = document.getElementById('messageInput');
+  if (input) input.focus();
+}
+
+function startEditOwnMessage(msg) {
+  if (!canEditOwnMessage(msg)) {
+    alert('该消息不可编辑（仅自己发送的文本消息，且 15 分钟内）');
+    return;
+  }
+  appState.replyingToMessage = null;
+  appState.editingOwnMessageId = msg.id;
+  const input = document.getElementById('messageInput');
+  if (input) {
+    input.value = msg.text;
+    input.focus();
+  }
+  renderComposerState();
+}
+
+function openMessageActionMenu(msg) {
+  appState.actionTargetMessage = msg;
+  const editBtn = document.getElementById('msgActionEditBtn');
+  if (editBtn) editBtn.classList.toggle('d-none', !canEditOwnMessage(msg));
+  const modal = new bootstrap.Modal(document.getElementById('messageActionModal'));
+  modal.show();
+}
+
 function bindChatEvents() {
   const sendBtn = document.getElementById('sendMessageBtn');
   const msgInput = document.getElementById('messageInput');
@@ -1408,6 +1507,9 @@ function bindChatEvents() {
   const msgList = document.getElementById('messageList');
   const uploadImageBtn = document.getElementById('uploadImageBtn');
   const imageInput = document.getElementById('imageInput');
+  const clearReplyBtn = document.getElementById('clearReplyBtn');
+  const actionReplyBtn = document.getElementById('msgActionReplyBtn');
+  const actionEditBtn = document.getElementById('msgActionEditBtn');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -1419,6 +1521,19 @@ function bindChatEvents() {
     uploadImageBtn.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', handleImageUpload);
   }
+  if (clearReplyBtn) clearReplyBtn.addEventListener('click', clearReplyAndEditState);
+  if (actionReplyBtn) actionReplyBtn.addEventListener('click', () => {
+    if (!appState.actionTargetMessage) return;
+    startReplyMessage(appState.actionTargetMessage);
+    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
+    if (modal) modal.hide();
+  });
+  if (actionEditBtn) actionEditBtn.addEventListener('click', () => {
+    if (!appState.actionTargetMessage) return;
+    startEditOwnMessage(appState.actionTargetMessage);
+    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
+    if (modal) modal.hide();
+  });
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
@@ -1453,11 +1568,17 @@ async function handleImageUpload(e) {
     alert('请先选择一个会话');
     return;
   }
+  if (appState.editingOwnMessageId) {
+    alert('编辑状态下不支持发送图片，请先完成或取消编辑');
+    return;
+  }
 
   try {
     const uploaded = await apiUploadImage(file);
     if (!uploaded || !uploaded.url) throw new Error('上传返回无效');
-    const sent = await apiSendMessage(conv.id, `![img](${uploaded.url})`);
+    const sent = await apiSendMessage(conv.id, `![img](${uploaded.url})`, {
+      replyToMessageId: appState.replyingToMessage?.id || null
+    });
     if (sent.via === 'http' && sent.message) {
       const msg = normalizeMessage(sent.message);
       const exists = conv.messages.some((m) => m.id === msg.id);
@@ -1467,6 +1588,7 @@ async function handleImageUpload(e) {
       updateUnreadBadges();
       await markCurrentRoomRead();
     }
+    clearReplyAndEditState();
   } catch (err) {
     if ((err.message || '').includes('Not Found')) {
       alert('上传接口未部署/路径不一致，请检查后端 /api/uploads/images');
@@ -1604,6 +1726,7 @@ function renderConversationList() {
     btn.addEventListener('click', () => {
       appState.activeConversationId = conv.id;
       conv.unreadCount = 0;
+      clearReplyAndEditState();
       renderConversationList();
       renderMessages({ autoScroll: true, forceBottom: true });
       startRoomPolling(conv.id);
@@ -1671,18 +1794,40 @@ function buildMessageRow(msg, conv) {
   const isEdited = !!(msg.updatedAt && msg.updatedAt > msg.createdAt);
   const editedMark = isEdited ? `（已编辑 ${formatTime(msg.updatedAt)}）` : '';
   const messageContent = renderMessageContent(msg.text);
+  const replySenderName = msg.replyToSenderId ? getDisplayNameByUserId(msg.replyToSenderId) : '';
+  const replyText = msg.replyToContent ? summarizeMessageText(msg.replyToContent) : '';
+  const replyBlock = msg.replyToMessageId
+    ? `<div class="msg-reply-preview"><div class="fw-semibold">${escapeHtml(replySenderName || '消息')}</div><div>${escapeHtml(replyText || '引用消息')}</div></div>`
+    : '';
 
   bubble.innerHTML = `
+    <button class="msg-action-btn" type="button" aria-label="消息操作">⋮</button>
     ${senderName}
+    ${replyBlock}
     <div>${messageContent}</div>
     <div class="msg-meta">${formatTime(msg.createdAt)} ${editedMark}</div>
   `;
 
-  if (me && appState.currentUser.role === 'admin') {
-    bubble.title = '管理员可点击编辑消息';
-    bubble.style.cursor = 'pointer';
-    bubble.addEventListener('click', () => openEditMessageModal(msg));
-  }
+  const actionBtn = bubble.querySelector('.msg-action-btn');
+  if (actionBtn) actionBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMessageActionMenu(msg);
+  });
+
+  bubble.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    openMessageActionMenu(msg);
+  });
+  let longPressTimer = null;
+  bubble.addEventListener('touchstart', () => {
+    longPressTimer = setTimeout(() => openMessageActionMenu(msg), 450);
+  }, { passive: true });
+  ['touchend', 'touchcancel', 'touchmove'].forEach((ev) => {
+    bubble.addEventListener(ev, () => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }, { passive: true });
+  });
 
   row.appendChild(bubble);
   return row;
@@ -1731,6 +1876,7 @@ function renderMessages(options = {}) {
     loadMoreBtn.classList.add('d-none');
     composer.classList.add('d-none');
     listEl.innerHTML = '';
+    clearReplyAndEditState();
     return;
   }
   setChatPaneVisible(true);
@@ -1755,6 +1901,7 @@ function renderMessages(options = {}) {
     appState.userNearBottom = true;
     scrollMessagesToBottom({ force: true });
   }
+  renderComposerState();
 }
 
 async function sendMessage() {
@@ -1771,15 +1918,29 @@ async function sendMessage() {
   // TODO: 后端 WebSocket 发送消息
   // ws.send({ action: 'send_message', room_id, content })
   try {
-    const sent = await apiSendMessage(conv.id, text);
-    if (sent.via === 'http' && sent.message) {
-      const msg = normalizeMessage(sent.message);
-      const exists = conv.messages.some((m) => m.id === msg.id);
-      if (!exists) conv.messages.push(msg);
-      appendMessagesToView(conv, [msg], { autoScroll: true });
+    if (appState.editingOwnMessageId) {
+      const updated = await apiEditMessage(appState.editingOwnMessageId, text);
+      const m = conv.messages.find((x) => x.id === updated.id);
+      if (m) {
+        m.text = updated.content;
+        m.updatedAt = updated.updated_at ? new Date(updated.updated_at).getTime() : null;
+        m.editedAt = m.updatedAt;
+      }
+      renderMessages({ autoScroll: false });
       scheduleConversationListRender();
-      updateUnreadBadges();
-      await markCurrentRoomRead();
+    } else {
+      const sent = await apiSendMessage(conv.id, text, {
+        replyToMessageId: appState.replyingToMessage?.id || null
+      });
+      if (sent.via === 'http' && sent.message) {
+        const msg = normalizeMessage(sent.message);
+        const exists = conv.messages.some((m) => m.id === msg.id);
+        if (!exists) conv.messages.push(msg);
+        appendMessagesToView(conv, [msg], { autoScroll: true });
+        scheduleConversationListRender();
+        updateUnreadBadges();
+        await markCurrentRoomRead();
+      }
     }
   } catch (err) {
     alert(`发送失败(${err.status || 'ERR'}): ${err.message}`);
@@ -1787,6 +1948,7 @@ async function sendMessage() {
   }
 
   input.value = '';
+  clearReplyAndEditState();
 }
 
 // ============================
