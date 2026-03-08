@@ -799,47 +799,8 @@ async def add_room_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ensure_user_in_room(db, current_user.id, room_id)
-    room = db.get(ChatRoom, room_id)
-    if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
-    if room_effective_type(room) != "group":
-        raise HTTPException(status_code=400, detail="Only group room supports member management")
-
-    my_role = get_room_member_role(db, room_id, current_user.id)
-    if my_role != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can add members")
-
-    target_user = db.get(User, payload.user_id)
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Target user not found")
-
-    exists = db.execute(
-        select(room_members.c.user_id).where(room_members.c.room_id == room_id, room_members.c.user_id == payload.user_id)
-    ).first()
-    if not exists:
-        db.execute(
-            insert(room_members).values(
-                room_id=room_id,
-                user_id=payload.user_id,
-                role="member",
-                joined_at=datetime.utcnow(),
-            )
-        )
-        db.commit()
-        manager.refresh_user_rooms(payload.user_id, get_room_ids_for_user(db, payload.user_id))
-
-        system_msg = Message(
-            room_id=room_id,
-            sender_id=current_user.id,
-            content=f"[system] {target_user.nickname or target_user.username} 加入了群聊",
-        )
-        db.add(system_msg)
-        db.commit()
-        db.refresh(system_msg)
-        await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
-
-    return {"ok": True}
+    # 产品策略：当前版本禁止在群聊中继续加人（保留接口以兼容旧客户端）
+    raise HTTPException(status_code=403, detail="Adding members is disabled in current version")
 
 
 @app.delete("/api/rooms/{room_id}/members/{user_id}")

@@ -145,6 +145,9 @@ body {
   word-break: break-word;
   cursor: default;
   position: relative;
+  margin-bottom: 2px;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
 }
 
 .msg-row.me .msg-bubble {
@@ -170,11 +173,15 @@ body {
 }
 
 .msg-reply-preview {
-  border-left: 3px solid rgba(255, 255, 255, 0.65);
+  border-left: 3px solid rgba(255, 255, 255, 0.75);
   padding-left: 8px;
   margin-bottom: 6px;
   font-size: 12px;
   opacity: 0.9;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .msg-row.other .msg-reply-preview {

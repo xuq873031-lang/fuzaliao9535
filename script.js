@@ -43,7 +43,8 @@ let appState = {
   conversationRenderQueued: false,
   userNearBottom: true,
   lastSoundAt: 0,
-  audioCtx: null
+  audioCtx: null,
+  readAckTimer: null
 };
 
 // ============================
@@ -879,6 +880,7 @@ function handleWsEvent(evt) {
     renderConversationList();
     if (appState.activeConversationId === conv.id) {
       if (!exists) appendMessagesToView(conv, [msg], { autoScroll: appState.userNearBottom });
+      if (isFromOther) scheduleMarkCurrentRoomRead();
     }
     updateUnreadBadges();
     return;
@@ -897,7 +899,7 @@ function handleWsEvent(evt) {
       target.editedByAdmin = msg.editedByAdmin;
     }
 
-    renderConversationList();
+    scheduleConversationListRender();
     if (appState.activeConversationId === conv.id) renderMessages({ autoScroll: false });
     return;
   }
@@ -1458,9 +1460,15 @@ function renderComposerState() {
   sendBtn.textContent = '发送';
 }
 
-function clearReplyAndEditState() {
+function clearReplyAndEditState(options = {}) {
+  const { resetInput = false } = options;
+  const wasEditing = !!appState.editingOwnMessageId;
   appState.replyingToMessage = null;
   appState.editingOwnMessageId = null;
+  if (resetInput && wasEditing) {
+    const input = document.getElementById('messageInput');
+    if (input) input.value = '';
+  }
   renderComposerState();
 }
 
@@ -1515,13 +1523,16 @@ function bindChatEvents() {
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendMessage();
   });
+  if (msgInput) msgInput.addEventListener('focus', () => {
+    setTimeout(() => scrollMessagesToBottom({ force: false }), 120);
+  });
   if (saveEditBtn) saveEditBtn.addEventListener('click', saveEditedMessage);
   if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMoreMessages);
   if (uploadImageBtn && imageInput) {
     uploadImageBtn.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', handleImageUpload);
   }
-  if (clearReplyBtn) clearReplyBtn.addEventListener('click', clearReplyAndEditState);
+  if (clearReplyBtn) clearReplyBtn.addEventListener('click', () => clearReplyAndEditState({ resetInput: true }));
   if (actionReplyBtn) actionReplyBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     startReplyMessage(appState.actionTargetMessage);
@@ -1541,6 +1552,12 @@ function bindChatEvents() {
     appState.userNearBottom = isNearBottom(listEl, 90);
     if (listEl.scrollTop <= 10) {
       loadMoreMessages();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (appState.currentView === 'messagesView' && appState.activeConversationId) {
+      scrollMessagesToBottom({ force: false });
     }
   });
 
@@ -1791,8 +1808,6 @@ function buildMessageRow(msg, conv) {
   const senderName = !me && conv.type === 'group'
     ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
     : '';
-  const isEdited = !!(msg.updatedAt && msg.updatedAt > msg.createdAt);
-  const editedMark = isEdited ? `（已编辑 ${formatTime(msg.updatedAt)}）` : '';
   const messageContent = renderMessageContent(msg.text);
   const replySenderName = msg.replyToSenderId ? getDisplayNameByUserId(msg.replyToSenderId) : '';
   const replyText = msg.replyToContent ? summarizeMessageText(msg.replyToContent) : '';
@@ -1805,7 +1820,7 @@ function buildMessageRow(msg, conv) {
     ${senderName}
     ${replyBlock}
     <div>${messageContent}</div>
-    <div class="msg-meta">${formatTime(msg.createdAt)} ${editedMark}</div>
+    <div class="msg-meta">${formatTime(msg.createdAt)}</div>
   `;
 
   const actionBtn = bubble.querySelector('.msg-action-btn');
@@ -1819,14 +1834,41 @@ function buildMessageRow(msg, conv) {
     openMessageActionMenu(msg);
   });
   let longPressTimer = null;
-  bubble.addEventListener('touchstart', () => {
-    longPressTimer = setTimeout(() => openMessageActionMenu(msg), 450);
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let longPressTriggered = false;
+  bubble.addEventListener('touchstart', (e) => {
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    longPressTriggered = false;
+    longPressTimer = setTimeout(() => {
+      longPressTriggered = true;
+      openMessageActionMenu(msg);
+    }, 550);
   }, { passive: true });
-  ['touchend', 'touchcancel', 'touchmove'].forEach((ev) => {
-    bubble.addEventListener(ev, () => {
+  bubble.addEventListener('touchmove', (e) => {
+    const t = e.touches && e.touches[0];
+    if (!t || !longPressTimer) return;
+    const dx = Math.abs(t.clientX - touchStartX);
+    const dy = Math.abs(t.clientY - touchStartY);
+    // 允许轻微手抖，避免滚动时误触发
+    if (dx > 14 || dy > 14) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }, { passive: true });
+  ['touchend', 'touchcancel'].forEach((ev) => {
+    bubble.addEventListener(ev, (e) => {
       if (longPressTimer) clearTimeout(longPressTimer);
       longPressTimer = null;
-    }, { passive: true });
+      if (longPressTriggered) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      longPressTriggered = false;
+    });
   });
 
   row.appendChild(bubble);
@@ -1853,6 +1895,13 @@ async function markCurrentRoomRead() {
   conv.unreadCount = 0;
   scheduleConversationListRender();
   updateUnreadBadges();
+}
+
+function scheduleMarkCurrentRoomRead() {
+  if (appState.readAckTimer) clearTimeout(appState.readAckTimer);
+  appState.readAckTimer = setTimeout(() => {
+    markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
+  }, 180);
 }
 
 function renderMessages(options = {}) {
@@ -1949,6 +1998,7 @@ async function sendMessage() {
 
   input.value = '';
   clearReplyAndEditState();
+  input.focus();
 }
 
 // ============================
