@@ -1,0 +1,19 @@
+{
+  "name": "fuzaliao-android-wrapper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor Android wrapper for existing Fuzaliao chat web app",
+  "scripts": {
+    "android:add": "npx cap add android",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "apk:debug": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

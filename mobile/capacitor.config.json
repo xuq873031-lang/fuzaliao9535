@@ -1,0 +1,10 @@
+{
+  "appId": "io.fuzaliao.chat",
+  "appName": "Fuzaliao",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://xuq873031-lang.github.io/fuzaliao9535/",
+    "cleartext": false
+  }
+}
