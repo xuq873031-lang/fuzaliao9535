@@ -165,6 +165,7 @@
                         <button id="voiceCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="语音通话">语音</button>
                         <button id="videoCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="视频通话">视频</button>
                       </div>
+                      <div id="mentionSuggestBox" class="list-group mention-suggest-box d-none"></div>
                       <div class="input-group">
                         <button id="uploadImageBtn" class="btn btn-outline-secondary" type="button">图片</button>
                         <input id="imageInput" type="file" accept="image/*" class="d-none" />
@@ -332,6 +333,18 @@
                 <div class="input-group">
                   <select id="groupAddMemberSelect" class="form-select"></select>
                   <button id="groupAddMemberBtn" class="btn btn-primary" type="button">添加</button>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label for="groupRateLimitSelect" class="form-label">发言频率限制（仅群主可设置）</label>
+                <div class="input-group">
+                  <select id="groupRateLimitSelect" class="form-select">
+                    <option value="0">关闭限制</option>
+                    <option value="3">3 秒 1 条</option>
+                    <option value="5">5 秒 1 条</option>
+                    <option value="10">10 秒 1 条</option>
+                  </select>
+                  <button id="groupRateLimitSaveBtn" class="btn btn-outline-primary" type="button">保存</button>
                 </div>
               </div>
               <div class="border-top pt-3">

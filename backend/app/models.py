@@ -55,6 +55,7 @@ class ChatRoom(Base):
     type = Column(String(20), nullable=False, default="group")
     title = Column(String(120), nullable=True)
     avatar = Column(Text, nullable=True)
+    rate_limit_seconds = Column(Integer, nullable=False, default=0)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

@@ -62,6 +62,7 @@ class RoomOut(BaseModel):
     created_by: int
     member_ids: list[int]
     member_count: int | None = None
+    rate_limit_seconds: int | None = 0
 
 
 class AddRoomMemberIn(BaseModel):
@@ -89,6 +90,10 @@ class RoomMuteOut(BaseModel):
     room_id: int
     user_id: int
     muted: bool
+
+
+class RoomRateLimitIn(BaseModel):
+    seconds: int = Field(default=0, ge=0, le=30)
 
 
 class RoomUnreadOut(BaseModel):
