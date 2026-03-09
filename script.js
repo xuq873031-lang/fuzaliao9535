@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
 };
 const DEFAULT_API_BASE = 'https://web-production-be9f.up.railway.app';
 const APP_BUILD = '20260308_1';
+const SHOW_DEBUG_BADGE = false;
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -45,6 +46,7 @@ let appState = {
   lastSoundAt: 0,
   audioCtx: null,
   readAckTimer: null,
+  managingGroupId: null,
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
     mode: null, // audio|video
@@ -55,7 +57,10 @@ let appState = {
     isOutgoing: false,
     muted: false,
     cameraOff: false,
+    speakerOn: false,
+    speakerSupported: false,
     pendingInvite: null,
+    pendingCandidates: [],
     pc: null,
     localStream: null,
     remoteStream: null
@@ -95,6 +100,11 @@ function getApiBase() {
 }
 
 function renderApiBaseIndicator() {
+  if (!SHOW_DEBUG_BADGE) {
+    const old = document.getElementById('apiBaseIndicator');
+    if (old) old.remove();
+    return;
+  }
   const host = new URL(getApiBase()).host;
   let el = document.getElementById('apiBaseIndicator');
   if (!el) {
@@ -310,8 +320,23 @@ function switchAuthPage(page) {
   document.getElementById('registerPage').classList.toggle('d-none', page !== 'register');
 }
 
+function setAuthLoading(loading, text = '正在恢复登录...') {
+  const hint = document.getElementById('authLoadingHint');
+  if (hint) {
+    hint.textContent = text;
+    hint.classList.toggle('d-none', !loading);
+  }
+}
+
+function setButtonLoading(btn, loading, loadingText, normalText) {
+  if (!btn) return;
+  btn.disabled = !!loading;
+  btn.textContent = loading ? loadingText : normalText;
+}
+
 function switchView(viewId, options = {}) {
   const keepRoom = !!options.keepRoom;
+  const silentRefresh = !!options.silentRefresh;
   if (viewId === 'messagesView' && !keepRoom) {
     appState.activeConversationId = null;
   }
@@ -333,6 +358,7 @@ function switchView(viewId, options = {}) {
     renderMessages();
     if (appState.activeConversationId) startRoomPolling(appState.activeConversationId);
     else stopRoomPolling();
+    if (silentRefresh) return;
     refreshRoomsAndMessages()
       .then(() => {
         renderConversationList();
@@ -507,6 +533,29 @@ async function apiCreateRoom(name, memberIds) {
     method: 'POST',
     body: JSON.stringify({ name, member_ids: memberIds })
   });
+}
+
+async function apiGetRoomMembers(roomId) {
+  return apiFetch(`/api/rooms/${roomId}/members`);
+}
+
+async function apiAddRoomMember(roomId, userId) {
+  return apiFetch(`/api/rooms/${roomId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId })
+  });
+}
+
+async function apiRemoveRoomMember(roomId, userId) {
+  return apiFetch(`/api/rooms/${roomId}/members/${userId}`, { method: 'DELETE' });
+}
+
+async function apiMuteRoomMember(roomId, userId) {
+  return apiFetch(`/api/rooms/${roomId}/members/${userId}/mute`, { method: 'POST' });
+}
+
+async function apiUnmuteRoomMember(roomId, userId) {
+  return apiFetch(`/api/rooms/${roomId}/members/${userId}/mute`, { method: 'DELETE' });
 }
 
 async function apiGetRoomMessages(roomId, limit = 50) {
@@ -1033,6 +1082,10 @@ function handleWsEvent(evt) {
 
   if (evt.type === 'error') {
     console.warn('[WS] server error:', evt.payload?.message);
+    const msg = String(evt.payload?.message || '');
+    if (msg.toLowerCase().includes('muted')) {
+      alert('你已被群主禁言，暂时不能发送消息');
+    }
   }
 }
 
@@ -1097,8 +1150,9 @@ function updateActiveCallPanel() {
   const localVideo = document.getElementById('localVideo');
   const remoteVideo = document.getElementById('remoteVideo');
   const muteBtn = document.getElementById('callMuteBtn');
+  const speakerBtn = document.getElementById('callSpeakerBtn');
   const camBtn = document.getElementById('callToggleCameraBtn');
-  if (!panel || !nameEl || !statusEl || !badgeEl || !avatarEl || !videoWrap || !muteBtn || !camBtn) return;
+  if (!panel || !nameEl || !statusEl || !badgeEl || !avatarEl || !videoWrap || !muteBtn || !speakerBtn || !camBtn) return;
 
   if (appState.call.status === 'idle') {
     panel.classList.add('d-none');
@@ -1124,6 +1178,8 @@ function updateActiveCallPanel() {
   camBtn.classList.toggle('d-none', !isVideo);
   camBtn.textContent = appState.call.cameraOff ? '开启摄像头' : '关闭摄像头';
   muteBtn.textContent = appState.call.muted ? '取消静音' : '静音';
+  speakerBtn.textContent = appState.call.speakerOn ? '扩音开' : '扩音关';
+  speakerBtn.disabled = !appState.call.speakerSupported;
 
   if (isVideo) {
     if (localVideo) localVideo.srcObject = appState.call.localStream || null;
@@ -1143,7 +1199,10 @@ function resetCallState() {
     isOutgoing: false,
     muted: false,
     cameraOff: false,
+    speakerOn: false,
+    speakerSupported: false,
     pendingInvite: null,
+    pendingCandidates: [],
     pc: null,
     localStream: null,
     remoteStream: null
@@ -1162,31 +1221,84 @@ async function ensureLocalMedia(mode) {
   return stream;
 }
 
+function attachRemoteMediaStream(stream) {
+  const remoteVideo = document.getElementById('remoteVideo');
+  if (!remoteVideo) return;
+  remoteVideo.srcObject = stream || null;
+  const playPromise = remoteVideo.play();
+  if (playPromise && typeof playPromise.catch === 'function') {
+    playPromise.catch(() => null);
+  }
+  remoteVideo.onloadedmetadata = () => {
+    remoteVideo.play().catch(() => null);
+  };
+  appState.call.speakerSupported = typeof remoteVideo.setSinkId === 'function';
+}
+
+async function applySpeakerOutput(enabled) {
+  const remoteVideo = document.getElementById('remoteVideo');
+  if (!remoteVideo || typeof remoteVideo.setSinkId !== 'function') {
+    appState.call.speakerSupported = false;
+    updateActiveCallPanel();
+    return false;
+  }
+  appState.call.speakerSupported = true;
+  try {
+    if (!enabled) {
+      await remoteVideo.setSinkId('default');
+      return true;
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const outputs = devices.filter((d) => d.kind === 'audiooutput');
+    const preferred = outputs.find((d) => d.deviceId && d.deviceId !== 'default');
+    await remoteVideo.setSinkId(preferred?.deviceId || 'default');
+    return true;
+  } catch (err) {
+    console.warn('切换扩音失败:', err.message);
+    return false;
+  } finally {
+    updateActiveCallPanel();
+  }
+}
+
 function buildPeerConnection() {
   if (appState.call.pc) return appState.call.pc;
   const pc = new RTCPeerConnection(getRtcConfiguration());
   appState.call.pc = pc;
   appState.call.remoteStream = new MediaStream();
 
-  const remoteVideo = document.getElementById('remoteVideo');
-  if (remoteVideo) remoteVideo.srcObject = appState.call.remoteStream;
+  attachRemoteMediaStream(appState.call.remoteStream);
   const localVideo = document.getElementById('localVideo');
-  if (localVideo) localVideo.srcObject = appState.call.localStream || null;
+  if (localVideo) {
+    localVideo.srcObject = appState.call.localStream || null;
+    localVideo.play().catch(() => null);
+  }
 
   pc.ontrack = (evt) => {
-    evt.streams[0]?.getTracks().forEach((track) => {
-      appState.call.remoteStream.addTrack(track);
-    });
+    if (evt.streams && evt.streams[0]) {
+      appState.call.remoteStream = evt.streams[0];
+      attachRemoteMediaStream(appState.call.remoteStream);
+    } else if (evt.track) {
+      appState.call.remoteStream.addTrack(evt.track);
+      attachRemoteMediaStream(appState.call.remoteStream);
+    }
     updateActiveCallPanel();
   };
 
   pc.onicecandidate = (evt) => {
     if (!evt.candidate || !appState.call.callId) return;
+    const candidatePayload = typeof evt.candidate.toJSON === 'function'
+      ? evt.candidate.toJSON()
+      : {
+          candidate: evt.candidate.candidate,
+          sdpMid: evt.candidate.sdpMid,
+          sdpMLineIndex: evt.candidate.sdpMLineIndex
+        };
     sendWsMessage({
       action: 'call_ice_candidate',
       call_id: appState.call.callId,
       room_id: appState.call.roomId,
-      candidate: evt.candidate
+      candidate: candidatePayload
     });
   };
 
@@ -1240,6 +1352,8 @@ async function startCall(mode) {
   appState.call.isOutgoing = true;
   appState.call.muted = false;
   appState.call.cameraOff = false;
+  appState.call.speakerOn = false;
+  appState.call.pendingCandidates = [];
 
   try {
     await ensureLocalMedia(mode);
@@ -1273,6 +1387,8 @@ async function acceptIncomingCall() {
   appState.call.status = 'connecting';
   appState.call.muted = false;
   appState.call.cameraOff = false;
+  appState.call.speakerOn = false;
+  appState.call.pendingCandidates = [];
   hideIncomingCallPanel();
 
   try {
@@ -1337,6 +1453,14 @@ async function onCallOffer(payload) {
   if (appState.call.callId !== payload.call_id) return;
   const pc = buildPeerConnection();
   await pc.setRemoteDescription({ type: 'offer', sdp: payload.sdp });
+  while (appState.call.pendingCandidates.length) {
+    const c = appState.call.pendingCandidates.shift();
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(c));
+    } catch (_) {
+      // ignore candidate race
+    }
+  }
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   sendWsMessage({
@@ -1351,15 +1475,31 @@ async function onCallAnswer(payload) {
   if (!payload?.call_id || !payload?.sdp) return;
   if (appState.call.callId !== payload.call_id || !appState.call.pc) return;
   await appState.call.pc.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
+  while (appState.call.pendingCandidates.length) {
+    const c = appState.call.pendingCandidates.shift();
+    try {
+      await appState.call.pc.addIceCandidate(new RTCIceCandidate(c));
+    } catch (_) {
+      // ignore candidate race
+    }
+  }
   appState.call.status = 'active';
   updateActiveCallPanel();
 }
 
 async function onCallIceCandidate(payload) {
-  if (!payload?.call_id || !payload?.candidate || !appState.call.pc) return;
+  if (!payload?.call_id || !payload?.candidate) return;
   if (appState.call.callId !== payload.call_id) return;
+  if (!appState.call.pc) {
+    appState.call.pendingCandidates.push(payload.candidate);
+    return;
+  }
+  if (!appState.call.pc.remoteDescription) {
+    appState.call.pendingCandidates.push(payload.candidate);
+    return;
+  }
   try {
-    await appState.call.pc.addIceCandidate(payload.candidate);
+    await appState.call.pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
   } catch (err) {
     console.warn('ICE candidate add failed:', err.message);
   }
@@ -1410,6 +1550,17 @@ function toggleCallCamera() {
   updateActiveCallPanel();
 }
 
+async function toggleSpeakerMode() {
+  const next = !appState.call.speakerOn;
+  const ok = await applySpeakerOutput(next);
+  if (!ok) {
+    alert('当前环境不支持切换扩音输出（部分 iOS/PWA/WebView 限制）');
+    return;
+  }
+  appState.call.speakerOn = next;
+  updateActiveCallPanel();
+}
+
 function updateCallButtonsState() {
   const voiceBtn = document.getElementById('voiceCallBtn');
   const videoBtn = document.getElementById('videoCallBtn');
@@ -1429,6 +1580,7 @@ function bindAuthEvents() {
 
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
     const phone = document.getElementById('loginPhone').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
     const agreed = document.getElementById('loginAgree').checked;
@@ -1438,16 +1590,20 @@ function bindAuthEvents() {
     }
 
     try {
+      setButtonLoading(submitBtn, true, '登录中...', '登录');
       const data = await apiLogin(phone, password);
       setToken(data.token);
       await bootstrapAfterLogin(data.user);
     } catch (err) {
       alert(`登录失败(${err.status || 'ERR'}): ${err.message}`);
+    } finally {
+      setButtonLoading(submitBtn, false, '登录中...', '登录');
     }
   });
 
   document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
     const phone = document.getElementById('regPhone').value.trim();
     const password = document.getElementById('regPassword').value.trim();
     const agreed = document.getElementById('registerAgree').checked;
@@ -1457,11 +1613,14 @@ function bindAuthEvents() {
     }
 
     try {
+      setButtonLoading(submitBtn, true, '注册中...', '注册并登录');
       const data = await apiRegister(phone, password);
       setToken(data.token);
       await bootstrapAfterLogin(data.user);
     } catch (err) {
       alert(`注册失败(${err.status || 'ERR'}): ${err.message}`);
+    } finally {
+      setButtonLoading(submitBtn, false, '注册中...', '注册并登录');
     }
   });
 }
@@ -1874,6 +2033,31 @@ function bindGroupEvents() {
   });
 
   document.getElementById('createGroupModal').addEventListener('show.bs.modal', renderGroupMemberOptions);
+  const addBtn = document.getElementById('groupAddMemberBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      const select = document.getElementById('groupAddMemberSelect');
+      const userId = Number(select?.value || 0);
+      if (!userId) return;
+      try {
+        await apiAddRoomMember(groupId, userId);
+        await refreshRoomsAndMessages();
+        await refreshGroupManageModal(groupId);
+        renderGroupList();
+        renderConversationList();
+      } catch (err) {
+        alert(`拉人失败：${err.message}`);
+      }
+    });
+  }
+  const manageModalEl = document.getElementById('groupManageModal');
+  if (manageModalEl) {
+    manageModalEl.addEventListener('hidden.bs.modal', () => {
+      appState.managingGroupId = null;
+    });
+  }
 }
 
 function renderGroupMemberOptions() {
@@ -1915,13 +2099,17 @@ function renderGroupList() {
 
     const item = document.createElement('button');
     item.className = 'list-group-item list-group-item-action';
+    const isOwner = Number(g.createdBy) === Number(appState.currentUser?.id);
     item.innerHTML = `
       <div class="d-flex justify-content-between align-items-center">
         <div>
           <div class="fw-semibold">${g.name}</div>
           <small class="text-secondary">成员：${names}</small>
         </div>
-        <span class="badge text-bg-info">${g.members.length}人</span>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge text-bg-info">${g.members.length}人</span>
+          ${isOwner ? '<button class="btn btn-sm btn-outline-primary group-manage-btn" type="button">管理</button>' : ''}
+        </div>
       </div>
     `;
 
@@ -1937,7 +2125,118 @@ function renderGroupList() {
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     });
 
+    const manageBtn = item.querySelector('.group-manage-btn');
+    if (manageBtn) {
+      manageBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openGroupManageModal(g.id).catch((err) => alert(`打开群管理失败：${err.message}`));
+      });
+    }
+
     box.appendChild(item);
+  });
+}
+
+async function openGroupManageModal(groupId) {
+  const conv = findConversationById(groupId);
+  if (!conv || conv.type !== 'group') return;
+  if (Number(conv.createdBy) !== Number(appState.currentUser?.id)) {
+    alert('仅群主可以管理成员');
+    return;
+  }
+  appState.managingGroupId = groupId;
+  const titleEl = document.getElementById('groupManageTitle');
+  if (titleEl) titleEl.textContent = `群管理 · ${conv.title || conv.name}`;
+  await refreshGroupManageModal(groupId);
+  const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
+  modal.show();
+}
+
+async function refreshGroupManageModal(groupId) {
+  const [members, _friends] = await Promise.all([apiGetRoomMembers(groupId), refreshFriends()]);
+  renderGroupManageMembers(members || []);
+  renderGroupAddMemberOptions(groupId, members || []);
+}
+
+function renderGroupAddMemberOptions(groupId, members) {
+  const select = document.getElementById('groupAddMemberSelect');
+  if (!select) return;
+  const memberIds = new Set((members || []).map((m) => Number(m.user_id)));
+  const candidates = appState.friends.filter((f) => !memberIds.has(Number(f.id)));
+  if (!candidates.length) {
+    select.innerHTML = '<option value="">暂无可添加好友</option>';
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  select.innerHTML = candidates
+    .map((u) => `<option value="${u.id}">${escapeHtml(u.nickname || u.username)}</option>`)
+    .join('');
+}
+
+function renderGroupManageMembers(members) {
+  const box = document.getElementById('groupMemberManageList');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!members.length) {
+    box.innerHTML = '<div class="text-secondary small">暂无成员</div>';
+    return;
+  }
+  members.forEach((m) => {
+    const isSelf = Number(m.user_id) === Number(appState.currentUser?.id);
+    const roleBadge = m.role === 'owner' ? '<span class="badge text-bg-warning ms-1">群主</span>' : '';
+    const muteBtn = !isSelf && m.role !== 'owner'
+      ? `<button class="btn btn-sm btn-outline-secondary member-mute-btn">${m.muted ? '取消禁言' : '禁言'}</button>`
+      : '';
+    const removeBtn = !isSelf && m.role !== 'owner'
+      ? '<button class="btn btn-sm btn-outline-danger member-remove-btn">踢出</button>'
+      : '';
+
+    const row = document.createElement('div');
+    row.className = 'list-group-item d-flex justify-content-between align-items-center';
+    row.innerHTML = `
+      <div>
+        <div class="fw-semibold">${escapeHtml(m.nickname || m.username)} ${roleBadge}</div>
+        <small class="text-secondary">ID: ${m.user_id} ${m.muted ? '· 已禁言' : ''}</small>
+      </div>
+      <div class="d-flex gap-2">
+        ${muteBtn}
+        ${removeBtn}
+      </div>
+    `;
+    const muteEl = row.querySelector('.member-mute-btn');
+    if (muteEl) {
+      muteEl.addEventListener('click', async () => {
+        try {
+          if (m.muted) await apiUnmuteRoomMember(appState.managingGroupId, m.user_id);
+          else await apiMuteRoomMember(appState.managingGroupId, m.user_id);
+          await refreshRoomsAndMessages();
+          await refreshGroupManageModal(appState.managingGroupId);
+          renderGroupList();
+        } catch (err) {
+          alert(`操作失败：${err.message}`);
+        }
+      });
+    }
+    const removeEl = row.querySelector('.member-remove-btn');
+    if (removeEl) {
+      removeEl.addEventListener('click', async () => {
+        if (!confirm('确定踢出该成员？')) return;
+        try {
+          await apiRemoveRoomMember(appState.managingGroupId, m.user_id);
+          await refreshRoomsAndMessages();
+          await refreshGroupManageModal(appState.managingGroupId);
+          renderGroupList();
+          if (appState.activeConversationId === appState.managingGroupId) {
+            renderMessages({ autoScroll: false });
+          }
+        } catch (err) {
+          alert(`踢人失败：${err.message}`);
+        }
+      });
+    }
+    box.appendChild(row);
   });
 }
 
@@ -2039,6 +2338,7 @@ function bindChatEvents() {
   const incomingRejectBtn = document.getElementById('incomingRejectBtn');
   const callHangupBtn = document.getElementById('callHangupBtn');
   const callMuteBtn = document.getElementById('callMuteBtn');
+  const callSpeakerBtn = document.getElementById('callSpeakerBtn');
   const callToggleCameraBtn = document.getElementById('callToggleCameraBtn');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
@@ -2080,6 +2380,9 @@ function bindChatEvents() {
   if (incomingRejectBtn) incomingRejectBtn.addEventListener('click', rejectIncomingCall);
   if (callHangupBtn) callHangupBtn.addEventListener('click', () => endActiveCall({ localOnly: false, reason: 'manual_hangup' }));
   if (callMuteBtn) callMuteBtn.addEventListener('click', toggleCallMute);
+  if (callSpeakerBtn) callSpeakerBtn.addEventListener('click', () => {
+    toggleSpeakerMode().catch((err) => console.warn('扩音切换失败:', err.message));
+  });
   if (callToggleCameraBtn) callToggleCameraBtn.addEventListener('click', toggleCallCamera);
 
   // 上滑到顶部自动触发历史加载
@@ -2639,21 +2942,37 @@ async function bootstrapAfterLogin(userFromAuth = null) {
   };
 
   mergeUserToMap(me);
-  await refreshFriends();
-  await refreshFriendRequests();
-  await refreshFriendRemarks();
-  await refreshPresenceOnlineList();
-  await refreshRoomsAndMessages();
-  await refreshUnreadCounts();
-
+  enterApp({ skipDataRefresh: true });
   connectWebSocket();
-  enterApp();
+  setAuthLoading(true, '正在同步数据...');
+
+  await Promise.all([
+    refreshFriends(),
+    refreshFriendRequests(),
+    refreshFriendRemarks(),
+    refreshPresenceOnlineList(),
+    refreshRoomsAndMessages(),
+    refreshUnreadCounts()
+  ]);
+
+  updateUserHeader();
+  renderProfile();
+  renderFriendList();
+  renderFriendRequestLists();
+  updateFriendRequestBadges();
+  renderGroupList();
+  renderConversationList();
+  renderMessages();
+  renderGroupMemberOptions();
+  updateUnreadBadges();
+  setAuthLoading(false);
 }
 
-function enterApp() {
+function enterApp(options = {}) {
+  const skipDataRefresh = !!options.skipDataRefresh;
   resetCallState();
   showMain();
-  switchView('messagesView');
+  switchView('messagesView', { silentRefresh: skipDataRefresh });
 
   updateUserHeader();
   renderProfile();
@@ -2695,18 +3014,21 @@ async function init() {
 
   const token = getToken();
   if (!token) {
+    setAuthLoading(false);
     showAuth();
     switchAuthPage('login');
     return;
   }
 
   try {
+    setAuthLoading(true, '正在恢复登录...');
     await bootstrapAfterLogin();
   } catch (err) {
     if (err.status === 401) {
       console.warn('token 失效，回到登录页：', err.message);
       clearToken();
     }
+    setAuthLoading(false);
     showAuth();
     switchAuthPage('login');
   }
@@ -2739,6 +3061,11 @@ window.__api = {
   apiSetFriendRemark,
   apiGetRooms,
   apiCreateRoom,
+  apiGetRoomMembers,
+  apiAddRoomMember,
+  apiRemoveRoomMember,
+  apiMuteRoomMember,
+  apiUnmuteRoomMember,
   apiGetRoomMessages,
   apiGetUnreadCounts,
   apiMarkRoomRead,

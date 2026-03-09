@@ -26,6 +26,7 @@
             <div class="card-body p-4 p-md-5">
               <h2 class="fw-bold mb-2 text-center">即时聊天应用</h2>
               <p class="text-secondary text-center mb-4">欢迎使用</p>
+              <div id="authLoadingHint" class="alert alert-info py-2 d-none">正在恢复登录...</div>
 
               <!-- 登录页 -->
               <section id="loginPage">
@@ -306,6 +307,31 @@
         </div>
       </div>
 
+      <!-- 群管理弹窗（仅群主） -->
+      <div class="modal fade" id="groupManageModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title" id="groupManageTitle">群管理</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="groupAddMemberSelect" class="form-label">拉人进群</label>
+                <div class="input-group">
+                  <select id="groupAddMemberSelect" class="form-select"></select>
+                  <button id="groupAddMemberBtn" class="btn btn-primary" type="button">添加</button>
+                </div>
+              </div>
+              <div class="border-top pt-3">
+                <div class="fw-semibold mb-2">成员管理</div>
+                <div id="groupMemberManageList" class="list-group"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 编辑消息弹窗：仅管理员能触发 -->
       <div class="modal fade" id="editMessageModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
@@ -375,6 +401,7 @@
             <video id="localVideo" class="call-local-video" autoplay playsinline muted></video>
           </div>
           <div class="d-flex justify-content-center gap-2 mt-3">
+            <button id="callSpeakerBtn" class="btn btn-outline-secondary btn-sm">扩音</button>
             <button id="callMuteBtn" class="btn btn-outline-secondary btn-sm">静音</button>
             <button id="callToggleCameraBtn" class="btn btn-outline-secondary btn-sm d-none">关闭摄像头</button>
             <button id="callHangupBtn" class="btn btn-danger btn-sm">挂断</button>
