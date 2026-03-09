@@ -93,6 +93,23 @@ body {
   flex: 0 0 42px;
 }
 
+.online-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.online-dot.on {
+  background: #24c16c;
+}
+
+.online-dot.off {
+  background: #adb5bd;
+}
+
 .conversation-main {
   min-width: 0;
   flex: 1;
