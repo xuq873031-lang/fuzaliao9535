@@ -3296,14 +3296,20 @@ function setChatPaneVisible(visible) {
   if (isMobile) {
     if (visible) {
       messagesView.classList.add('mobile-chat-active');
+      conversationPane.style.setProperty('display', 'none', 'important');
+      chatPane.style.setProperty('display', 'flex', 'important');
       if (mobileBackBtn) mobileBackBtn.classList.remove('d-none');
     } else {
       messagesView.classList.remove('mobile-chat-active');
+      conversationPane.style.setProperty('display', 'block', 'important');
+      chatPane.style.setProperty('display', 'none', 'important');
       if (mobileBackBtn) mobileBackBtn.classList.add('d-none');
     }
     return;
   }
 
+  conversationPane.style.removeProperty('display');
+  chatPane.style.removeProperty('display');
   messagesView.classList.remove('mobile-chat-active');
   if (visible) {
     chatPane.classList.remove('d-none');

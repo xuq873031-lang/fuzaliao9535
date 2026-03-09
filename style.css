@@ -491,11 +491,11 @@ body {
 
 @media (max-width: 991.98px) {
   #messagesView .conversation-pane {
-    display: block;
+    display: block !important;
   }
 
   #messagesView .chat-pane {
-    display: none;
+    display: none !important;
   }
 
   #messagesView.mobile-chat-active .conversation-pane {
