@@ -956,6 +956,21 @@ function handleWsEvent(evt) {
     return;
   }
 
+  if (evt.type === 'room_removed') {
+    const roomId = Number(evt.room_id);
+    appState.conversations = appState.conversations.filter((c) => c.id !== roomId);
+    if (appState.activeConversationId === roomId) {
+      appState.activeConversationId = null;
+      stopRoomPolling();
+      renderMessages({ autoScroll: false });
+      alert('你已被移出该群');
+    }
+    renderGroupList();
+    renderConversationList();
+    updateUnreadBadges();
+    return;
+  }
+
   if (evt.type === 'read_receipt') {
     // 可选事件：当前版本不展示“谁已读到哪里”，保留入口以便后续扩展
     return;
@@ -2033,6 +2048,14 @@ function bindGroupEvents() {
   });
 
   document.getElementById('createGroupModal').addEventListener('show.bs.modal', renderGroupMemberOptions);
+  const groupMembersBtn = document.getElementById('groupMembersBtn');
+  if (groupMembersBtn) {
+    groupMembersBtn.addEventListener('click', () => {
+      const conv = findConversationById(appState.activeConversationId);
+      if (!conv || conv.type !== 'group') return;
+      openGroupManageModal(conv.id).catch((err) => alert(`打开成员列表失败：${err.message}`));
+    });
+  }
   const addBtn = document.getElementById('groupAddMemberBtn');
   if (addBtn) {
     addBtn.addEventListener('click', async () => {
@@ -2044,7 +2067,7 @@ function bindGroupEvents() {
       try {
         await apiAddRoomMember(groupId, userId);
         await refreshRoomsAndMessages();
-        await refreshGroupManageModal(groupId);
+        await refreshGroupManageModal(groupId, true);
         renderGroupList();
         renderConversationList();
       } catch (err) {
@@ -2141,27 +2164,31 @@ function renderGroupList() {
 async function openGroupManageModal(groupId) {
   const conv = findConversationById(groupId);
   if (!conv || conv.type !== 'group') return;
-  if (Number(conv.createdBy) !== Number(appState.currentUser?.id)) {
-    alert('仅群主可以管理成员');
-    return;
-  }
+  const isOwner = Number(conv.createdBy) === Number(appState.currentUser?.id);
   appState.managingGroupId = groupId;
   const titleEl = document.getElementById('groupManageTitle');
   if (titleEl) titleEl.textContent = `群管理 · ${conv.title || conv.name}`;
-  await refreshGroupManageModal(groupId);
+  await refreshGroupManageModal(groupId, isOwner);
   const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
   modal.show();
 }
 
-async function refreshGroupManageModal(groupId) {
+async function refreshGroupManageModal(groupId, isOwner) {
   const [members, _friends] = await Promise.all([apiGetRoomMembers(groupId), refreshFriends()]);
-  renderGroupManageMembers(members || []);
-  renderGroupAddMemberOptions(groupId, members || []);
+  renderGroupManageMembers(members || [], isOwner);
+  renderGroupAddMemberOptions(groupId, members || [], isOwner);
 }
 
-function renderGroupAddMemberOptions(groupId, members) {
+function renderGroupAddMemberOptions(groupId, members, isOwner) {
   const select = document.getElementById('groupAddMemberSelect');
+  const addBtn = document.getElementById('groupAddMemberBtn');
   if (!select) return;
+  if (addBtn) addBtn.disabled = !isOwner;
+  select.disabled = !isOwner;
+  if (!isOwner) {
+    select.innerHTML = '<option value="">仅群主可添加成员</option>';
+    return;
+  }
   const memberIds = new Set((members || []).map((m) => Number(m.user_id)));
   const candidates = appState.friends.filter((f) => !memberIds.has(Number(f.id)));
   if (!candidates.length) {
@@ -2175,7 +2202,7 @@ function renderGroupAddMemberOptions(groupId, members) {
     .join('');
 }
 
-function renderGroupManageMembers(members) {
+function renderGroupManageMembers(members, isOwner) {
   const box = document.getElementById('groupMemberManageList');
   if (!box) return;
   box.innerHTML = '';
@@ -2186,10 +2213,10 @@ function renderGroupManageMembers(members) {
   members.forEach((m) => {
     const isSelf = Number(m.user_id) === Number(appState.currentUser?.id);
     const roleBadge = m.role === 'owner' ? '<span class="badge text-bg-warning ms-1">群主</span>' : '';
-    const muteBtn = !isSelf && m.role !== 'owner'
+    const muteBtn = isOwner && !isSelf && m.role !== 'owner'
       ? `<button class="btn btn-sm btn-outline-secondary member-mute-btn">${m.muted ? '取消禁言' : '禁言'}</button>`
       : '';
-    const removeBtn = !isSelf && m.role !== 'owner'
+    const removeBtn = isOwner && !isSelf && m.role !== 'owner'
       ? '<button class="btn btn-sm btn-outline-danger member-remove-btn">踢出</button>'
       : '';
 
@@ -2212,7 +2239,7 @@ function renderGroupManageMembers(members) {
           if (m.muted) await apiUnmuteRoomMember(appState.managingGroupId, m.user_id);
           else await apiMuteRoomMember(appState.managingGroupId, m.user_id);
           await refreshRoomsAndMessages();
-          await refreshGroupManageModal(appState.managingGroupId);
+          await refreshGroupManageModal(appState.managingGroupId, true);
           renderGroupList();
         } catch (err) {
           alert(`操作失败：${err.message}`);
@@ -2226,7 +2253,7 @@ function renderGroupManageMembers(members) {
         try {
           await apiRemoveRoomMember(appState.managingGroupId, m.user_id);
           await refreshRoomsAndMessages();
-          await refreshGroupManageModal(appState.managingGroupId);
+          await refreshGroupManageModal(appState.managingGroupId, true);
           renderGroupList();
           if (appState.activeConversationId === appState.managingGroupId) {
             renderMessages({ autoScroll: false });
@@ -2774,6 +2801,7 @@ function renderMessages(options = {}) {
   const subEl = document.getElementById('chatSubTitle');
   const avatarEl = document.getElementById('chatAvatar');
   const loadMoreBtn = document.getElementById('loadMoreBtn');
+  const groupMembersBtn = document.getElementById('groupMembersBtn');
   const composer = document.getElementById('chatComposer');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
 
@@ -2786,6 +2814,7 @@ function renderMessages(options = {}) {
     subEl.textContent = '请选择会话';
     if (avatarEl) avatarEl.src = DEFAULT_AVATAR;
     loadMoreBtn.classList.add('d-none');
+    if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     composer.classList.add('d-none');
     listEl.innerHTML = '';
     clearReplyAndEditState();
@@ -2804,9 +2833,11 @@ function renderMessages(options = {}) {
   if (avatarEl) avatarEl.src = getConversationAvatar(conv);
   if (conv.type === 'group') {
     subEl.textContent = `群成员：${conv.members.length} 人`;
+    if (groupMembersBtn) groupMembersBtn.classList.remove('d-none');
   } else {
     const other = getOtherUserInPrivateConversation(conv);
     subEl.textContent = other?.online ? '在线' : '离线';
+    if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
   }
 
   appendMessagesToView(conv, conv.messages, { autoScroll });
