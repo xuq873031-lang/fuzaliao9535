@@ -41,6 +41,7 @@ let appState = {
   roomPollInFlight: false,
   roomPollRoomId: null,
   lastMessageIdByRoom: {},
+  lastSentAtByRoom: {},
   unreadPollTimer: null,
   baseCorrectedLogged: false,
   conversationRenderQueued: false,
@@ -49,8 +50,10 @@ let appState = {
   audioCtx: null,
   readAckTimer: null,
   roomMuteStateByRoom: {},
+  roomMyMemberMetaByRoom: {},
   emojiPanelOpen: false,
   managingGroupId: null,
+  mentionCandidates: [],
   pendingMessageSeq: 0,
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
@@ -166,6 +169,8 @@ function translateErrorDetail(detail) {
   if (normalized.includes('no permission') || normalized.includes('forbidden')) return '你没有权限执行该操作';
   if (normalized.includes('already friend')) return '你们已经是好友';
   if (normalized.includes('you are muted in this group')) return '你已被群主禁言';
+  if (normalized.includes('发言过快')) return raw;
+  if (normalized.includes('group members')) return '群成员之间不可直接互加好友';
   if (normalized.includes('room not found')) return '会话不存在';
   if (normalized.includes('user not found')) return '用户不存在';
   if (normalized.includes('too many requests')) return '请求过于频繁，请稍后重试';
@@ -233,7 +238,7 @@ function renderMessageContent(text) {
     const safeUrl = escapeHtml(url);
     return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer"><img src="${safeUrl}" class="msg-image" alt="image" /></a>`;
   }
-  return escapeHtml(raw).replaceAll('\n', '<br>');
+  return applyAtMentionHighlight(raw).replaceAll('\n', '<br>');
 }
 
 function isImageMessageText(text) {
@@ -363,6 +368,20 @@ function reconcilePendingMessage(conv, serverMsg) {
     return true;
   }
   return false;
+}
+
+function markLatestPendingAsFailed(roomId) {
+  const conv = findConversationById(Number(roomId));
+  if (!conv) return;
+  const pending = [...conv.messages]
+    .reverse()
+    .find((m) => m.localPending && !m.localFailed && Number(m.senderId) === Number(appState.currentUser?.id));
+  if (!pending) return;
+  pending.localPending = false;
+  pending.localFailed = true;
+  if (appState.activeConversationId === conv.id) {
+    renderMessages({ autoScroll: false });
+  }
 }
 
 function setTheme(theme) {
@@ -634,6 +653,13 @@ async function apiSetRoomMemberPermissions(roomId, userId, canKick, canMute) {
   });
 }
 
+async function apiSetRoomRateLimit(roomId, seconds) {
+  return apiFetch(`/api/rooms/${roomId}/rate-limit`, {
+    method: 'PUT',
+    body: JSON.stringify({ seconds: Number(seconds || 0) })
+  });
+}
+
 async function apiGetRoomMessages(roomId, limit = 50) {
   return apiFetch(`/api/rooms/${roomId}/messages?limit=${limit}`);
 }
@@ -720,6 +746,7 @@ function roomToConversation(room) {
     messages: [],
     createdBy: room.created_by,
     memberCount: room.member_count || (room.member_ids || []).length,
+    rateLimitSeconds: Number(room.rate_limit_seconds || 0),
     hasMore: true
   };
 }
@@ -873,12 +900,14 @@ function applyMuteComposerState(conv) {
       btn.disabled = muted;
     });
   }
+  if (muted) hideMentionSuggestions();
 }
 
 async function refreshCurrentUserMuteState(roomId) {
   const conv = findConversationById(roomId);
   if (!conv || conv.type !== 'group') {
     if (roomId) appState.roomMuteStateByRoom[roomId] = false;
+    if (roomId) delete appState.roomMyMemberMetaByRoom[roomId];
     return false;
   }
   try {
@@ -886,6 +915,12 @@ async function refreshCurrentUserMuteState(roomId) {
     const me = (members || []).find((m) => Number(m.user_id) === Number(appState.currentUser?.id));
     const muted = !!me?.muted;
     appState.roomMuteStateByRoom[roomId] = muted;
+    appState.roomMyMemberMetaByRoom[roomId] = {
+      role: me?.role || 'member',
+      canKick: !!me?.can_kick,
+      canMute: !!me?.can_mute,
+      muted
+    };
     return muted;
   } catch (err) {
     console.warn('刷新禁言状态失败:', err.message);
@@ -893,10 +928,102 @@ async function refreshCurrentUserMuteState(roomId) {
   }
 }
 
+function canBypassGroupRateLimit(roomId) {
+  const meta = appState.roomMyMemberMetaByRoom[roomId];
+  if (!meta) return false;
+  return meta.role === 'owner' || !!meta.canKick || !!meta.canMute;
+}
+
+function checkLocalGroupRateLimit(conv) {
+  if (!conv || conv.type !== 'group') return { blocked: false };
+  const seconds = Number(conv.rateLimitSeconds || 0);
+  if (!seconds || seconds <= 0) return { blocked: false };
+  if (canBypassGroupRateLimit(conv.id)) return { blocked: false };
+  const last = Number(appState.lastSentAtByRoom[conv.id] || 0);
+  const now = Date.now();
+  const diff = now - last;
+  if (diff >= seconds * 1000) return { blocked: false };
+  const remain = Math.ceil((seconds * 1000 - diff) / 1000);
+  return { blocked: true, message: `发言过快，请 ${remain} 秒后再试` };
+}
+
 function getDmConversationWithFriend(friendId) {
   return appState.conversations.find(
     (c) => isDmConversation(c) && c.members.includes(friendId) && c.members.includes(appState.currentUser.id)
   );
+}
+
+function getCurrentGroupMembersForMention(conv) {
+  if (!conv || conv.type !== 'group') return [];
+  const ids = conv.members || [];
+  return ids
+    .filter((id) => Number(id) !== Number(appState.currentUser?.id))
+    .map((id) => ({
+      id,
+      name: getDisplayNameByUserId(id)
+    }));
+}
+
+function extractMentionKeyword(text, caretPos) {
+  const left = String(text || '').slice(0, caretPos);
+  const at = left.lastIndexOf('@');
+  if (at < 0) return null;
+  if (at > 0 && !/\s/.test(left[at - 1])) return null;
+  const keyword = left.slice(at + 1);
+  if (/\s/.test(keyword)) return null;
+  return { atIndex: at, keyword };
+}
+
+function hideMentionSuggestions() {
+  const box = document.getElementById('mentionSuggestBox');
+  if (!box) return;
+  box.classList.add('d-none');
+  box.innerHTML = '';
+  appState.mentionCandidates = [];
+}
+
+function insertMentionToInput(user) {
+  const input = document.getElementById('messageInput');
+  if (!input || !user) return;
+  const caretPos = input.selectionStart ?? input.value.length;
+  const found = extractMentionKeyword(input.value, caretPos);
+  if (!found) return;
+  const before = input.value.slice(0, found.atIndex);
+  const after = input.value.slice(caretPos);
+  input.value = `${before}@${user.name} ${after}`;
+  const newPos = `${before}@${user.name} `.length;
+  input.setSelectionRange(newPos, newPos);
+  input.focus();
+  hideMentionSuggestions();
+}
+
+function renderMentionSuggestions(conv, keyword) {
+  const box = document.getElementById('mentionSuggestBox');
+  if (!box) return;
+  const all = getCurrentGroupMembersForMention(conv);
+  const kw = String(keyword || '').toLowerCase();
+  const list = all.filter((m) => !kw || m.name.toLowerCase().includes(kw)).slice(0, 8);
+  appState.mentionCandidates = list;
+  if (!list.length) {
+    hideMentionSuggestions();
+    return;
+  }
+  box.innerHTML = '';
+  list.forEach((m) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'list-group-item list-group-item-action';
+    row.textContent = `@${m.name}`;
+    row.addEventListener('mousedown', (e) => e.preventDefault());
+    row.addEventListener('click', () => insertMentionToInput(m));
+    box.appendChild(row);
+  });
+  box.classList.remove('d-none');
+}
+
+function applyAtMentionHighlight(text) {
+  const escaped = escapeHtml(String(text || ''));
+  return escaped.replace(/(^|\s)(@[^\s@]+)/g, '$1<span class="text-primary fw-semibold">$2</span>');
 }
 
 function isNearBottom(el, threshold = 80) {
@@ -1244,9 +1371,16 @@ function handleWsEvent(evt) {
     if (msg.toLowerCase().includes('muted')) {
       const rid = Number(evt.payload?.room_id || appState.activeConversationId || 0);
       if (rid) appState.roomMuteStateByRoom[rid] = true;
+      if (rid) markLatestPendingAsFailed(rid);
       const conv = findConversationById(appState.activeConversationId);
       applyMuteComposerState(conv);
       alert('你已被群主禁言，暂时不能发送消息');
+      return;
+    }
+    if (msg.includes('发言过快')) {
+      const rid = Number(evt.payload?.room_id || appState.activeConversationId || 0);
+      if (rid) markLatestPendingAsFailed(rid);
+      alert(msg);
     }
   }
 }
@@ -2306,6 +2440,30 @@ function bindGroupEvents() {
       }
     });
   }
+  const rateLimitSaveBtn = document.getElementById('groupRateLimitSaveBtn');
+  if (rateLimitSaveBtn) {
+    rateLimitSaveBtn.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      const conv = findConversationById(groupId);
+      if (!conv || conv.type !== 'group') return;
+
+      const me = appState.roomMyMemberMetaByRoom[groupId];
+      if (!me || me.role !== 'owner') {
+        alert('仅群主可设置发言频率限制');
+        return;
+      }
+      const select = document.getElementById('groupRateLimitSelect');
+      const seconds = Number(select?.value || 0);
+      try {
+        const res = await apiSetRoomRateLimit(groupId, seconds);
+        conv.rateLimitSeconds = Number(res?.rate_limit_seconds || seconds || 0);
+        alert('群发言频率设置已保存');
+      } catch (err) {
+        alert(`保存失败：${err.message}`);
+      }
+    });
+  }
   const manageModalEl = document.getElementById('groupManageModal');
   if (manageModalEl) {
     manageModalEl.addEventListener('hidden.bs.modal', () => {
@@ -2438,8 +2596,23 @@ async function refreshGroupManageModal(groupId) {
     canKick: !!(me?.role === 'owner' || me?.can_kick),
     canMute: !!(me?.role === 'owner' || me?.can_mute)
   };
+  appState.roomMyMemberMetaByRoom[groupId] = {
+    role: me?.role || 'member',
+    canKick: !!me?.can_kick,
+    canMute: !!me?.can_mute,
+    muted: !!me?.muted
+  };
   renderGroupManageMembers(members || [], actor);
   renderGroupAddMemberOptions(groupId, members || [], actor.isOwner);
+  const select = document.getElementById('groupRateLimitSelect');
+  const saveBtn = document.getElementById('groupRateLimitSaveBtn');
+  const conv = findConversationById(groupId);
+  if (select) {
+    const current = Number(conv?.rateLimitSeconds || 0);
+    select.value = String([0, 3, 5, 10].includes(current) ? current : 0);
+    select.disabled = !actor.isOwner;
+  }
+  if (saveBtn) saveBtn.disabled = !actor.isOwner;
 }
 
 function renderGroupAddMemberOptions(groupId, members, isOwner) {
@@ -2475,6 +2648,7 @@ function renderGroupManageMembers(members, actor) {
   }
   members.forEach((m) => {
     const isSelf = Number(m.user_id) === Number(appState.currentUser?.id);
+    const targetDelegated = !!(m.can_kick || m.can_mute);
     const roleBadge = m.role === 'owner' ? '<span class="badge text-bg-warning ms-1">群主</span>' : '';
     const delegatedBadge = m.role !== 'owner' && (m.can_kick || m.can_mute)
       ? `<span class="badge text-bg-info ms-1">${m.can_kick && m.can_mute ? '管理员' : (m.can_kick ? '可踢人' : '可禁言')}</span>`
@@ -2482,10 +2656,11 @@ function renderGroupManageMembers(members, actor) {
     const isOnline = appState.onlineUserIds.has(Number(m.user_id)) || !!appState.userMap[m.user_id]?.online;
     const dotClass = isOnline ? 'on' : 'off';
     const onlineText = isOnline ? '在线' : '离线';
-    const muteBtn = actor.canMute && !isSelf && m.role !== 'owner'
+    const canOperateTarget = actor.isOwner || !targetDelegated;
+    const muteBtn = actor.canMute && canOperateTarget && !isSelf && m.role !== 'owner'
       ? `<button class="btn btn-sm btn-outline-secondary member-mute-btn">${m.muted ? '取消禁言' : '禁言'}</button>`
       : '';
-    const removeBtn = actor.canKick && !isSelf && m.role !== 'owner'
+    const removeBtn = actor.canKick && canOperateTarget && !isSelf && m.role !== 'owner'
       ? '<button class="btn btn-sm btn-outline-danger member-remove-btn">踢出</button>'
       : '';
     const grantKickBtn = actor.isOwner && !isSelf && m.role !== 'owner'
@@ -2954,6 +3129,32 @@ function bindChatEvents() {
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendMessage();
   });
+  if (msgInput) {
+    msgInput.addEventListener('input', () => {
+      const conv = findConversationById(appState.activeConversationId);
+      if (!conv || conv.type !== 'group') {
+        hideMentionSuggestions();
+        return;
+      }
+      const caretPos = msgInput.selectionStart ?? msgInput.value.length;
+      const found = extractMentionKeyword(msgInput.value, caretPos);
+      if (!found) {
+        hideMentionSuggestions();
+        return;
+      }
+      renderMentionSuggestions(conv, found.keyword || '');
+    });
+    msgInput.addEventListener('blur', () => {
+      setTimeout(() => hideMentionSuggestions(), 120);
+    });
+  }
+  document.addEventListener('click', (e) => {
+    const box = document.getElementById('mentionSuggestBox');
+    const input = document.getElementById('messageInput');
+    if (!box || box.classList.contains('d-none')) return;
+    if (box.contains(e.target) || e.target === input) return;
+    hideMentionSuggestions();
+  });
   if (msgInput) msgInput.addEventListener('focus', () => {
     setTimeout(() => scrollMessagesToBottom({ force: false }), 120);
   });
@@ -3123,6 +3324,11 @@ async function handleImageUpload(e) {
     alert('你已被群主禁言，暂时不能发送消息');
     return;
   }
+  const localRateState = checkLocalGroupRateLimit(conv);
+  if (localRateState.blocked) {
+    alert(localRateState.message);
+    return;
+  }
 
   try {
     const uploaded = await apiUploadImage(file);
@@ -3130,6 +3336,7 @@ async function handleImageUpload(e) {
     const sent = await apiSendMessage(conv.id, `![img](${uploaded.url})`, {
       replyToMessageId: appState.replyingToMessage?.id || null
     });
+    appState.lastSentAtByRoom[conv.id] = Date.now();
     if (sent.via === 'http' && sent.message) {
       const msg = normalizeMessage(sent.message);
       const exists = conv.messages.some((m) => m.id === msg.id);
@@ -3510,6 +3717,7 @@ function renderMessages(options = {}) {
     listEl.innerHTML = '';
     clearReplyAndEditState();
     toggleEmojiPanel(false);
+    hideMentionSuggestions();
     updateCallButtonsState();
     return;
   }
@@ -3533,6 +3741,7 @@ function renderMessages(options = {}) {
     const other = getOtherUserInPrivateConversation(conv);
     subEl.textContent = other?.online ? '在线' : '离线';
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
+    hideMentionSuggestions();
   }
 
   appendMessagesToView(conv, conv.messages, { autoScroll });
@@ -3587,6 +3796,7 @@ async function sendMessage() {
       const sent = await apiSendMessage(conv.id, text, {
         replyToMessageId: appState.replyingToMessage?.id || null
       });
+      appState.lastSentAtByRoom[conv.id] = Date.now();
       if (sent.via === 'http' && sent.message) {
         const msg = normalizeMessage(sent.message);
         const replaced = reconcilePendingMessage(conv, msg);
@@ -3616,6 +3826,7 @@ async function sendMessage() {
   input.value = '';
   clearReplyAndEditState();
   toggleEmojiPanel(false);
+  hideMentionSuggestions();
   input.focus();
 }
 
@@ -3820,6 +4031,7 @@ window.__api = {
   apiMuteRoomMember,
   apiUnmuteRoomMember,
   apiSetRoomMemberPermissions,
+  apiSetRoomRateLimit,
   apiGetRoomMessages,
   apiGetUnreadCounts,
   apiMarkRoomRead,

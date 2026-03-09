@@ -32,6 +32,7 @@ from .schemas import (
     RoomMemberOut,
     RoomMemberPermissionIn,
     RoomMuteOut,
+    RoomRateLimitIn,
     SendMessageIn,
     SearchUserOut,
     TokenOut,
@@ -45,6 +46,7 @@ app = FastAPI(title=settings.app_name)
 manager = ConnectionManager()
 call_sessions: dict[str, dict] = {}
 user_call_index: dict[int, str] = {}
+group_rate_last_sent_at: dict[tuple[int, int], datetime] = {}
 UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -169,11 +171,52 @@ def can_actor_manage_member(db: Session, room_id: int, actor_id: int, target_id:
     if actor_role == "owner":
         return target_role != "owner" and actor_id != target_id
     can_kick, can_mute = get_room_member_permissions(db, room_id, actor_id)
+    target_can_kick, target_can_mute = get_room_member_permissions(db, room_id, target_id)
+    target_is_delegated_admin = target_can_kick or target_can_mute
     if action == "kick":
-        return can_kick and target_role != "owner" and actor_id != target_id
+        return can_kick and target_role != "owner" and actor_id != target_id and not target_is_delegated_admin
     if action == "mute":
-        return can_mute and target_role != "owner" and actor_id != target_id
+        return can_mute and target_role != "owner" and actor_id != target_id and not target_is_delegated_admin
     return False
+
+
+def should_bypass_group_rate_limit(db: Session, room_id: int, user_id: int) -> bool:
+    role = get_room_member_role(db, room_id, user_id)
+    if role == "owner":
+        return True
+    can_kick, can_mute = get_room_member_permissions(db, room_id, user_id)
+    return bool(can_kick or can_mute)
+
+
+def check_group_rate_limit_or_raise(db: Session, room: ChatRoom, user_id: int):
+    if room_effective_type(room) != "group":
+        return
+    seconds = int(room.rate_limit_seconds or 0)
+    if seconds <= 0:
+        return
+    if should_bypass_group_rate_limit(db, room.id, user_id):
+        return
+    now = datetime.utcnow()
+    key = (room.id, user_id)
+    last = group_rate_last_sent_at.get(key)
+    if last:
+        passed = (now - last).total_seconds()
+        if passed < seconds:
+            wait_s = max(1, int(seconds - passed))
+            raise HTTPException(status_code=429, detail=f"发言过快，请在 {wait_s} 秒后重试")
+    group_rate_last_sent_at[key] = now
+
+
+def users_share_group_room(db: Session, user_a: int, user_b: int) -> bool:
+    room_ids_a = set(get_room_ids_for_user(db, user_a))
+    room_ids_b = set(get_room_ids_for_user(db, user_b))
+    shared = room_ids_a.intersection(room_ids_b)
+    if not shared:
+        return False
+    row = db.execute(
+        select(ChatRoom.id).where(ChatRoom.id.in_(shared), ChatRoom.type == "group").limit(1)
+    ).first()
+    return row is not None
 
 
 def is_user_muted_in_room(db: Session, room_id: int, user_id: int) -> bool:
@@ -317,11 +360,14 @@ def ensure_compatible_schema():
                 conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN title VARCHAR(120)"))
             if "avatar" not in room_columns:
                 conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN avatar TEXT"))
+            if "rate_limit_seconds" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN rate_limit_seconds INTEGER"))
 
             # 数据回填：旧 room_type=private -> type=dm，其余保留 group
             conn.execute(text("UPDATE chat_rooms SET type='dm' WHERE type IS NULL AND room_type='private'"))
             conn.execute(text("UPDATE chat_rooms SET type='group' WHERE type IS NULL AND room_type!='private'"))
             conn.execute(text("UPDATE chat_rooms SET title=name WHERE title IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET rate_limit_seconds=0 WHERE rate_limit_seconds IS NULL"))
 
         if "room_members" in table_names:
             member_columns = {col["name"] for col in inspector.get_columns("room_members")}
@@ -562,6 +608,8 @@ def _create_friend_request(db: Session, from_user_id: int, to_user_id: int) -> F
         raise HTTPException(status_code=404, detail="User not found")
     if _is_friend(db, from_user_id, to_user_id):
         raise HTTPException(status_code=400, detail="Already friends")
+    if users_share_group_room(db, from_user_id, to_user_id):
+        raise HTTPException(status_code=403, detail="群成员之间不可直接互加好友")
 
     existing = db.execute(
         select(FriendRequest).where(
@@ -796,6 +844,7 @@ def _create_group_room_impl(
         name=title,
         title=title,
         avatar=avatar,
+        rate_limit_seconds=0,
         room_type="group",
         type="group",
         created_by=current_user.id,
@@ -828,6 +877,7 @@ def _create_group_room_impl(
         type=room_effective_type(room),
         title=room_effective_title(room),
         avatar=room.avatar,
+        rate_limit_seconds=int(room.rate_limit_seconds or 0),
         created_by=room.created_by,
         member_ids=list(valid_ids),
         member_count=len(valid_ids),
@@ -868,6 +918,7 @@ def list_my_rooms(db: Session = Depends(get_db), current_user: User = Depends(ge
                 type=room_effective_type(room),
                 title=room_effective_title(room),
                 avatar=room.avatar,
+                rate_limit_seconds=int(room.rate_limit_seconds or 0),
                 created_by=room.created_by,
                 member_ids=member_ids,
                 member_count=len(member_ids),
@@ -960,6 +1011,38 @@ async def add_room_member(
     db.refresh(system_msg)
     await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
     return {"ok": True}
+
+
+@app.put("/api/rooms/{room_id}/rate-limit")
+async def update_group_rate_limit(
+    room_id: int,
+    payload: RoomRateLimitIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room supports rate limit")
+    if get_room_member_role(db, room_id, current_user.id) != "owner":
+        raise HTTPException(status_code=403, detail="Only owner can update rate limit")
+
+    room.rate_limit_seconds = int(payload.seconds or 0)
+    db.commit()
+
+    actor = current_user.nickname or current_user.username
+    system_msg = Message(
+        room_id=room_id,
+        sender_id=current_user.id,
+        content=f"[system] {actor} 设置了群发言频率：{room.rate_limit_seconds} 秒/条",
+    )
+    db.add(system_msg)
+    db.commit()
+    db.refresh(system_msg)
+    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
+    return {"ok": True, "room_id": room_id, "rate_limit_seconds": room.rate_limit_seconds}
 
 
 @app.delete("/api/rooms/{room_id}/members/{user_id}")
@@ -1201,6 +1284,8 @@ async def post_room_message(
     room = db.get(ChatRoom, room_id)
     if room and room_effective_type(room) == "group" and is_user_muted_in_room(db, room_id, current_user.id):
         raise HTTPException(status_code=403, detail="You are muted in this group")
+    if room:
+        check_group_rate_limit_or_raise(db, room, current_user.id)
     content = payload.content.strip()
     if not content:
         raise HTTPException(status_code=422, detail="Empty content")
@@ -1343,6 +1428,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 if room and room_effective_type(room) == "group" and is_user_muted_in_room(db, data.room_id, user_id):
                     await websocket.send_json({"type": "error", "payload": {"message": "You are muted in this group"}})
                     continue
+                if room:
+                    try:
+                        check_group_rate_limit_or_raise(db, room, user_id)
+                    except HTTPException as e:
+                        await websocket.send_json({"type": "error", "payload": {"message": e.detail}})
+                        continue
 
                 reply_to_message_id = data.reply_to_message_id
                 if reply_to_message_id:
