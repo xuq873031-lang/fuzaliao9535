@@ -366,6 +366,28 @@
             <div class="modal-body d-grid gap-2">
               <button id="msgActionReplyBtn" class="btn btn-outline-primary">回复</button>
               <button id="msgActionEditBtn" class="btn btn-outline-secondary d-none">编辑</button>
+              <button id="msgActionForwardBtn" class="btn btn-outline-success">转发</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 消息转发弹窗 -->
+      <div class="modal fade" id="forwardMessageModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">转发消息</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="forwardPreviewText" class="small text-secondary mb-2"></div>
+              <div class="small fw-semibold mb-2">选择目标会话（可多选）</div>
+              <div id="forwardTargetList" class="list-group"></div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button id="confirmForwardBtn" class="btn btn-success">一键转发</button>
             </div>
           </div>
         </div>

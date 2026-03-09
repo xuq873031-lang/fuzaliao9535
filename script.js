@@ -23,6 +23,7 @@ let appState = {
   outgoingRequests: [],
   friendRemarks: {},
   userMap: {},
+  onlineUserIds: new Set(),
   conversations: [],
   activeConversationId: null,
   currentView: 'messagesView',
@@ -30,6 +31,7 @@ let appState = {
   editingOwnMessageId: null,
   replyingToMessage: null,
   actionTargetMessage: null,
+  forwardingMessage: null,
   ws: null,
   wsReconnectTimer: null,
   wsReconnectTried: false,
@@ -609,6 +611,13 @@ async function apiSendMessage(roomId, content, extra = {}) {
   return { ok: true, via: 'http', message };
 }
 
+async function apiSendMessageDirect(roomId, content) {
+  return apiFetch(`/api/rooms/${roomId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ content })
+  });
+}
+
 // ============================
 // 数据同步与转换
 // ============================
@@ -685,6 +694,7 @@ async function refreshFriendRemarks() {
 async function refreshPresenceOnlineList() {
   const onlineList = await apiGetOnlinePresence();
   const onlineSet = new Set(onlineList.map((x) => x.id));
+  appState.onlineUserIds = onlineSet;
 
   appState.friends = appState.friends.map((f) => ({ ...f, online: onlineSet.has(f.id) }));
   Object.keys(appState.userMap).forEach((idStr) => {
@@ -937,6 +947,8 @@ function handleWsEvent(evt) {
   if (evt.type === 'presence') {
     const uid = Number(evt.user_id);
     if (!Number.isNaN(uid)) {
+      if (evt.online) appState.onlineUserIds.add(uid);
+      else appState.onlineUserIds.delete(uid);
       if (appState.userMap[uid]) appState.userMap[uid].online = !!evt.online;
       appState.friends = appState.friends.map((f) => (f.id === uid ? { ...f, online: !!evt.online } : f));
       renderFriendList();
@@ -2081,6 +2093,18 @@ function bindGroupEvents() {
       appState.managingGroupId = null;
     });
   }
+  const forwardModalEl = document.getElementById('forwardMessageModal');
+  if (forwardModalEl) {
+    forwardModalEl.addEventListener('hidden.bs.modal', () => {
+      appState.forwardingMessage = null;
+      const checks = document.querySelectorAll('.forward-target-check');
+      checks.forEach((c) => {
+        c.checked = false;
+      });
+      const btn = document.getElementById('confirmForwardBtn');
+      setButtonLoading(btn, false, '转发中...', '一键转发');
+    });
+  }
 }
 
 function renderGroupMemberOptions() {
@@ -2213,6 +2237,9 @@ function renderGroupManageMembers(members, isOwner) {
   members.forEach((m) => {
     const isSelf = Number(m.user_id) === Number(appState.currentUser?.id);
     const roleBadge = m.role === 'owner' ? '<span class="badge text-bg-warning ms-1">群主</span>' : '';
+    const isOnline = appState.onlineUserIds.has(Number(m.user_id)) || !!appState.userMap[m.user_id]?.online;
+    const dotClass = isOnline ? 'on' : 'off';
+    const onlineText = isOnline ? '在线' : '离线';
     const muteBtn = isOwner && !isSelf && m.role !== 'owner'
       ? `<button class="btn btn-sm btn-outline-secondary member-mute-btn">${m.muted ? '取消禁言' : '禁言'}</button>`
       : '';
@@ -2224,8 +2251,8 @@ function renderGroupManageMembers(members, isOwner) {
     row.className = 'list-group-item d-flex justify-content-between align-items-center';
     row.innerHTML = `
       <div>
-        <div class="fw-semibold">${escapeHtml(m.nickname || m.username)} ${roleBadge}</div>
-        <small class="text-secondary">ID: ${m.user_id} ${m.muted ? '· 已禁言' : ''}</small>
+        <div class="fw-semibold"><span class="online-dot ${dotClass}"></span>${escapeHtml(m.nickname || m.username)} ${roleBadge}</div>
+        <small class="text-secondary">ID: ${m.user_id} · ${onlineText} ${m.muted ? '· 已禁言' : ''}</small>
       </div>
       <div class="d-flex gap-2">
         ${muteBtn}
@@ -2347,6 +2374,97 @@ function openMessageActionMenu(msg) {
   modal.show();
 }
 
+function openForwardModal(msg) {
+  appState.forwardingMessage = msg;
+  const preview = document.getElementById('forwardPreviewText');
+  if (preview) {
+    preview.textContent = isImageMessageText(msg.text)
+      ? '将转发一条图片消息'
+      : `将转发：${summarizeMessageText(msg.text)}`;
+  }
+  renderForwardTargetList();
+  const modal = new bootstrap.Modal(document.getElementById('forwardMessageModal'));
+  modal.show();
+}
+
+function renderForwardTargetList() {
+  const box = document.getElementById('forwardTargetList');
+  if (!box) return;
+  box.innerHTML = '';
+  const list = (appState.conversations || []).slice().sort((a, b) => {
+    const ta = a.messages.length ? a.messages[a.messages.length - 1].createdAt : 0;
+    const tb = b.messages.length ? b.messages[b.messages.length - 1].createdAt : 0;
+    return tb - ta;
+  });
+  if (!list.length) {
+    box.innerHTML = '<div class="text-secondary small">暂无可转发会话</div>';
+    return;
+  }
+  list.forEach((conv) => {
+    const isGroup = conv.type === 'group';
+    const row = document.createElement('label');
+    row.className = 'list-group-item d-flex align-items-center gap-2';
+    row.innerHTML = `
+      <input class="form-check-input forward-target-check" type="checkbox" value="${conv.id}" />
+      <img src="${getConversationAvatar(conv)}" class="conversation-avatar" style="width:28px;height:28px;" alt="avatar" />
+      <div class="flex-grow-1">
+        <div class="fw-semibold">${escapeHtml(getConversationTitle(conv))}</div>
+        <small class="text-secondary">${isGroup ? '群聊' : '单聊'}</small>
+      </div>
+    `;
+    box.appendChild(row);
+  });
+}
+
+async function forwardMessageToSelectedTargets() {
+  const msg = appState.forwardingMessage;
+  if (!msg) return;
+  const checks = [...document.querySelectorAll('.forward-target-check:checked')];
+  if (!checks.length) {
+    alert('请至少选择一个目标会话');
+    return;
+  }
+
+  const btn = document.getElementById('confirmForwardBtn');
+  setButtonLoading(btn, true, '转发中...', '一键转发');
+
+  const targets = checks.map((c) => Number(c.value)).filter(Boolean);
+  const success = [];
+  const failed = [];
+
+  for (const roomId of targets) {
+    const conv = findConversationById(roomId);
+    try {
+      const sent = await apiSendMessageDirect(roomId, msg.text);
+      success.push(conv?.title || conv?.name || `会话${roomId}`);
+      const normalized = normalizeMessage(sent);
+      if (conv) {
+        const exists = conv.messages.some((m) => m.id === normalized.id);
+        if (!exists) conv.messages.push(normalized);
+      }
+      if (appState.activeConversationId === roomId && conv) {
+        appendMessagesToView(conv, [normalized], { autoScroll: true });
+        await markCurrentRoomRead();
+      }
+    } catch (err) {
+      failed.push(`${conv?.title || conv?.name || roomId}: ${err.message}`);
+    }
+  }
+
+  setButtonLoading(btn, false, '转发中...', '一键转发');
+  const modal = bootstrap.Modal.getInstance(document.getElementById('forwardMessageModal'));
+  if (modal) modal.hide();
+  appState.forwardingMessage = null;
+  renderConversationList();
+  updateUnreadBadges();
+
+  if (!failed.length) {
+    alert(`转发成功：${success.length} 个会话`);
+    return;
+  }
+  alert(`转发完成：成功 ${success.length}，失败 ${failed.length}\n${failed.slice(0, 3).join('\n')}`);
+}
+
 function bindChatEvents() {
   const sendBtn = document.getElementById('sendMessageBtn');
   const msgInput = document.getElementById('messageInput');
@@ -2358,6 +2476,7 @@ function bindChatEvents() {
   const clearReplyBtn = document.getElementById('clearReplyBtn');
   const actionReplyBtn = document.getElementById('msgActionReplyBtn');
   const actionEditBtn = document.getElementById('msgActionEditBtn');
+  const actionForwardBtn = document.getElementById('msgActionForwardBtn');
   const mobileBackBtn = document.getElementById('mobileBackToListBtn');
   const voiceCallBtn = document.getElementById('voiceCallBtn');
   const videoCallBtn = document.getElementById('videoCallBtn');
@@ -2367,6 +2486,7 @@ function bindChatEvents() {
   const callMuteBtn = document.getElementById('callMuteBtn');
   const callSpeakerBtn = document.getElementById('callSpeakerBtn');
   const callToggleCameraBtn = document.getElementById('callToggleCameraBtn');
+  const confirmForwardBtn = document.getElementById('confirmForwardBtn');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -2394,6 +2514,13 @@ function bindChatEvents() {
     const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
     if (modal) modal.hide();
   });
+  if (actionForwardBtn) actionForwardBtn.addEventListener('click', () => {
+    if (!appState.actionTargetMessage) return;
+    const msg = appState.actionTargetMessage;
+    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
+    if (modal) modal.hide();
+    openForwardModal(msg);
+  });
   if (mobileBackBtn) mobileBackBtn.addEventListener('click', () => {
     appState.activeConversationId = null;
     clearReplyAndEditState({ resetInput: true });
@@ -2411,6 +2538,9 @@ function bindChatEvents() {
     toggleSpeakerMode().catch((err) => console.warn('扩音切换失败:', err.message));
   });
   if (callToggleCameraBtn) callToggleCameraBtn.addEventListener('click', toggleCallCamera);
+  if (confirmForwardBtn) confirmForwardBtn.addEventListener('click', () => {
+    forwardMessageToSelectedTargets().catch((err) => alert(`转发失败：${err.message}`));
+  });
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
@@ -2832,7 +2962,8 @@ function renderMessages(options = {}) {
   titleEl.textContent = getConversationTitle(conv);
   if (avatarEl) avatarEl.src = getConversationAvatar(conv);
   if (conv.type === 'group') {
-    subEl.textContent = `群成员：${conv.members.length} 人`;
+    const onlineCount = (conv.members || []).filter((id) => appState.onlineUserIds.has(Number(id))).length;
+    subEl.textContent = `群成员：${conv.members.length} 人 · 在线 ${onlineCount}`;
     if (groupMembersBtn) groupMembersBtn.classList.remove('d-none');
   } else {
     const other = getOtherUserInPrivateConversation(conv);
