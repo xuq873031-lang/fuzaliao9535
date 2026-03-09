@@ -429,6 +429,12 @@ body {
   text-overflow: ellipsis;
 }
 
+.history-photo-locate {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--tg-primary);
+}
+
 .history-hit .msg-bubble {
   outline: 2px solid rgba(34, 158, 217, 0.6);
 }

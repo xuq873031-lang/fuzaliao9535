@@ -2760,19 +2760,23 @@ function renderHistorySearchResults(conv, results) {
       renderConversationList();
       renderMessages({ autoScroll: false });
       startRoomPolling(conv.id);
-      setTimeout(() => {
-        const target = document.querySelector(`.msg-row[data-message-id="${msg.id}"]`);
-        if (target) {
-          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          target.classList.add('history-hit');
-          setTimeout(() => target.classList.remove('history-hit'), 1300);
-        }
-      }, 80);
+      jumpToMessageById(msg.id);
       const modal = bootstrap.Modal.getInstance(document.getElementById('historySearchModal'));
       if (modal) modal.hide();
     });
     box.appendChild(row);
   });
+}
+
+function jumpToMessageById(messageId) {
+  setTimeout(() => {
+    const target = document.querySelector(`.msg-row[data-message-id="${messageId}"]`);
+    if (target) {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.classList.add('history-hit');
+      setTimeout(() => target.classList.remove('history-hit'), 1300);
+    }
+  }, 80);
 }
 
 async function doHistorySearch() {
@@ -2823,8 +2827,20 @@ function renderHistoryPhotoGrid(conv) {
     card.innerHTML = `
       <img src="${escapeHtml(url)}" alt="历史图片" />
       <div class="history-photo-meta">${escapeHtml(getDisplayNameByUserId(msg.senderId))} · ${formatConversationTime(msg.createdAt)}</div>
+      <div class="history-photo-locate">定位消息</div>
     `;
     card.addEventListener('click', () => {
+      appState.activeConversationId = conv.id;
+      switchView('messagesView', { keepRoom: true });
+      renderConversationList();
+      renderMessages({ autoScroll: false });
+      startRoomPolling(conv.id);
+      jumpToMessageById(msg.id);
+      const photosModal = bootstrap.Modal.getInstance(document.getElementById('historyPhotosModal'));
+      if (photosModal) photosModal.hide();
+    });
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
       const previewImg = document.getElementById('photoPreviewImg');
       const previewMeta = document.getElementById('photoPreviewMeta');
       if (previewImg) previewImg.src = url;
