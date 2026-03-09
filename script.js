@@ -51,6 +51,7 @@ let appState = {
   roomMuteStateByRoom: {},
   emojiPanelOpen: false,
   managingGroupId: null,
+  pendingMessageSeq: 0,
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
     mode: null, // audio|video
@@ -326,8 +327,42 @@ function normalizeMessage(raw) {
     createdAt: new Date(raw.created_at).getTime(),
     updatedAt: raw.updated_at ? new Date(raw.updated_at).getTime() : null,
     editedAt: raw.updated_at ? new Date(raw.updated_at).getTime() : null,
-    editedByAdmin: !!raw.edited_by_admin
+    editedByAdmin: !!raw.edited_by_admin,
+    localPending: false,
+    localFailed: false,
+    localTempId: null
   };
+}
+
+function makeLocalPendingMessage(roomId, content, senderId, replyToMessage) {
+  appState.pendingMessageSeq += 1;
+  const now = Date.now();
+  return {
+    id: -(now + appState.pendingMessageSeq),
+    roomId,
+    senderId,
+    replyToMessageId: replyToMessage?.id || null,
+    replyToSenderId: replyToMessage?.senderId || null,
+    replyToContent: replyToMessage?.text || null,
+    text: content,
+    createdAt: now,
+    updatedAt: null,
+    editedAt: null,
+    editedByAdmin: false,
+    localPending: true,
+    localFailed: false,
+    localTempId: `tmp-${roomId}-${now}-${appState.pendingMessageSeq}`
+  };
+}
+
+function reconcilePendingMessage(conv, serverMsg) {
+  if (!conv || !serverMsg) return false;
+  const idx = conv.messages.findIndex((m) => m.localPending && !m.localFailed && m.senderId === serverMsg.senderId && m.text === serverMsg.text);
+  if (idx >= 0) {
+    conv.messages[idx] = { ...serverMsg, localPending: false, localFailed: false, localTempId: null };
+    return true;
+  }
+  return false;
 }
 
 function setTheme(theme) {
@@ -587,6 +622,16 @@ async function apiMuteRoomMember(roomId, userId) {
 
 async function apiUnmuteRoomMember(roomId, userId) {
   return apiFetch(`/api/rooms/${roomId}/members/${userId}/mute`, { method: 'DELETE' });
+}
+
+async function apiSetRoomMemberPermissions(roomId, userId, canKick, canMute) {
+  return apiFetch(`/api/rooms/${roomId}/members/${userId}/permissions`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      can_kick: !!canKick,
+      can_mute: !!canMute
+    })
+  });
 }
 
 async function apiGetRoomMessages(roomId, limit = 50) {
@@ -1074,8 +1119,9 @@ function handleWsEvent(evt) {
     const conv = findConversationById(msg.room_id);
     if (!conv) return;
 
+    const replacedPending = reconcilePendingMessage(conv, msg);
     const exists = conv.messages.some((m) => m.id === msg.id);
-    if (!exists) conv.messages.push(msg);
+    if (!exists && !replacedPending) conv.messages.push(msg);
 
     const isCurrent = appState.activeConversationId === conv.id && appState.currentView === 'messagesView';
     const isFromOther = msg.senderId !== appState.currentUser.id;
@@ -1089,7 +1135,11 @@ function handleWsEvent(evt) {
 
     renderConversationList();
     if (appState.activeConversationId === conv.id) {
-      if (!exists) appendMessagesToView(conv, [msg], { autoScroll: appState.userNearBottom });
+      if (replacedPending || exists) {
+        renderMessages({ autoScroll: appState.userNearBottom });
+      } else {
+        appendMessagesToView(conv, [msg], { autoScroll: appState.userNearBottom });
+      }
       if (isFromOther) scheduleMarkCurrentRoomRead();
     }
     updateUnreadBadges();
@@ -2248,7 +2298,7 @@ function bindGroupEvents() {
       try {
         await apiAddRoomMember(groupId, userId);
         await refreshRoomsAndMessages();
-        await refreshGroupManageModal(groupId, true);
+        await refreshGroupManageModal(groupId);
         renderGroupList();
         renderConversationList();
       } catch (err) {
@@ -2366,7 +2416,6 @@ function renderGroupList() {
 async function openGroupManageModal(groupId) {
   const conv = findConversationById(groupId);
   if (!conv || conv.type !== 'group') return;
-  const isOwner = Number(conv.createdBy) === Number(appState.currentUser?.id);
   appState.managingGroupId = groupId;
   const titleEl = document.getElementById('groupManageTitle');
   if (titleEl) titleEl.textContent = `群管理 · ${conv.title || conv.name}`;
@@ -2376,15 +2425,21 @@ async function openGroupManageModal(groupId) {
   if (nameEl) nameEl.textContent = conv.title || conv.name || '群聊';
   const noticeEl = document.getElementById('groupManageNotice');
   if (noticeEl) noticeEl.textContent = `群公告：${conv.notice || '暂无公告'}`;
-  await refreshGroupManageModal(groupId, isOwner);
+  await refreshGroupManageModal(groupId);
   const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
   modal.show();
 }
 
-async function refreshGroupManageModal(groupId, isOwner) {
+async function refreshGroupManageModal(groupId) {
   const [members, _friends] = await Promise.all([apiGetRoomMembers(groupId), refreshFriends()]);
-  renderGroupManageMembers(members || [], isOwner);
-  renderGroupAddMemberOptions(groupId, members || [], isOwner);
+  const me = (members || []).find((m) => Number(m.user_id) === Number(appState.currentUser?.id));
+  const actor = {
+    isOwner: me?.role === 'owner',
+    canKick: !!(me?.role === 'owner' || me?.can_kick),
+    canMute: !!(me?.role === 'owner' || me?.can_mute)
+  };
+  renderGroupManageMembers(members || [], actor);
+  renderGroupAddMemberOptions(groupId, members || [], actor.isOwner);
 }
 
 function renderGroupAddMemberOptions(groupId, members, isOwner) {
@@ -2410,7 +2465,7 @@ function renderGroupAddMemberOptions(groupId, members, isOwner) {
     .join('');
 }
 
-function renderGroupManageMembers(members, isOwner) {
+function renderGroupManageMembers(members, actor) {
   const box = document.getElementById('groupMemberManageList');
   if (!box) return;
   box.innerHTML = '';
@@ -2421,24 +2476,35 @@ function renderGroupManageMembers(members, isOwner) {
   members.forEach((m) => {
     const isSelf = Number(m.user_id) === Number(appState.currentUser?.id);
     const roleBadge = m.role === 'owner' ? '<span class="badge text-bg-warning ms-1">群主</span>' : '';
+    const delegatedBadge = m.role !== 'owner' && (m.can_kick || m.can_mute)
+      ? `<span class="badge text-bg-info ms-1">${m.can_kick && m.can_mute ? '管理员' : (m.can_kick ? '可踢人' : '可禁言')}</span>`
+      : '';
     const isOnline = appState.onlineUserIds.has(Number(m.user_id)) || !!appState.userMap[m.user_id]?.online;
     const dotClass = isOnline ? 'on' : 'off';
     const onlineText = isOnline ? '在线' : '离线';
-    const muteBtn = isOwner && !isSelf && m.role !== 'owner'
+    const muteBtn = actor.canMute && !isSelf && m.role !== 'owner'
       ? `<button class="btn btn-sm btn-outline-secondary member-mute-btn">${m.muted ? '取消禁言' : '禁言'}</button>`
       : '';
-    const removeBtn = isOwner && !isSelf && m.role !== 'owner'
+    const removeBtn = actor.canKick && !isSelf && m.role !== 'owner'
       ? '<button class="btn btn-sm btn-outline-danger member-remove-btn">踢出</button>'
+      : '';
+    const grantKickBtn = actor.isOwner && !isSelf && m.role !== 'owner'
+      ? `<button class="btn btn-sm btn-outline-primary member-grant-kick-btn">${m.can_kick ? '取消踢人权' : '赋予踢人权'}</button>`
+      : '';
+    const grantMuteBtn = actor.isOwner && !isSelf && m.role !== 'owner'
+      ? `<button class="btn btn-sm btn-outline-primary member-grant-mute-btn">${m.can_mute ? '取消禁言权' : '赋予禁言权'}</button>`
       : '';
 
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex justify-content-between align-items-center';
     row.innerHTML = `
       <div>
-        <div class="fw-semibold"><span class="online-dot ${dotClass}"></span>${escapeHtml(m.nickname || m.username)} ${roleBadge}</div>
+        <div class="fw-semibold"><span class="online-dot ${dotClass}"></span>${escapeHtml(m.nickname || m.username)} ${roleBadge} ${delegatedBadge}</div>
         <small class="text-secondary">ID: ${m.user_id} · ${onlineText} ${m.muted ? '· 已禁言' : ''}</small>
       </div>
       <div class="d-flex gap-2">
+        ${grantKickBtn}
+        ${grantMuteBtn}
         ${muteBtn}
         ${removeBtn}
       </div>
@@ -2450,7 +2516,7 @@ function renderGroupManageMembers(members, isOwner) {
           if (m.muted) await apiUnmuteRoomMember(appState.managingGroupId, m.user_id);
           else await apiMuteRoomMember(appState.managingGroupId, m.user_id);
           await refreshRoomsAndMessages();
-          await refreshGroupManageModal(appState.managingGroupId, true);
+          await refreshGroupManageModal(appState.managingGroupId);
           renderGroupList();
         } catch (err) {
           alert(`操作失败：${err.message}`);
@@ -2464,13 +2530,35 @@ function renderGroupManageMembers(members, isOwner) {
         try {
           await apiRemoveRoomMember(appState.managingGroupId, m.user_id);
           await refreshRoomsAndMessages();
-          await refreshGroupManageModal(appState.managingGroupId, true);
+          await refreshGroupManageModal(appState.managingGroupId);
           renderGroupList();
           if (appState.activeConversationId === appState.managingGroupId) {
             renderMessages({ autoScroll: false });
           }
         } catch (err) {
           alert(`踢人失败：${err.message}`);
+        }
+      });
+    }
+    const grantKickEl = row.querySelector('.member-grant-kick-btn');
+    if (grantKickEl) {
+      grantKickEl.addEventListener('click', async () => {
+        try {
+          await apiSetRoomMemberPermissions(appState.managingGroupId, m.user_id, !m.can_kick, !!m.can_mute);
+          await refreshGroupManageModal(appState.managingGroupId);
+        } catch (err) {
+          alert(`设置权限失败：${err.message}`);
+        }
+      });
+    }
+    const grantMuteEl = row.querySelector('.member-grant-mute-btn');
+    if (grantMuteEl) {
+      grantMuteEl.addEventListener('click', async () => {
+        try {
+          await apiSetRoomMemberPermissions(appState.managingGroupId, m.user_id, !!m.can_kick, !m.can_mute);
+          await refreshGroupManageModal(appState.managingGroupId);
+        } catch (err) {
+          alert(`设置权限失败：${err.message}`);
         }
       });
     }
@@ -3251,9 +3339,14 @@ function scheduleConversationListRender() {
 function buildMessageRow(msg, conv) {
   const me = msg.senderId === appState.currentUser.id;
   const sender = appState.userMap[msg.senderId];
+  const isSystem = String(msg.text || '').startsWith('[system]');
   const row = document.createElement('div');
-  row.className = `msg-row ${me ? 'me' : 'other'}`;
+  row.className = `msg-row ${me ? 'me' : 'other'} ${isSystem ? 'system' : ''}`;
   row.dataset.messageId = String(msg.id);
+  if (isSystem) {
+    row.classList.remove('me', 'other');
+    row.classList.add('system');
+  }
   if (!me) {
     const avatar = document.createElement('img');
     avatar.className = 'conversation-avatar me-2';
@@ -3265,7 +3358,7 @@ function buildMessageRow(msg, conv) {
   }
 
   const bubble = document.createElement('div');
-  bubble.className = 'msg-bubble';
+  bubble.className = `msg-bubble ${msg.localPending ? 'pending' : ''} ${msg.localFailed ? 'failed' : ''}`;
 
   const senderName = !me && conv.type === 'group'
     ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
@@ -3277,12 +3370,13 @@ function buildMessageRow(msg, conv) {
     ? `<div class="msg-reply-preview"><div class="fw-semibold">${escapeHtml(replySenderName || '消息')}</div><div>${escapeHtml(replyText || '引用消息')}</div></div>`
     : '';
 
+  const stateText = msg.localFailed ? '发送失败' : (msg.localPending ? '发送中...' : '');
   bubble.innerHTML = `
     <button class="msg-action-btn" type="button" aria-label="消息操作">⋮</button>
     ${senderName}
     ${replyBlock}
     <div>${messageContent}</div>
-    <div class="msg-meta">${formatTime(msg.createdAt)}</div>
+    <div class="msg-meta">${formatTime(msg.createdAt)} ${stateText ? ` · ${stateText}` : ''}</div>
   `;
 
   const actionBtn = bubble.querySelector('.msg-action-btn');
@@ -3458,20 +3552,41 @@ async function sendMessage() {
       renderMessages({ autoScroll: false });
       scheduleConversationListRender();
     } else {
+      const optimistic = makeLocalPendingMessage(
+        conv.id,
+        text,
+        appState.currentUser.id,
+        appState.replyingToMessage
+      );
+      conv.messages.push(optimistic);
+      appendMessagesToView(conv, [optimistic], { autoScroll: true });
+      scheduleConversationListRender();
+
       const sent = await apiSendMessage(conv.id, text, {
         replyToMessageId: appState.replyingToMessage?.id || null
       });
       if (sent.via === 'http' && sent.message) {
         const msg = normalizeMessage(sent.message);
-        const exists = conv.messages.some((m) => m.id === msg.id);
-        if (!exists) conv.messages.push(msg);
-        appendMessagesToView(conv, [msg], { autoScroll: true });
+        const replaced = reconcilePendingMessage(conv, msg);
+        if (!replaced) {
+          const exists = conv.messages.some((m) => m.id === msg.id);
+          if (!exists) conv.messages.push(msg);
+        }
+        renderMessages({ autoScroll: true });
         scheduleConversationListRender();
         updateUnreadBadges();
         await markCurrentRoomRead();
       }
     }
   } catch (err) {
+    if (!appState.editingOwnMessageId) {
+      const latestPending = [...conv.messages].reverse().find((m) => m.localPending && !m.localFailed && m.senderId === appState.currentUser.id && m.text === text);
+      if (latestPending) {
+        latestPending.localPending = false;
+        latestPending.localFailed = true;
+        renderMessages({ autoScroll: false });
+      }
+    }
     alert(`发送失败(${err.status || 'ERR'}): ${err.message}`);
     return;
   }
@@ -3682,6 +3797,7 @@ window.__api = {
   apiRemoveRoomMember,
   apiMuteRoomMember,
   apiUnmuteRoomMember,
+  apiSetRoomMemberPermissions,
   apiGetRoomMessages,
   apiGetUnreadCounts,
   apiMarkRoomRead,
