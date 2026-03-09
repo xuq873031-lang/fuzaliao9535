@@ -49,6 +49,7 @@ let appState = {
   audioCtx: null,
   readAckTimer: null,
   roomMuteStateByRoom: {},
+  emojiPanelOpen: false,
   managingGroupId: null,
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
@@ -249,6 +250,16 @@ function canEditOwnMessage(msg) {
   if (msg.senderId !== appState.currentUser?.id) return false;
   if (isImageMessageText(msg.text)) return false;
   return true;
+}
+
+function toggleEmojiPanel(open) {
+  const emojiBar = document.getElementById('emojiBar');
+  const emojiToggleBtn = document.getElementById('emojiToggleBtn');
+  if (!emojiBar) return;
+  const shouldOpen = typeof open === 'boolean' ? open : emojiBar.classList.contains('d-none');
+  emojiBar.classList.toggle('d-none', !shouldOpen);
+  appState.emojiPanelOpen = shouldOpen;
+  if (emojiToggleBtn) emojiToggleBtn.classList.toggle('active', shouldOpen);
 }
 
 function getRtcConfiguration() {
@@ -2210,12 +2221,20 @@ function bindGroupEvents() {
   });
 
   document.getElementById('createGroupModal').addEventListener('show.bs.modal', renderGroupMemberOptions);
-  const groupMembersBtn = document.getElementById('groupMembersBtn');
-  if (groupMembersBtn) {
-    groupMembersBtn.addEventListener('click', () => {
-      const conv = findConversationById(appState.activeConversationId);
-      if (!conv || conv.type !== 'group') return;
-      openGroupManageModal(conv.id).catch((err) => alert(`打开成员列表失败：${err.message}`));
+  const groupManageHistorySearchBtn = document.getElementById('groupManageHistorySearchBtn');
+  if (groupManageHistorySearchBtn) {
+    groupManageHistorySearchBtn.addEventListener('click', () => {
+      const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
+      if (modal) modal.hide();
+      openHistorySearchModal();
+    });
+  }
+  const groupManageHistoryPhotosBtn = document.getElementById('groupManageHistoryPhotosBtn');
+  if (groupManageHistoryPhotosBtn) {
+    groupManageHistoryPhotosBtn.addEventListener('click', () => {
+      const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
+      if (modal) modal.hide();
+      openHistoryPhotosModal();
     });
   }
   const addBtn = document.getElementById('groupAddMemberBtn');
@@ -2351,6 +2370,12 @@ async function openGroupManageModal(groupId) {
   appState.managingGroupId = groupId;
   const titleEl = document.getElementById('groupManageTitle');
   if (titleEl) titleEl.textContent = `群管理 · ${conv.title || conv.name}`;
+  const avatarEl = document.getElementById('groupManageAvatar');
+  if (avatarEl) avatarEl.src = getConversationAvatar(conv);
+  const nameEl = document.getElementById('groupManageName');
+  if (nameEl) nameEl.textContent = conv.title || conv.name || '群聊';
+  const noticeEl = document.getElementById('groupManageNotice');
+  if (noticeEl) noticeEl.textContent = `群公告：${conv.notice || '暂无公告'}`;
   await refreshGroupManageModal(groupId, isOwner);
   const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
   modal.show();
@@ -2496,6 +2521,21 @@ function clearReplyAndEditState(options = {}) {
     if (input) input.value = '';
   }
   renderComposerState();
+}
+
+function openHistorySearchModal() {
+  const box = document.getElementById('historySearchResultList');
+  const input = document.getElementById('historySearchInput');
+  if (box) box.innerHTML = '<div class="text-secondary small">输入关键词后点击搜索</div>';
+  if (input) input.value = '';
+  const modal = new bootstrap.Modal(document.getElementById('historySearchModal'));
+  modal.show();
+}
+
+function openHistoryPhotosModal() {
+  openHistoryPhotos().catch((err) => console.warn('历史图片加载失败', err.message));
+  const modal = new bootstrap.Modal(document.getElementById('historyPhotosModal'));
+  modal.show();
 }
 
 function startReplyMessage(msg) {
@@ -2800,6 +2840,11 @@ function bindChatEvents() {
   const historyPhotosBtn = document.getElementById('historyPhotosBtn');
   const historySearchDoBtn = document.getElementById('historySearchDoBtn');
   const historySearchInput = document.getElementById('historySearchInput');
+  const chatDetailsBtn = document.getElementById('chatDetailsBtn');
+  const chatHeaderMain = document.getElementById('chatHeaderMain');
+  const emojiToggleBtn = document.getElementById('emojiToggleBtn');
+  const directDetailsHistorySearchBtn = document.getElementById('directDetailsHistorySearchBtn');
+  const directDetailsHistoryPhotosBtn = document.getElementById('directDetailsHistoryPhotosBtn');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -2854,14 +2899,7 @@ function bindChatEvents() {
   if (confirmForwardBtn) confirmForwardBtn.addEventListener('click', () => {
     forwardMessageToSelectedTargets().catch((err) => alert(`转发失败：${err.message}`));
   });
-  if (historySearchBtn) historySearchBtn.addEventListener('click', () => {
-    const box = document.getElementById('historySearchResultList');
-    const input = document.getElementById('historySearchInput');
-    if (box) box.innerHTML = '<div class="text-secondary small">输入关键词后点击搜索</div>';
-    if (input) input.value = '';
-    const modal = new bootstrap.Modal(document.getElementById('historySearchModal'));
-    modal.show();
-  });
+  if (historySearchBtn) historySearchBtn.addEventListener('click', openHistorySearchModal);
   if (historySearchDoBtn) historySearchDoBtn.addEventListener('click', () => {
     doHistorySearch().catch((err) => console.warn('历史搜索失败', err.message));
   });
@@ -2873,11 +2911,51 @@ function bindChatEvents() {
       }
     });
   }
-  if (historyPhotosBtn) historyPhotosBtn.addEventListener('click', () => {
-    openHistoryPhotos().catch((err) => console.warn('历史图片加载失败', err.message));
-    const modal = new bootstrap.Modal(document.getElementById('historyPhotosModal'));
-    modal.show();
+  if (historyPhotosBtn) historyPhotosBtn.addEventListener('click', openHistoryPhotosModal);
+  if (directDetailsHistorySearchBtn) directDetailsHistorySearchBtn.addEventListener('click', () => {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('directDetailsModal'));
+    if (modal) modal.hide();
+    openHistorySearchModal();
   });
+  if (directDetailsHistoryPhotosBtn) directDetailsHistoryPhotosBtn.addEventListener('click', () => {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('directDetailsModal'));
+    if (modal) modal.hide();
+    openHistoryPhotosModal();
+  });
+
+  const openChatDetailsPanel = () => {
+    const conv = findConversationById(appState.activeConversationId);
+    if (!conv) return;
+    if (conv.type === 'group') {
+      openGroupManageModal(conv.id).catch((err) => alert(`打开群资料失败：${err.message}`));
+      return;
+    }
+    const avatarEl = document.getElementById('directDetailsAvatar');
+    const nameEl = document.getElementById('directDetailsName');
+    const statusEl = document.getElementById('directDetailsStatus');
+    const other = getOtherUserInPrivateConversation(conv);
+    if (avatarEl) avatarEl.src = getConversationAvatar(conv);
+    if (nameEl) nameEl.textContent = getConversationTitle(conv);
+    if (statusEl) statusEl.textContent = other?.online ? '在线' : '离线';
+    const modal = new bootstrap.Modal(document.getElementById('directDetailsModal'));
+    modal.show();
+  };
+  if (chatDetailsBtn) chatDetailsBtn.addEventListener('click', openChatDetailsPanel);
+  if (chatHeaderMain) {
+    chatHeaderMain.addEventListener('click', () => {
+      const conv = findConversationById(appState.activeConversationId);
+      if (!conv) return;
+      openChatDetailsPanel();
+    });
+  }
+
+  if (emojiToggleBtn) {
+    emojiToggleBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleEmojiPanel();
+    });
+  }
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
@@ -2898,16 +2976,28 @@ function bindChatEvents() {
   });
 
   const emojiBar = document.getElementById('emojiBar');
-  EMOJIS.forEach((emoji) => {
-    const b = document.createElement('button');
-    b.className = 'btn btn-light btn-sm';
-    b.textContent = emoji;
-    b.addEventListener('click', () => {
-      const input = document.getElementById('messageInput');
-      input.value += emoji;
-      input.focus();
+  if (emojiBar) {
+    EMOJIS.forEach((emoji) => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-light btn-sm';
+      b.textContent = emoji;
+      b.addEventListener('click', () => {
+        const input = document.getElementById('messageInput');
+        input.value += emoji;
+        input.focus();
+        toggleEmojiPanel(false);
+      });
+      emojiBar.appendChild(b);
     });
-    emojiBar.appendChild(b);
+  }
+
+  document.addEventListener('click', (e) => {
+    const bar = document.getElementById('emojiBar');
+    const toggleBtn = document.getElementById('emojiToggleBtn');
+    if (!bar || bar.classList.contains('d-none')) return;
+    if (bar.contains(e.target)) return;
+    if (toggleBtn && toggleBtn.contains(e.target)) return;
+    toggleEmojiPanel(false);
   });
 }
 
@@ -2946,6 +3036,7 @@ async function handleImageUpload(e) {
       await markCurrentRoomRead();
     }
     clearReplyAndEditState();
+    toggleEmojiPanel(false);
   } catch (err) {
     if ((err.message || '').includes('Not Found')) {
       alert('上传接口未部署/路径不一致，请检查后端 /api/uploads/images');
@@ -3284,6 +3375,7 @@ function renderMessages(options = {}) {
   const loadMoreBtn = document.getElementById('loadMoreBtn');
   const groupMembersBtn = document.getElementById('groupMembersBtn');
   const composer = document.getElementById('chatComposer');
+  const chatDetailsBtn = document.getElementById('chatDetailsBtn');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
 
   listEl.innerHTML = '';
@@ -3294,16 +3386,19 @@ function renderMessages(options = {}) {
     titleEl.textContent = '未选择会话';
     subEl.textContent = '请选择会话';
     if (avatarEl) avatarEl.src = DEFAULT_AVATAR;
+    if (chatDetailsBtn) chatDetailsBtn.disabled = true;
     loadMoreBtn.classList.add('d-none');
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     composer.classList.add('d-none');
     applyMuteComposerState(null);
     listEl.innerHTML = '';
     clearReplyAndEditState();
+    toggleEmojiPanel(false);
     updateCallButtonsState();
     return;
   }
   setChatPaneVisible(true);
+  if (chatDetailsBtn) chatDetailsBtn.disabled = false;
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
   applyMuteComposerState(conv);
@@ -3316,7 +3411,7 @@ function renderMessages(options = {}) {
   if (avatarEl) avatarEl.src = getConversationAvatar(conv);
   if (conv.type === 'group') {
     const onlineCount = (conv.members || []).filter((id) => appState.onlineUserIds.has(Number(id))).length;
-    subEl.textContent = `群成员：${conv.members.length} 人 · 在线 ${onlineCount}`;
+    subEl.textContent = `${conv.members.length} 人 · 在线 ${onlineCount}`;
     if (groupMembersBtn) groupMembersBtn.classList.remove('d-none');
   } else {
     const other = getOtherUserInPrivateConversation(conv);
@@ -3383,6 +3478,7 @@ async function sendMessage() {
 
   input.value = '';
   clearReplyAndEditState();
+  toggleEmojiPanel(false);
   input.focus();
 }
 

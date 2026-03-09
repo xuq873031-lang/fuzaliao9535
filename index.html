@@ -159,7 +159,12 @@
                           <button id="clearReplyBtn" class="btn btn-sm btn-outline-secondary" type="button">取消</button>
                         </div>
                       </div>
-                      <div class="d-flex flex-wrap gap-1 mb-2" id="emojiBar"></div>
+                      <div class="d-flex flex-wrap gap-1 mb-2 d-none" id="emojiBar"></div>
+                      <div class="chat-tools-row mb-2">
+                        <button id="emojiToggleBtn" class="btn btn-outline-secondary btn-sm" type="button" title="表情">😊</button>
+                        <button id="voiceCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="语音通话">语音</button>
+                        <button id="videoCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="视频通话">视频</button>
+                      </div>
                       <div class="input-group">
                         <button id="uploadImageBtn" class="btn btn-outline-secondary" type="button">图片</button>
                         <input id="imageInput" type="file" accept="image/*" class="d-none" />
@@ -311,6 +316,17 @@
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <img id="groupManageAvatar" class="chat-header-avatar" alt="group-avatar" />
+                <div>
+                  <div id="groupManageName" class="fw-semibold">群聊</div>
+                  <div id="groupManageNotice" class="small text-secondary">群公告：暂无公告</div>
+                </div>
+              </div>
+              <div class="d-flex gap-2 flex-wrap mb-3">
+                <button id="groupManageHistorySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
+                <button id="groupManageHistoryPhotosBtn" class="btn btn-outline-secondary btn-sm" type="button">历史照片</button>
+              </div>
               <div class="mb-3">
                 <label for="groupAddMemberSelect" class="form-label">拉人进群</label>
                 <div class="input-group">
@@ -321,6 +337,31 @@
               <div class="border-top pt-3">
                 <div class="fw-semibold mb-2">成员管理</div>
                 <div id="groupMemberManageList" class="list-group"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 会话详情（单聊） -->
+      <div class="modal fade" id="directDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">会话详情</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <img id="directDetailsAvatar" class="chat-header-avatar" alt="direct-avatar" />
+                <div>
+                  <div id="directDetailsName" class="fw-semibold">好友</div>
+                  <div id="directDetailsStatus" class="small text-secondary">离线</div>
+                </div>
+              </div>
+              <div class="d-grid gap-2">
+                <button id="directDetailsHistorySearchBtn" class="btn btn-outline-secondary" type="button">查找聊天记录</button>
+                <button id="directDetailsHistoryPhotosBtn" class="btn btn-outline-secondary" type="button">查看历史照片</button>
               </div>
             </div>
           </div>

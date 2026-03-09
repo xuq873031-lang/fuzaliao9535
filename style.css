@@ -161,6 +161,27 @@ body {
   object-fit: cover;
 }
 
+.chat-header-main {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.chat-header-main:hover {
+  opacity: 0.9;
+}
+
+.chat-tools-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-tools-row .btn {
+  border-radius: 999px;
+  min-width: 54px;
+}
+
 .message-list {
   overflow-y: auto;
   background: linear-gradient(180deg, rgba(34, 158, 217, 0.04), rgba(62, 207, 142, 0.03));
