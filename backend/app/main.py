@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
 from .manager import ConnectionManager
-from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomRead, User, friends, room_members
+from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, friends, room_members
 from .schemas import (
     AddRoomMemberIn,
     CreateFriendRequestIn,
@@ -30,6 +30,7 @@ from .schemas import (
     RoomUnreadOut,
     RoomOut,
     RoomMemberOut,
+    RoomMuteOut,
     SendMessageIn,
     SearchUserOut,
     TokenOut,
@@ -139,6 +140,13 @@ def get_room_member_role(db: Session, room_id: int, user_id: int) -> str | None:
         select(room_members.c.role).where(room_members.c.room_id == room_id, room_members.c.user_id == user_id)
     ).first()
     return row[0] if row else None
+
+
+def is_user_muted_in_room(db: Session, room_id: int, user_id: int) -> bool:
+    row = db.execute(
+        select(RoomMute.id).where(RoomMute.room_id == room_id, RoomMute.user_id == user_id)
+    ).first()
+    return bool(row)
 
 
 def room_effective_type(room: ChatRoom) -> str:
@@ -819,6 +827,8 @@ def list_room_members(
     user_ids = [r[0] for r in rows]
     users = db.execute(select(User).where(User.id.in_(user_ids))).scalars().all() if user_ids else []
     user_map = {u.id: u for u in users}
+    muted_rows = db.execute(select(RoomMute.user_id).where(RoomMute.room_id == room_id)).all()
+    muted_set = {m[0] for m in muted_rows}
     return [
         RoomMemberOut(
             room_id=room_id,
@@ -826,6 +836,7 @@ def list_room_members(
             username=user_map[uid].username if uid in user_map else f"user_{uid}",
             nickname=user_map[uid].nickname if uid in user_map else "",
             role=role or "member",
+            muted=uid in muted_set,
             joined_at=joined_at,
         )
         for uid, role, joined_at in rows
@@ -839,8 +850,52 @@ async def add_room_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # 产品策略：当前版本禁止在群聊中继续加人（保留接口以兼容旧客户端）
-    raise HTTPException(status_code=403, detail="Adding members is disabled in current version")
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room supports member management")
+
+    my_role = get_room_member_role(db, room_id, current_user.id)
+    if my_role != "owner":
+        raise HTTPException(status_code=403, detail="Only owner can add members")
+
+    if payload.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot add yourself")
+
+    target_user = db.get(User, payload.user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    exists = db.execute(
+        select(room_members.c.user_id).where(room_members.c.room_id == room_id, room_members.c.user_id == payload.user_id)
+    ).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="User already in room")
+
+    db.execute(
+        insert(room_members).values(
+            room_id=room_id,
+            user_id=payload.user_id,
+            role="member",
+            joined_at=datetime.utcnow(),
+        )
+    )
+    db.commit()
+    manager.refresh_user_rooms(payload.user_id, get_room_ids_for_user(db, payload.user_id))
+
+    actor = current_user.nickname or current_user.username
+    system_msg = Message(
+        room_id=room_id,
+        sender_id=current_user.id,
+        content=f"[system] {actor} 邀请了成员 {target_user.nickname or target_user.username}",
+    )
+    db.add(system_msg)
+    db.commit()
+    db.refresh(system_msg)
+    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
+    return {"ok": True}
 
 
 @app.delete("/api/rooms/{room_id}/members/{user_id}")
@@ -878,6 +933,7 @@ async def remove_room_member(
             raise HTTPException(status_code=400, detail="Cannot remove the last owner")
 
     db.execute(delete(room_members).where(room_members.c.room_id == room_id, room_members.c.user_id == user_id))
+    db.execute(delete(RoomMute).where(RoomMute.room_id == room_id, RoomMute.user_id == user_id))
     db.commit()
     manager.refresh_user_rooms(user_id, get_room_ids_for_user(db, user_id))
 
@@ -888,6 +944,72 @@ async def remove_room_member(
     db.refresh(system_msg)
     await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
     return {"ok": True}
+
+
+@app.post("/api/rooms/{room_id}/members/{user_id}/mute", response_model=RoomMuteOut)
+async def mute_room_member(
+    room_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room supports mute")
+    if get_room_member_role(db, room_id, current_user.id) != "owner":
+        raise HTTPException(status_code=403, detail="Only owner can mute members")
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Owner cannot mute self")
+
+    target_role = get_room_member_role(db, room_id, user_id)
+    if not target_role:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if target_role == "owner":
+        raise HTTPException(status_code=400, detail="Cannot mute owner")
+
+    row = db.execute(select(RoomMute).where(RoomMute.room_id == room_id, RoomMute.user_id == user_id)).scalar_one_or_none()
+    if not row:
+        db.add(RoomMute(room_id=room_id, user_id=user_id, muted_by=current_user.id))
+        db.commit()
+
+    actor = current_user.nickname or current_user.username
+    system_msg = Message(room_id=room_id, sender_id=current_user.id, content=f"[system] {actor} 禁言了成员 {user_id}")
+    db.add(system_msg)
+    db.commit()
+    db.refresh(system_msg)
+    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
+    return RoomMuteOut(room_id=room_id, user_id=user_id, muted=True)
+
+
+@app.delete("/api/rooms/{room_id}/members/{user_id}/mute", response_model=RoomMuteOut)
+async def unmute_room_member(
+    room_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room supports mute")
+    if get_room_member_role(db, room_id, current_user.id) != "owner":
+        raise HTTPException(status_code=403, detail="Only owner can unmute members")
+
+    db.execute(delete(RoomMute).where(RoomMute.room_id == room_id, RoomMute.user_id == user_id))
+    db.commit()
+
+    actor = current_user.nickname or current_user.username
+    system_msg = Message(room_id=room_id, sender_id=current_user.id, content=f"[system] {actor} 取消了成员 {user_id} 的禁言")
+    db.add(system_msg)
+    db.commit()
+    db.refresh(system_msg)
+    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
+    return RoomMuteOut(room_id=room_id, user_id=user_id, muted=False)
 
 
 @app.get("/api/rooms/unread", response_model=list[RoomUnreadOut])
@@ -961,6 +1083,9 @@ async def post_room_message(
     current_user: User = Depends(get_current_user),
 ):
     ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if room and room_effective_type(room) == "group" and is_user_muted_in_room(db, room_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You are muted in this group")
     content = payload.content.strip()
     if not content:
         raise HTTPException(status_code=422, detail="Empty content")
@@ -1097,6 +1222,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 ).first()
                 if not member:
                     await websocket.send_json({"type": "error", "payload": {"message": "No room access"}})
+                    continue
+
+                room = db.get(ChatRoom, data.room_id)
+                if room and room_effective_type(room) == "group" and is_user_muted_in_room(db, data.room_id, user_id):
+                    await websocket.send_json({"type": "error", "payload": {"message": "You are muted in this group"}})
                     continue
 
                 reply_to_message_id = data.reply_to_message_id

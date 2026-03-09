@@ -74,7 +74,14 @@ class RoomMemberOut(BaseModel):
     username: str
     nickname: str
     role: str
+    muted: bool = False
     joined_at: datetime | None = None
+
+
+class RoomMuteOut(BaseModel):
+    room_id: int
+    user_id: int
+    muted: bool
 
 
 class RoomUnreadOut(BaseModel):

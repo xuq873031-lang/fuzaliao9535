@@ -120,3 +120,17 @@ class FriendRemark(Base):
     friend_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     remark = Column(String(80), nullable=False, default="")
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RoomMute(Base):
+    __tablename__ = "room_mutes"
+    __table_args__ = (
+        UniqueConstraint("room_id", "user_id", name="uq_room_mute_room_user"),
+        Index("ix_room_mutes_room_user", "room_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    muted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
