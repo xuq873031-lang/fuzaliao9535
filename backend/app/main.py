@@ -936,6 +936,7 @@ async def remove_room_member(
     db.execute(delete(RoomMute).where(RoomMute.room_id == room_id, RoomMute.user_id == user_id))
     db.commit()
     manager.refresh_user_rooms(user_id, get_room_ids_for_user(db, user_id))
+    await manager.send_json_to_user(user_id, {"type": "room_removed", "room_id": room_id})
 
     actor = current_user.nickname or current_user.username
     system_msg = Message(room_id=room_id, sender_id=current_user.id, content=f"[system] {actor} 移除了成员 {user_id}")
