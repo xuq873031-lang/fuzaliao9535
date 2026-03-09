@@ -151,10 +151,14 @@ class MarkRoomReadIn(BaseModel):
 
 class WsMessageIn(BaseModel):
     action: str
-    room_id: int
+    room_id: int | None = None
     content: str | None = None
     message_id: int | None = None
     reply_to_message_id: int | None = None
+    call_id: str | None = None
+    call_type: str | None = None
+    sdp: str | None = None
+    candidate: dict | None = None
 
 
 class WsMessageOut(BaseModel):

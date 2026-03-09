@@ -44,7 +44,22 @@ let appState = {
   userNearBottom: true,
   lastSoundAt: 0,
   audioCtx: null,
-  readAckTimer: null
+  readAckTimer: null,
+  call: {
+    status: 'idle', // idle|ringing|incoming|connecting|active|ended
+    mode: null, // audio|video
+    callId: null,
+    roomId: null,
+    peerUserId: null,
+    peerName: '',
+    isOutgoing: false,
+    muted: false,
+    cameraOff: false,
+    pendingInvite: null,
+    pc: null,
+    localStream: null,
+    remoteStream: null
+  }
 };
 
 // ============================
@@ -205,6 +220,33 @@ function canEditOwnMessage(msg) {
   if (msg.senderId !== appState.currentUser?.id) return false;
   if (isImageMessageText(msg.text)) return false;
   return true;
+}
+
+function getRtcConfiguration() {
+  const fallback = [{ urls: 'stun:stun.l.google.com:19302' }];
+  try {
+    if (Array.isArray(window.CHAT_ICE_SERVERS) && window.CHAT_ICE_SERVERS.length) {
+      return { iceServers: window.CHAT_ICE_SERVERS };
+    }
+    const raw = localStorage.getItem('chat_ice_servers');
+    if (!raw) return { iceServers: fallback };
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) return { iceServers: fallback };
+    return { iceServers: parsed };
+  } catch (_) {
+    return { iceServers: fallback };
+  }
+}
+
+function getCallPeerUserId(conv) {
+  if (!conv || !isDmConversation(conv)) return null;
+  const me = appState.currentUser?.id;
+  return conv.members.find((id) => id !== me) || null;
+}
+
+function getCallPeerName(peerUserId) {
+  if (!peerUserId) return '对方';
+  return getDisplayNameByUserId(peerUserId);
 }
 
 function getUnreadTotal() {
@@ -915,6 +957,80 @@ function handleWsEvent(evt) {
     return;
   }
 
+  if (evt.type === 'call_invite') {
+    const payload = evt.payload || {};
+    // 已在通话中：显示忙线提示并拒绝
+    if (appState.call.status !== 'idle' || appState.call.pendingInvite) {
+      sendWsMessage({
+        action: 'call_reject',
+        call_id: payload.call_id,
+        room_id: payload.room_id
+      });
+      return;
+    }
+    appState.call.pendingInvite = payload;
+    showIncomingCallPanel(payload);
+    playIncomingSound();
+    return;
+  }
+
+  if (evt.type === 'call_ringing') {
+    const payload = evt.payload || {};
+    appState.call.callId = payload.call_id || appState.call.callId;
+    appState.call.status = 'ringing';
+    updateActiveCallPanel();
+    return;
+  }
+
+  if (evt.type === 'call_accept') {
+    onCallAccepted(evt.payload).catch((err) => {
+      console.warn('处理接听失败:', err.message);
+      endActiveCall({ localOnly: true, reason: 'accept_failed' });
+    });
+    return;
+  }
+
+  if (evt.type === 'call_reject') {
+    hideIncomingCallPanel();
+    appState.call.pendingInvite = null;
+    endActiveCall({ localOnly: true, reason: evt.payload?.reason || 'rejected' });
+    return;
+  }
+
+  if (evt.type === 'call_busy') {
+    endActiveCall({ localOnly: true, reason: evt.payload?.reason || 'busy' });
+    alert('对方忙线中，请稍后再试');
+    return;
+  }
+
+  if (evt.type === 'call_hangup') {
+    hideIncomingCallPanel();
+    appState.call.pendingInvite = null;
+    endActiveCall({ localOnly: true, reason: evt.payload?.reason || 'hangup' });
+    return;
+  }
+
+  if (evt.type === 'call_offer') {
+    onCallOffer(evt.payload).catch((err) => {
+      console.warn('处理 offer 失败:', err.message);
+      endActiveCall({ localOnly: false, reason: 'offer_failed' });
+    });
+    return;
+  }
+
+  if (evt.type === 'call_answer') {
+    onCallAnswer(evt.payload).catch((err) => {
+      console.warn('处理 answer 失败:', err.message);
+      endActiveCall({ localOnly: false, reason: 'answer_failed' });
+    });
+    return;
+  }
+
+  if (evt.type === 'call_ice_candidate') {
+    onCallIceCandidate(evt.payload);
+    return;
+  }
+
   if (evt.type === 'error') {
     console.warn('[WS] server error:', evt.payload?.message);
   }
@@ -926,6 +1042,382 @@ function sendWsMessage(payload) {
   }
   appState.ws.send(JSON.stringify(payload));
   return true;
+}
+
+function resetCallMedia() {
+  if (appState.call.pc) {
+    try {
+      appState.call.pc.ontrack = null;
+      appState.call.pc.onicecandidate = null;
+      appState.call.pc.onconnectionstatechange = null;
+      appState.call.pc.close();
+    } catch (_) {
+      // ignore
+    }
+    appState.call.pc = null;
+  }
+  if (appState.call.localStream) {
+    appState.call.localStream.getTracks().forEach((t) => t.stop());
+    appState.call.localStream = null;
+  }
+  appState.call.remoteStream = null;
+
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  if (localVideo) localVideo.srcObject = null;
+  if (remoteVideo) remoteVideo.srcObject = null;
+}
+
+function hideIncomingCallPanel() {
+  const panel = document.getElementById('incomingCallPanel');
+  if (panel) panel.classList.add('d-none');
+}
+
+function showIncomingCallPanel(payload) {
+  const panel = document.getElementById('incomingCallPanel');
+  const nameEl = document.getElementById('incomingCallName');
+  const typeEl = document.getElementById('incomingCallTypeText');
+  const avatarEl = document.getElementById('incomingCallAvatar');
+  if (!panel || !nameEl || !typeEl || !avatarEl) return;
+
+  const peerId = Number(payload.from_user_id);
+  nameEl.textContent = getCallPeerName(peerId);
+  typeEl.textContent = payload.call_type === 'video' ? '视频来电' : '语音来电';
+  avatarEl.src = getUserAvatarById(peerId);
+  panel.classList.remove('d-none');
+}
+
+function updateActiveCallPanel() {
+  const panel = document.getElementById('activeCallPanel');
+  const nameEl = document.getElementById('activeCallName');
+  const statusEl = document.getElementById('activeCallStatus');
+  const badgeEl = document.getElementById('activeCallTypeBadge');
+  const avatarEl = document.getElementById('activeCallAvatar');
+  const videoWrap = document.getElementById('activeCallVideoWrap');
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  const muteBtn = document.getElementById('callMuteBtn');
+  const camBtn = document.getElementById('callToggleCameraBtn');
+  if (!panel || !nameEl || !statusEl || !badgeEl || !avatarEl || !videoWrap || !muteBtn || !camBtn) return;
+
+  if (appState.call.status === 'idle') {
+    panel.classList.add('d-none');
+    return;
+  }
+  panel.classList.remove('d-none');
+
+  nameEl.textContent = appState.call.peerName || '对方';
+  avatarEl.src = getUserAvatarById(appState.call.peerUserId) || DEFAULT_AVATAR;
+  badgeEl.textContent = appState.call.mode === 'video' ? '视频' : '语音';
+
+  const statusMap = {
+    ringing: appState.call.isOutgoing ? '呼叫中...' : '来电中...',
+    incoming: '来电中...',
+    connecting: '连接中...',
+    active: '已接通',
+    ended: '已结束'
+  };
+  statusEl.textContent = statusMap[appState.call.status] || appState.call.status;
+
+  const isVideo = appState.call.mode === 'video';
+  videoWrap.classList.toggle('d-none', !isVideo);
+  camBtn.classList.toggle('d-none', !isVideo);
+  camBtn.textContent = appState.call.cameraOff ? '开启摄像头' : '关闭摄像头';
+  muteBtn.textContent = appState.call.muted ? '取消静音' : '静音';
+
+  if (isVideo) {
+    if (localVideo) localVideo.srcObject = appState.call.localStream || null;
+    if (remoteVideo) remoteVideo.srcObject = appState.call.remoteStream || null;
+  }
+}
+
+function resetCallState() {
+  resetCallMedia();
+  appState.call = {
+    status: 'idle',
+    mode: null,
+    callId: null,
+    roomId: null,
+    peerUserId: null,
+    peerName: '',
+    isOutgoing: false,
+    muted: false,
+    cameraOff: false,
+    pendingInvite: null,
+    pc: null,
+    localStream: null,
+    remoteStream: null
+  };
+  hideIncomingCallPanel();
+  updateActiveCallPanel();
+}
+
+async function ensureLocalMedia(mode) {
+  if (appState.call.localStream) return appState.call.localStream;
+  const constraints = mode === 'video'
+    ? { audio: true, video: { width: 640, height: 360 } }
+    : { audio: true, video: false };
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  appState.call.localStream = stream;
+  return stream;
+}
+
+function buildPeerConnection() {
+  if (appState.call.pc) return appState.call.pc;
+  const pc = new RTCPeerConnection(getRtcConfiguration());
+  appState.call.pc = pc;
+  appState.call.remoteStream = new MediaStream();
+
+  const remoteVideo = document.getElementById('remoteVideo');
+  if (remoteVideo) remoteVideo.srcObject = appState.call.remoteStream;
+  const localVideo = document.getElementById('localVideo');
+  if (localVideo) localVideo.srcObject = appState.call.localStream || null;
+
+  pc.ontrack = (evt) => {
+    evt.streams[0]?.getTracks().forEach((track) => {
+      appState.call.remoteStream.addTrack(track);
+    });
+    updateActiveCallPanel();
+  };
+
+  pc.onicecandidate = (evt) => {
+    if (!evt.candidate || !appState.call.callId) return;
+    sendWsMessage({
+      action: 'call_ice_candidate',
+      call_id: appState.call.callId,
+      room_id: appState.call.roomId,
+      candidate: evt.candidate
+    });
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (['connected'].includes(pc.connectionState)) {
+      appState.call.status = 'active';
+      updateActiveCallPanel();
+      return;
+    }
+    if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+      endActiveCall({ localOnly: true, finalStatus: 'ended' });
+    }
+  };
+
+  const stream = appState.call.localStream;
+  if (stream) {
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+  }
+  return pc;
+}
+
+async function startCall(mode) {
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv || !isDmConversation(conv)) {
+    alert('仅支持在单聊中发起通话');
+    return;
+  }
+  if (appState.call.status !== 'idle') {
+    alert('当前已有进行中的通话');
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert('当前设备不支持音视频通话');
+    return;
+  }
+  if (!sendWsMessage({ action: 'ping', room_id: conv.id })) {
+    alert('实时连接未建立，请稍后重试');
+    return;
+  }
+
+  const peerUserId = getCallPeerUserId(conv);
+  if (!peerUserId) {
+    alert('无法识别通话对象');
+    return;
+  }
+  appState.call.mode = mode;
+  appState.call.roomId = conv.id;
+  appState.call.peerUserId = peerUserId;
+  appState.call.peerName = getCallPeerName(peerUserId);
+  appState.call.status = 'ringing';
+  appState.call.isOutgoing = true;
+  appState.call.muted = false;
+  appState.call.cameraOff = false;
+
+  try {
+    await ensureLocalMedia(mode);
+  } catch (err) {
+    resetCallState();
+    alert(`无法获取麦克风/摄像头权限：${err.message}`);
+    return;
+  }
+
+  updateActiveCallPanel();
+  const ok = sendWsMessage({
+    action: 'call_invite',
+    room_id: conv.id,
+    call_type: mode
+  });
+  if (!ok) {
+    resetCallState();
+    alert('实时连接未建立，请稍后重试');
+  }
+}
+
+async function acceptIncomingCall() {
+  const invite = appState.call.pendingInvite;
+  if (!invite) return;
+  appState.call.callId = invite.call_id;
+  appState.call.mode = invite.call_type;
+  appState.call.roomId = Number(invite.room_id);
+  appState.call.peerUserId = Number(invite.from_user_id);
+  appState.call.peerName = getCallPeerName(appState.call.peerUserId);
+  appState.call.isOutgoing = false;
+  appState.call.status = 'connecting';
+  appState.call.muted = false;
+  appState.call.cameraOff = false;
+  hideIncomingCallPanel();
+
+  try {
+    await ensureLocalMedia(appState.call.mode);
+  } catch (err) {
+    sendWsMessage({ action: 'call_reject', call_id: invite.call_id, room_id: invite.room_id });
+    resetCallState();
+    alert(`无法接听，设备权限被拒绝：${err.message}`);
+    return;
+  }
+
+  const conv = findConversationById(appState.call.roomId);
+  if (conv) {
+    appState.activeConversationId = conv.id;
+    switchView('messagesView', { keepRoom: true });
+    renderConversationList();
+    renderMessages({ autoScroll: true, forceBottom: true });
+    startRoomPolling(conv.id);
+  }
+
+  updateActiveCallPanel();
+  sendWsMessage({
+    action: 'call_accept',
+    call_id: invite.call_id,
+    room_id: invite.room_id
+  });
+  appState.call.pendingInvite = null;
+}
+
+function rejectIncomingCall() {
+  const invite = appState.call.pendingInvite;
+  if (!invite) return;
+  sendWsMessage({
+    action: 'call_reject',
+    call_id: invite.call_id,
+    room_id: invite.room_id
+  });
+  appState.call.pendingInvite = null;
+  hideIncomingCallPanel();
+}
+
+async function onCallAccepted(payload) {
+  if (!payload?.call_id) return;
+  if (appState.call.callId && appState.call.callId !== payload.call_id) return;
+  appState.call.callId = payload.call_id;
+  appState.call.status = 'connecting';
+  updateActiveCallPanel();
+
+  const pc = buildPeerConnection();
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  sendWsMessage({
+    action: 'call_offer',
+    call_id: payload.call_id,
+    room_id: appState.call.roomId,
+    sdp: offer.sdp
+  });
+}
+
+async function onCallOffer(payload) {
+  if (!payload?.call_id || !payload?.sdp) return;
+  if (appState.call.callId !== payload.call_id) return;
+  const pc = buildPeerConnection();
+  await pc.setRemoteDescription({ type: 'offer', sdp: payload.sdp });
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  sendWsMessage({
+    action: 'call_answer',
+    call_id: payload.call_id,
+    room_id: appState.call.roomId,
+    sdp: answer.sdp
+  });
+}
+
+async function onCallAnswer(payload) {
+  if (!payload?.call_id || !payload?.sdp) return;
+  if (appState.call.callId !== payload.call_id || !appState.call.pc) return;
+  await appState.call.pc.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
+  appState.call.status = 'active';
+  updateActiveCallPanel();
+}
+
+async function onCallIceCandidate(payload) {
+  if (!payload?.call_id || !payload?.candidate || !appState.call.pc) return;
+  if (appState.call.callId !== payload.call_id) return;
+  try {
+    await appState.call.pc.addIceCandidate(payload.candidate);
+  } catch (err) {
+    console.warn('ICE candidate add failed:', err.message);
+  }
+}
+
+function endActiveCall(options = {}) {
+  const { localOnly = false, finalStatus = 'ended', reason = '' } = options;
+  const callId = appState.call.callId;
+  const roomId = appState.call.roomId;
+  const hadActive = !!callId || appState.call.status !== 'idle';
+  if (!hadActive) {
+    resetCallState();
+    return;
+  }
+  if (!localOnly && callId) {
+    sendWsMessage({
+      action: 'call_hangup',
+      call_id: callId,
+      room_id: roomId
+    });
+  }
+  appState.call.status = finalStatus;
+  updateActiveCallPanel();
+  setTimeout(() => {
+    resetCallState();
+    if (reason) console.info(`[call] ${reason}`);
+  }, 200);
+}
+
+function toggleCallMute() {
+  const stream = appState.call.localStream;
+  if (!stream) return;
+  appState.call.muted = !appState.call.muted;
+  stream.getAudioTracks().forEach((t) => {
+    t.enabled = !appState.call.muted;
+  });
+  updateActiveCallPanel();
+}
+
+function toggleCallCamera() {
+  if (appState.call.mode !== 'video') return;
+  const stream = appState.call.localStream;
+  if (!stream) return;
+  appState.call.cameraOff = !appState.call.cameraOff;
+  stream.getVideoTracks().forEach((t) => {
+    t.enabled = !appState.call.cameraOff;
+  });
+  updateActiveCallPanel();
+}
+
+function updateCallButtonsState() {
+  const voiceBtn = document.getElementById('voiceCallBtn');
+  const videoBtn = document.getElementById('videoCallBtn');
+  if (!voiceBtn || !videoBtn) return;
+  const conv = findConversationById(appState.activeConversationId);
+  const canCall = !!conv && isDmConversation(conv);
+  voiceBtn.disabled = !canCall || appState.call.status !== 'idle';
+  videoBtn.disabled = !canCall || appState.call.status !== 'idle';
 }
 
 // ============================
@@ -975,6 +1467,7 @@ function bindAuthEvents() {
 }
 
 function logout() {
+  endActiveCall({ localOnly: true, reason: 'logout' });
   clearToken();
   appState.currentUser = null;
   appState.friends = [];
@@ -1540,6 +2033,13 @@ function bindChatEvents() {
   const actionReplyBtn = document.getElementById('msgActionReplyBtn');
   const actionEditBtn = document.getElementById('msgActionEditBtn');
   const mobileBackBtn = document.getElementById('mobileBackToListBtn');
+  const voiceCallBtn = document.getElementById('voiceCallBtn');
+  const videoCallBtn = document.getElementById('videoCallBtn');
+  const incomingAcceptBtn = document.getElementById('incomingAcceptBtn');
+  const incomingRejectBtn = document.getElementById('incomingRejectBtn');
+  const callHangupBtn = document.getElementById('callHangupBtn');
+  const callMuteBtn = document.getElementById('callMuteBtn');
+  const callToggleCameraBtn = document.getElementById('callToggleCameraBtn');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -1574,6 +2074,13 @@ function bindChatEvents() {
     renderConversationList();
     renderMessages({ autoScroll: false });
   });
+  if (voiceCallBtn) voiceCallBtn.addEventListener('click', () => startCall('audio'));
+  if (videoCallBtn) videoCallBtn.addEventListener('click', () => startCall('video'));
+  if (incomingAcceptBtn) incomingAcceptBtn.addEventListener('click', acceptIncomingCall);
+  if (incomingRejectBtn) incomingRejectBtn.addEventListener('click', rejectIncomingCall);
+  if (callHangupBtn) callHangupBtn.addEventListener('click', () => endActiveCall({ localOnly: false, reason: 'manual_hangup' }));
+  if (callMuteBtn) callMuteBtn.addEventListener('click', toggleCallMute);
+  if (callToggleCameraBtn) callToggleCameraBtn.addEventListener('click', toggleCallCamera);
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
@@ -1590,6 +2097,7 @@ function bindChatEvents() {
     }
     const conv = findConversationById(appState.activeConversationId);
     setChatPaneVisible(!!conv);
+    updateCallButtonsState();
   });
 
   const emojiBar = document.getElementById('emojiBar');
@@ -1978,6 +2486,7 @@ function renderMessages(options = {}) {
     composer.classList.add('d-none');
     listEl.innerHTML = '';
     clearReplyAndEditState();
+    updateCallButtonsState();
     return;
   }
   setChatPaneVisible(true);
@@ -2003,6 +2512,7 @@ function renderMessages(options = {}) {
     scrollMessagesToBottom({ force: true });
   }
   renderComposerState();
+  updateCallButtonsState();
 }
 
 async function sendMessage() {
@@ -2141,6 +2651,7 @@ async function bootstrapAfterLogin(userFromAuth = null) {
 }
 
 function enterApp() {
+  resetCallState();
   showMain();
   switchView('messagesView');
 

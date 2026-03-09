@@ -41,6 +41,8 @@ from .security import create_access_token, hash_password, verify_access_token, v
 
 app = FastAPI(title=settings.app_name)
 manager = ConnectionManager()
+call_sessions: dict[str, dict] = {}
+user_call_index: dict[int, str] = {}
 UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -92,6 +94,44 @@ def get_room_members_with_meta(db: Session, room_id: int):
     return db.execute(
         select(room_members.c.user_id, room_members.c.role, room_members.c.joined_at).where(room_members.c.room_id == room_id)
     ).all()
+
+
+def get_direct_call_peer_id(db: Session, room_id: int, user_id: int) -> int:
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "dm":
+        raise HTTPException(status_code=400, detail="Only 1-to-1 call is supported")
+
+    member_ids = get_room_member_ids(db, room_id)
+    if user_id not in member_ids:
+        raise HTTPException(status_code=403, detail="No room access")
+    if len(member_ids) != 2:
+        raise HTTPException(status_code=400, detail="Only 1-to-1 call is supported")
+    return member_ids[0] if member_ids[1] == user_id else member_ids[1]
+
+
+def get_call_peer_id(call: dict, user_id: int) -> int | None:
+    if not call:
+        return None
+    caller = int(call["caller_id"])
+    callee = int(call["callee_id"])
+    if user_id == caller:
+        return callee
+    if user_id == callee:
+        return caller
+    return None
+
+
+def clear_call_state(call_id: str | None) -> dict | None:
+    if not call_id:
+        return None
+    call = call_sessions.pop(call_id, None)
+    if not call:
+        return None
+    user_call_index.pop(int(call["caller_id"]), None)
+    user_call_index.pop(int(call["callee_id"]), None)
+    return call
 
 
 def get_room_member_role(db: Session, room_id: int, user_id: int) -> str | None:
@@ -1043,6 +1083,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 continue
 
             if data.action == "send_message":
+                if not data.room_id:
+                    await websocket.send_json({"type": "error", "payload": {"message": "room_id required"}})
+                    continue
                 if not data.content or not data.content.strip():
                     await websocket.send_json({"type": "error", "payload": {"message": "Empty content"}})
                     continue
@@ -1091,6 +1134,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 continue
 
             if data.action == "edit_message":
+                if not data.room_id:
+                    await websocket.send_json({"type": "error", "payload": {"message": "room_id required"}})
+                    continue
                 if not data.message_id or not data.content:
                     await websocket.send_json({"type": "error", "payload": {"message": "message_id/content required"}})
                     continue
@@ -1125,11 +1171,207 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 )
                 continue
 
+            if data.action == "call_invite":
+                if not data.room_id:
+                    await websocket.send_json({"type": "error", "payload": {"message": "room_id required"}})
+                    continue
+                if data.call_type not in {"audio", "video"}:
+                    await websocket.send_json({"type": "error", "payload": {"message": "Invalid call_type"}})
+                    continue
+
+                try:
+                    peer_id = get_direct_call_peer_id(db, data.room_id, user_id)
+                except HTTPException as e:
+                    await websocket.send_json({"type": "error", "payload": {"message": e.detail}})
+                    continue
+
+                if user_call_index.get(user_id):
+                    await websocket.send_json(
+                        {"type": "call_busy", "payload": {"room_id": data.room_id, "reason": "caller_busy"}}
+                    )
+                    continue
+                if user_call_index.get(peer_id):
+                    await websocket.send_json(
+                        {
+                            "type": "call_busy",
+                            "payload": {"room_id": data.room_id, "peer_user_id": peer_id, "reason": "peer_busy"},
+                        }
+                    )
+                    continue
+                if manager.connection_count(peer_id) == 0:
+                    await websocket.send_json(
+                        {
+                            "type": "call_reject",
+                            "payload": {"room_id": data.room_id, "peer_user_id": peer_id, "reason": "peer_offline"},
+                        }
+                    )
+                    continue
+
+                call_id = str(uuid4())
+                call = {
+                    "call_id": call_id,
+                    "caller_id": user_id,
+                    "callee_id": peer_id,
+                    "room_id": data.room_id,
+                    "call_type": data.call_type,
+                    "status": "ringing",
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+                call_sessions[call_id] = call
+                user_call_index[user_id] = call_id
+                user_call_index[peer_id] = call_id
+
+                await manager.send_json_to_user(
+                    peer_id,
+                    {
+                        "type": "call_invite",
+                        "payload": {
+                            "call_id": call_id,
+                            "room_id": data.room_id,
+                            "from_user_id": user_id,
+                            "call_type": data.call_type,
+                        },
+                    },
+                )
+                await websocket.send_json(
+                    {
+                        "type": "call_ringing",
+                        "payload": {
+                            "call_id": call_id,
+                            "room_id": data.room_id,
+                            "to_user_id": peer_id,
+                            "call_type": data.call_type,
+                        },
+                    }
+                )
+                continue
+
+            if data.action == "call_accept":
+                call_id = data.call_id or user_call_index.get(user_id)
+                call = call_sessions.get(call_id) if call_id else None
+                if not call:
+                    await websocket.send_json({"type": "error", "payload": {"message": "Call not found"}})
+                    continue
+                if int(call["callee_id"]) != user_id:
+                    await websocket.send_json({"type": "error", "payload": {"message": "No permission"}})
+                    continue
+                call["status"] = "active"
+                call["accepted_at"] = datetime.utcnow().isoformat()
+                await manager.send_json_to_user(
+                    int(call["caller_id"]),
+                    {
+                        "type": "call_accept",
+                        "payload": {
+                            "call_id": call_id,
+                            "room_id": call["room_id"],
+                            "from_user_id": user_id,
+                            "call_type": call["call_type"],
+                        },
+                    },
+                )
+                continue
+
+            if data.action == "call_reject":
+                call_id = data.call_id or user_call_index.get(user_id)
+                call = call_sessions.get(call_id) if call_id else None
+                if not call:
+                    await websocket.send_json({"type": "error", "payload": {"message": "Call not found"}})
+                    continue
+                if user_id not in {int(call["caller_id"]), int(call["callee_id"])}:
+                    await websocket.send_json({"type": "error", "payload": {"message": "No permission"}})
+                    continue
+                peer_id = get_call_peer_id(call, user_id)
+                clear_call_state(call_id)
+                if peer_id:
+                    await manager.send_json_to_user(
+                        peer_id,
+                        {
+                            "type": "call_reject",
+                            "payload": {
+                                "call_id": call_id,
+                                "room_id": call["room_id"],
+                                "from_user_id": user_id,
+                                "reason": "rejected",
+                            },
+                        },
+                    )
+                continue
+
+            if data.action == "call_hangup":
+                call_id = data.call_id or user_call_index.get(user_id)
+                call = call_sessions.get(call_id) if call_id else None
+                if not call:
+                    continue
+                if user_id not in {int(call["caller_id"]), int(call["callee_id"])}:
+                    await websocket.send_json({"type": "error", "payload": {"message": "No permission"}})
+                    continue
+                peer_id = get_call_peer_id(call, user_id)
+                clear_call_state(call_id)
+                if peer_id:
+                    await manager.send_json_to_user(
+                        peer_id,
+                        {
+                            "type": "call_hangup",
+                            "payload": {
+                                "call_id": call_id,
+                                "room_id": call["room_id"],
+                                "from_user_id": user_id,
+                                "reason": "hangup",
+                            },
+                        },
+                    )
+                continue
+
+            if data.action in {"call_offer", "call_answer", "call_ice_candidate"}:
+                call_id = data.call_id or user_call_index.get(user_id)
+                call = call_sessions.get(call_id) if call_id else None
+                if not call:
+                    await websocket.send_json({"type": "error", "payload": {"message": "Call not found"}})
+                    continue
+                if user_id not in {int(call["caller_id"]), int(call["callee_id"])}:
+                    await websocket.send_json({"type": "error", "payload": {"message": "No permission"}})
+                    continue
+                peer_id = get_call_peer_id(call, user_id)
+                if not peer_id:
+                    continue
+                payload_forward = {
+                    "call_id": call_id,
+                    "room_id": call["room_id"],
+                    "from_user_id": user_id,
+                    "call_type": call["call_type"],
+                }
+                if data.sdp:
+                    payload_forward["sdp"] = data.sdp
+                if data.candidate:
+                    payload_forward["candidate"] = data.candidate
+                await manager.send_json_to_user(peer_id, {"type": data.action, "payload": payload_forward})
+                continue
+
             await websocket.send_json({"type": "error", "payload": {"message": "Unknown action"}})
 
     except WebSocketDisconnect:
         pass
     finally:
+        active_call_id = user_call_index.get(user_id)
+        active_call = call_sessions.get(active_call_id) if active_call_id else None
+        if active_call:
+            peer_id = get_call_peer_id(active_call, user_id)
+            call_room_id = active_call.get("room_id")
+            clear_call_state(active_call_id)
+            if peer_id:
+                await manager.send_json_to_user(
+                    peer_id,
+                    {
+                        "type": "call_hangup",
+                        "payload": {
+                            "call_id": active_call_id,
+                            "room_id": call_room_id,
+                            "from_user_id": user_id,
+                            "reason": "peer_disconnected",
+                        },
+                    },
+                )
+
         manager.disconnect(user_id, websocket)
         remain = manager.connection_count(user_id)
         if remain == 0:

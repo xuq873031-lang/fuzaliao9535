@@ -236,6 +236,62 @@ body {
   border-radius: 10px;
 }
 
+.call-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.call-panel-card {
+  width: min(420px, 94vw);
+  background: var(--tg-surface);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+}
+
+.call-active-card {
+  width: min(620px, 96vw);
+}
+
+.call-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.call-video-wrap {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0c111a;
+  min-height: 220px;
+}
+
+.call-remote-video {
+  width: 100%;
+  max-height: 54vh;
+  background: #0c111a;
+}
+
+.call-local-video {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 120px;
+  height: 90px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
 .profile-avatar {
   width: 112px;
   height: 112px;
@@ -288,6 +344,11 @@ body {
 
   .chat-pane {
     min-height: calc(100vh - 210px);
+  }
+
+  .call-local-video {
+    width: 96px;
+    height: 74px;
   }
 }
 

@@ -139,6 +139,8 @@
                         </div>
                       </div>
                       <div class="d-flex align-items-center gap-2">
+                        <button id="voiceCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="语音通话">语音</button>
+                        <button id="videoCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="视频通话">视频</button>
                         <button id="mobileBackToListBtn" class="btn btn-outline-secondary btn-sm d-lg-none d-none">返回</button>
                         <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm">加载更多</button>
                       </div>
@@ -338,6 +340,44 @@
               <button id="msgActionReplyBtn" class="btn btn-outline-primary">回复</button>
               <button id="msgActionEditBtn" class="btn btn-outline-secondary d-none">编辑</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 来电提示 -->
+      <div id="incomingCallPanel" class="call-panel-overlay d-none">
+        <div class="call-panel-card text-center">
+          <img id="incomingCallAvatar" class="call-avatar mb-2" alt="avatar" />
+          <h6 id="incomingCallName" class="mb-1">来电</h6>
+          <div id="incomingCallTypeText" class="text-secondary small mb-3">语音通话</div>
+          <div class="d-flex justify-content-center gap-2">
+            <button id="incomingRejectBtn" class="btn btn-outline-danger btn-sm">拒绝</button>
+            <button id="incomingAcceptBtn" class="btn btn-success btn-sm">接听</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 通话中面板 -->
+      <div id="activeCallPanel" class="call-panel-overlay d-none">
+        <div class="call-panel-card call-active-card">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center gap-2">
+              <img id="activeCallAvatar" class="call-avatar" alt="avatar" />
+              <div>
+                <div id="activeCallName" class="fw-semibold">通话中</div>
+                <div id="activeCallStatus" class="small text-secondary">连接中...</div>
+              </div>
+            </div>
+            <span id="activeCallTypeBadge" class="badge text-bg-primary">语音</span>
+          </div>
+          <div id="activeCallVideoWrap" class="call-video-wrap d-none">
+            <video id="remoteVideo" class="call-remote-video" autoplay playsinline></video>
+            <video id="localVideo" class="call-local-video" autoplay playsinline muted></video>
+          </div>
+          <div class="d-flex justify-content-center gap-2 mt-3">
+            <button id="callMuteBtn" class="btn btn-outline-secondary btn-sm">静音</button>
+            <button id="callToggleCameraBtn" class="btn btn-outline-secondary btn-sm d-none">关闭摄像头</button>
+            <button id="callHangupBtn" class="btn btn-danger btn-sm">挂断</button>
           </div>
         </div>
       </div>
