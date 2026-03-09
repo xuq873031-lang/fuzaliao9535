@@ -33,6 +33,7 @@ from .schemas import (
     RoomMemberPermissionIn,
     RoomMuteOut,
     RoomRateLimitIn,
+    RoomUpdateIn,
     SendMessageIn,
     SearchUserOut,
     TokenOut,
@@ -925,6 +926,48 @@ def list_my_rooms(db: Session = Depends(get_db), current_user: User = Depends(ge
             )
         )
     return res
+
+
+@app.patch("/api/rooms/{room_id}", response_model=RoomOut)
+def update_group_room(
+    room_id: int,
+    payload: RoomUpdateIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room can be updated")
+    if get_room_member_role(db, room_id, current_user.id) != "owner":
+        raise HTTPException(status_code=403, detail="Only owner can update group profile")
+
+    if payload.title is not None:
+        room.title = payload.title.strip()
+        room.name = payload.title.strip()
+    if payload.avatar is not None:
+        room.avatar = payload.avatar
+    db.commit()
+    db.refresh(room)
+
+    mids = db.execute(select(room_members.c.user_id).where(room_members.c.room_id == room_id)).all()
+    member_ids = [m[0] for m in mids]
+    for uid in member_ids:
+        manager.refresh_user_rooms(uid, get_room_ids_for_user(db, uid))
+    return RoomOut(
+        id=room.id,
+        name=room.name,
+        room_type=room.room_type,
+        type=room_effective_type(room),
+        title=room_effective_title(room),
+        avatar=room.avatar,
+        rate_limit_seconds=int(room.rate_limit_seconds or 0),
+        created_by=room.created_by,
+        member_ids=member_ids,
+        member_count=len(member_ids),
+    )
 
 
 @app.get("/api/rooms/{room_id}/members", response_model=list[RoomMemberOut])

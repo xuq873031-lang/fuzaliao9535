@@ -52,6 +52,11 @@ class CreateGroupRoomIn(BaseModel):
     avatar: str | None = None
 
 
+class RoomUpdateIn(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    avatar: str | None = None
+
+
 class RoomOut(BaseModel):
     id: int
     name: str
