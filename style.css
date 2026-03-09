@@ -183,6 +183,14 @@ body {
   min-width: 54px;
 }
 
+.mention-suggest-box {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+}
+
 .message-list {
   overflow-y: auto;
   background: linear-gradient(180deg, rgba(34, 158, 217, 0.04), rgba(62, 207, 142, 0.03));
