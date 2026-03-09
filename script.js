@@ -1798,8 +1798,26 @@ function bindProfileEvents() {
   const profileAvatar = document.getElementById('profileAvatar');
   const avatarPickerBtn = document.getElementById('avatarPickerBtn');
 
+  const triggerAvatarPicker = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (avatarInput) avatarInput.click();
+  };
+
   if (avatarPickerBtn && avatarInput) {
-    avatarPickerBtn.addEventListener('click', () => avatarInput.click());
+    avatarPickerBtn.addEventListener('click', triggerAvatarPicker);
+    avatarPickerBtn.addEventListener('touchend', triggerAvatarPicker, { passive: false });
+  }
+  if (profileAvatar && avatarInput) {
+    profileAvatar.style.cursor = 'pointer';
+    profileAvatar.addEventListener('click', triggerAvatarPicker);
+  }
+
+  if (!avatarInput || !profileAvatar) {
+    console.warn('头像上传控件未找到，已跳过头像事件绑定');
+    return;
   }
 
   avatarInput.addEventListener('change', (e) => {
@@ -1815,7 +1833,10 @@ function bindProfileEvents() {
     reader.readAsDataURL(file);
   });
 
-  document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+  const saveBtn = document.getElementById('saveProfileBtn');
+  if (!saveBtn) return;
+
+  saveBtn.addEventListener('click', async () => {
     const nickname = document.getElementById('nicknameInput').value.trim();
     const signature = document.getElementById('signatureInput').value.trim();
 
@@ -1850,7 +1871,8 @@ function bindProfileEvents() {
     }
   });
 
-  document.getElementById('toggleThemeBtn').addEventListener('click', () => {
+  const toggleThemeBtn = document.getElementById('toggleThemeBtn');
+  if (toggleThemeBtn) toggleThemeBtn.addEventListener('click', () => {
     const current = document.documentElement.getAttribute('data-bs-theme') || 'light';
     setTheme(current === 'light' ? 'dark' : 'light');
   });
@@ -1874,6 +1896,27 @@ function bindFriendEvents() {
   const searchInput = document.getElementById('friendSearchInput');
   const toggleToolsBtn = document.getElementById('toggleFriendToolsBtn');
   const toolsPanel = document.getElementById('friendToolsPanel');
+  const friendList = document.getElementById('friendList');
+
+  if (toolsPanel && !toggleToolsBtn) {
+    toolsPanel.classList.remove('d-none');
+  }
+
+  const openTools = () => {
+    if (!toolsPanel) return;
+    toolsPanel.classList.remove('d-none');
+    if (toggleToolsBtn) toggleToolsBtn.textContent = '收起';
+    setTimeout(() => {
+      toolsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 20);
+  };
+
+  const closeTools = () => {
+    if (!toolsPanel) return;
+    toolsPanel.classList.add('d-none');
+    if (toggleToolsBtn) toggleToolsBtn.textContent = '添加好友';
+  };
+
   if (searchBtn) searchBtn.addEventListener('click', handleFriendSearch);
   if (searchInput) {
     searchInput.addEventListener('keydown', (e) => {
@@ -1882,15 +1925,26 @@ function bindFriendEvents() {
   }
   if (toggleToolsBtn && toolsPanel) {
     toggleToolsBtn.addEventListener('click', () => {
-      toolsPanel.classList.toggle('d-none');
-      toggleToolsBtn.textContent = toolsPanel.classList.contains('d-none') ? '添加好友' : '收起';
+      if (toolsPanel.classList.contains('d-none')) openTools();
+      else closeTools();
     });
+  }
+
+  // 没有好友时，默认展开添加好友区域，避免误解为“功能消失”
+  if (friendList && toolsPanel) {
+    const observer = new MutationObserver(() => {
+      const hasFriends = !!friendList.querySelector('.list-group-item');
+      if (!hasFriends) openTools();
+    });
+    observer.observe(friendList, { childList: true });
   }
 }
 
 async function handleFriendSearch() {
-  const keyword = document.getElementById('friendSearchInput').value.trim();
+  const inputEl = document.getElementById('friendSearchInput');
   const box = document.getElementById('friendSearchResults');
+  if (!inputEl || !box) return;
+  const keyword = inputEl.value.trim();
   box.innerHTML = '';
 
   if (!keyword) {
