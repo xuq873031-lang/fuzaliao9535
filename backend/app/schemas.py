@@ -74,8 +74,15 @@ class RoomMemberOut(BaseModel):
     username: str
     nickname: str
     role: str
+    can_kick: bool = False
+    can_mute: bool = False
     muted: bool = False
     joined_at: datetime | None = None
+
+
+class RoomMemberPermissionIn(BaseModel):
+    can_kick: bool = False
+    can_mute: bool = False
 
 
 class RoomMuteOut(BaseModel):

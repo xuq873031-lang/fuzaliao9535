@@ -30,6 +30,7 @@ from .schemas import (
     RoomUnreadOut,
     RoomOut,
     RoomMemberOut,
+    RoomMemberPermissionIn,
     RoomMuteOut,
     SendMessageIn,
     SearchUserOut,
@@ -93,7 +94,13 @@ def get_room_member_ids(db: Session, room_id: int) -> list[int]:
 
 def get_room_members_with_meta(db: Session, room_id: int):
     return db.execute(
-        select(room_members.c.user_id, room_members.c.role, room_members.c.joined_at).where(room_members.c.room_id == room_id)
+        select(
+            room_members.c.user_id,
+            room_members.c.role,
+            room_members.c.can_kick,
+            room_members.c.can_mute,
+            room_members.c.joined_at,
+        ).where(room_members.c.room_id == room_id)
     ).all()
 
 
@@ -140,6 +147,33 @@ def get_room_member_role(db: Session, room_id: int, user_id: int) -> str | None:
         select(room_members.c.role).where(room_members.c.room_id == room_id, room_members.c.user_id == user_id)
     ).first()
     return row[0] if row else None
+
+
+def get_room_member_permissions(db: Session, room_id: int, user_id: int) -> tuple[bool, bool]:
+    row = db.execute(
+        select(room_members.c.can_kick, room_members.c.can_mute).where(
+            room_members.c.room_id == room_id,
+            room_members.c.user_id == user_id,
+        )
+    ).first()
+    if not row:
+        return False, False
+    return bool(row[0]), bool(row[1])
+
+
+def can_actor_manage_member(db: Session, room_id: int, actor_id: int, target_id: int, action: str) -> bool:
+    actor_role = get_room_member_role(db, room_id, actor_id)
+    target_role = get_room_member_role(db, room_id, target_id)
+    if not actor_role or not target_role:
+        return False
+    if actor_role == "owner":
+        return target_role != "owner" and actor_id != target_id
+    can_kick, can_mute = get_room_member_permissions(db, room_id, actor_id)
+    if action == "kick":
+        return can_kick and target_role != "owner" and actor_id != target_id
+    if action == "mute":
+        return can_mute and target_role != "owner" and actor_id != target_id
+    return False
 
 
 def is_user_muted_in_room(db: Session, room_id: int, user_id: int) -> bool:
@@ -293,6 +327,10 @@ def ensure_compatible_schema():
             member_columns = {col["name"] for col in inspector.get_columns("room_members")}
             if "role" not in member_columns:
                 conn.execute(text("ALTER TABLE room_members ADD COLUMN role VARCHAR(20)"))
+            if "can_kick" not in member_columns:
+                conn.execute(text("ALTER TABLE room_members ADD COLUMN can_kick BOOLEAN"))
+            if "can_mute" not in member_columns:
+                conn.execute(text("ALTER TABLE room_members ADD COLUMN can_mute BOOLEAN"))
             if "joined_at" not in member_columns:
                 if engine.dialect.name == "sqlite":
                     conn.execute(text("ALTER TABLE room_members ADD COLUMN joined_at DATETIME"))
@@ -300,6 +338,8 @@ def ensure_compatible_schema():
                     conn.execute(text("ALTER TABLE room_members ADD COLUMN joined_at TIMESTAMP NULL"))
 
             conn.execute(text("UPDATE room_members SET role='member' WHERE role IS NULL"))
+            conn.execute(text("UPDATE room_members SET can_kick=0 WHERE can_kick IS NULL"))
+            conn.execute(text("UPDATE room_members SET can_mute=0 WHERE can_mute IS NULL"))
             conn.execute(text("UPDATE room_members SET joined_at=CURRENT_TIMESTAMP WHERE joined_at IS NULL"))
 
         if "messages" in table_names:
@@ -488,8 +528,26 @@ def _ensure_friendship_and_dm(db: Session, user_id: int, friend_id: int):
         db.add(room)
         db.commit()
         db.refresh(room)
-        db.execute(insert(room_members).values(room_id=room.id, user_id=user_id, role="owner", joined_at=datetime.utcnow()))
-        db.execute(insert(room_members).values(room_id=room.id, user_id=friend_id, role="member", joined_at=datetime.utcnow()))
+        db.execute(
+            insert(room_members).values(
+                room_id=room.id,
+                user_id=user_id,
+                role="owner",
+                can_kick=False,
+                can_mute=False,
+                joined_at=datetime.utcnow(),
+            )
+        )
+        db.execute(
+            insert(room_members).values(
+                room_id=room.id,
+                user_id=friend_id,
+                role="member",
+                can_kick=False,
+                can_mute=False,
+                joined_at=datetime.utcnow(),
+            )
+        )
 
     db.commit()
     manager.refresh_user_rooms(user_id, get_room_ids_for_user(db, user_id))
@@ -753,6 +811,8 @@ def _create_group_room_impl(
                 room_id=room.id,
                 user_id=uid,
                 role=role,
+                can_kick=False,
+                can_mute=False,
                 joined_at=datetime.utcnow(),
             )
         )
@@ -836,10 +896,12 @@ def list_room_members(
             username=user_map[uid].username if uid in user_map else f"user_{uid}",
             nickname=user_map[uid].nickname if uid in user_map else "",
             role=role or "member",
+            can_kick=bool(can_kick),
+            can_mute=bool(can_mute),
             muted=uid in muted_set,
             joined_at=joined_at,
         )
-        for uid, role, joined_at in rows
+        for uid, role, can_kick, can_mute, joined_at in rows
     ]
 
 
@@ -879,6 +941,8 @@ async def add_room_member(
             room_id=room_id,
             user_id=payload.user_id,
             role="member",
+            can_kick=False,
+            can_mute=False,
             joined_at=datetime.utcnow(),
         )
     )
@@ -912,9 +976,8 @@ async def remove_room_member(
     if room_effective_type(room) != "group":
         raise HTTPException(status_code=400, detail="Only group room supports member management")
 
-    my_role = get_room_member_role(db, room_id, current_user.id)
-    if current_user.id != user_id and my_role != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can remove other members")
+    if current_user.id != user_id and not can_actor_manage_member(db, room_id, current_user.id, user_id, "kick"):
+        raise HTTPException(status_code=403, detail="No permission to remove this member")
 
     exists = db.execute(
         select(room_members.c.user_id).where(room_members.c.room_id == room_id, room_members.c.user_id == user_id)
@@ -947,6 +1010,57 @@ async def remove_room_member(
     return {"ok": True}
 
 
+@app.put("/api/rooms/{room_id}/members/{user_id}/permissions")
+async def update_room_member_permissions(
+    room_id: int,
+    user_id: int,
+    payload: RoomMemberPermissionIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room supports permission management")
+    if get_room_member_role(db, room_id, current_user.id) != "owner":
+        raise HTTPException(status_code=403, detail="Only owner can grant member permissions")
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Owner permission cannot be changed")
+
+    target_role = get_room_member_role(db, room_id, user_id)
+    if not target_role:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if target_role == "owner":
+        raise HTTPException(status_code=400, detail="Cannot change owner permissions")
+
+    db.execute(
+        text(
+            "UPDATE room_members SET can_kick=:can_kick, can_mute=:can_mute "
+            "WHERE room_id=:room_id AND user_id=:user_id"
+        ),
+        {
+            "can_kick": bool(payload.can_kick),
+            "can_mute": bool(payload.can_mute),
+            "room_id": room_id,
+            "user_id": user_id,
+        },
+    )
+    db.commit()
+
+    actor = current_user.nickname or current_user.username
+    target_user = db.get(User, user_id)
+    target_name = target_user.nickname or target_user.username if target_user else str(user_id)
+    grant_text = f"踢人:{'开' if payload.can_kick else '关'} / 禁言:{'开' if payload.can_mute else '关'}"
+    system_msg = Message(room_id=room_id, sender_id=current_user.id, content=f"[system] {actor} 调整了 {target_name} 的管理权限（{grant_text}）")
+    db.add(system_msg)
+    db.commit()
+    db.refresh(system_msg)
+    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
+    return {"ok": True, "room_id": room_id, "user_id": user_id, "can_kick": bool(payload.can_kick), "can_mute": bool(payload.can_mute)}
+
+
 @app.post("/api/rooms/{room_id}/members/{user_id}/mute", response_model=RoomMuteOut)
 async def mute_room_member(
     room_id: int,
@@ -960,8 +1074,8 @@ async def mute_room_member(
         raise HTTPException(status_code=404, detail="Room not found")
     if room_effective_type(room) != "group":
         raise HTTPException(status_code=400, detail="Only group room supports mute")
-    if get_room_member_role(db, room_id, current_user.id) != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can mute members")
+    if not can_actor_manage_member(db, room_id, current_user.id, user_id, "mute"):
+        raise HTTPException(status_code=403, detail="No permission to mute this member")
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Owner cannot mute self")
 
@@ -998,8 +1112,8 @@ async def unmute_room_member(
         raise HTTPException(status_code=404, detail="Room not found")
     if room_effective_type(room) != "group":
         raise HTTPException(status_code=400, detail="Only group room supports mute")
-    if get_room_member_role(db, room_id, current_user.id) != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can unmute members")
+    if not can_actor_manage_member(db, room_id, current_user.id, user_id, "mute"):
+        raise HTTPException(status_code=403, detail="No permission to unmute this member")
 
     db.execute(delete(RoomMute).where(RoomMute.room_id == room_id, RoomMute.user_id == user_id))
     db.commit()

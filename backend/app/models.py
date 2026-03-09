@@ -12,6 +12,8 @@ room_members = Table(
     Column("room_id", ForeignKey("chat_rooms.id", ondelete="CASCADE"), primary_key=True),
     Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
     Column("role", String(20), nullable=False, default="member"),
+    Column("can_kick", Boolean, nullable=False, default=False),
+    Column("can_mute", Boolean, nullable=False, default=False),
     Column("joined_at", DateTime, default=datetime.utcnow, nullable=False),
 )
 
