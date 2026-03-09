@@ -132,7 +132,7 @@
 
                   <div class="col-12 col-lg-8 d-flex flex-column chat-pane">
                     <div id="chatHeader" class="p-3 border-bottom d-flex justify-content-between align-items-center">
-                      <div class="d-flex align-items-center gap-2">
+                      <div id="chatHeaderMain" class="d-flex align-items-center gap-2 chat-header-main">
                         <img id="chatAvatar" class="chat-header-avatar" alt="avatar" />
                         <div>
                           <h6 id="chatTitle" class="mb-1">请选择会话</h6>
@@ -140,13 +140,9 @@
                         </div>
                       </div>
                       <div class="d-flex align-items-center gap-2">
-                        <button id="historySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
-                        <button id="historyPhotosBtn" class="btn btn-outline-secondary btn-sm" type="button">历史照片</button>
-                        <button id="groupMembersBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">成员</button>
-                        <button id="voiceCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="语音通话">语音</button>
-                        <button id="videoCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="视频通话">视频</button>
+                        <button id="chatDetailsBtn" class="btn btn-outline-secondary btn-sm" type="button">详情</button>
                         <button id="mobileBackToListBtn" class="btn btn-outline-secondary btn-sm d-lg-none d-none">返回</button>
-                        <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm">加载更多</button>
+                        <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm d-none">加载更多</button>
                       </div>
                     </div>
 
