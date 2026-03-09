@@ -140,6 +140,8 @@
                         </div>
                       </div>
                       <div class="d-flex align-items-center gap-2">
+                        <button id="historySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
+                        <button id="historyPhotosBtn" class="btn btn-outline-secondary btn-sm" type="button">历史照片</button>
                         <button id="groupMembersBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">成员</button>
                         <button id="voiceCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="语音通话">语音</button>
                         <button id="videoCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="视频通话">视频</button>
@@ -151,6 +153,7 @@
                     <div id="messageList" class="flex-grow-1 p-3 message-list"></div>
 
                     <div id="chatComposer" class="border-top p-2 p-md-3">
+                      <div id="muteHintBar" class="alert alert-warning py-2 px-3 mb-2 d-none">你已被群主禁言，当前无法发送消息</div>
                       <div id="replyPreviewBar" class="alert alert-secondary py-2 px-3 mb-2 d-none">
                         <div class="d-flex justify-content-between align-items-start gap-2">
                           <div>
@@ -174,31 +177,25 @@
 
               <!-- 好友页 -->
               <section id="friendsView" class="view-section d-none p-3">
-                <div class="row g-3">
-                  <div class="col-12 col-lg-5">
-                    <div class="card border-0 shadow-sm rounded-4 h-100">
-                      <div class="card-body">
-                        <h6 class="mb-3">搜索好友</h6>
-                        <div class="input-group mb-3">
-                          <input id="friendSearchInput" class="form-control" placeholder="输入用户名搜索" />
-                          <button id="friendSearchBtn" class="btn btn-primary">搜索</button>
-                        </div>
-                        <div id="friendSearchResults" class="list-group"></div>
-                      </div>
+                <div class="card border-0 shadow-sm rounded-4">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h6 class="mb-0">我的好友</h6>
+                      <button id="toggleFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">添加好友</button>
                     </div>
-                  </div>
+                    <div id="friendList" class="list-group mb-3"></div>
 
-                  <div class="col-12 col-lg-7">
-                    <div class="card border-0 shadow-sm rounded-4 h-100">
-                      <div class="card-body">
-                        <h6 class="mb-3">我的好友</h6>
-                        <div id="friendList" class="list-group"></div>
-                        <hr class="my-3" />
-                        <h6 class="mb-2">新朋友（收到的申请）</h6>
-                        <div id="incomingRequestList" class="list-group mb-3"></div>
-                        <h6 class="mb-2">我发出的申请</h6>
-                        <div id="outgoingRequestList" class="list-group"></div>
+                    <div id="friendToolsPanel" class="d-none border-top pt-3">
+                      <h6 class="mb-2">搜索好友</h6>
+                      <div class="input-group mb-2">
+                        <input id="friendSearchInput" class="form-control" placeholder="输入用户名搜索" />
+                        <button id="friendSearchBtn" class="btn btn-primary">搜索</button>
                       </div>
+                      <div id="friendSearchResults" class="list-group mb-3"></div>
+                      <h6 class="mb-2">新朋友（收到的申请）</h6>
+                      <div id="incomingRequestList" class="list-group mb-3"></div>
+                      <h6 class="mb-2">我发出的申请</h6>
+                      <div id="outgoingRequestList" class="list-group"></div>
                     </div>
                   </div>
                 </div>
@@ -219,11 +216,12 @@
                   <div class="col-12 col-lg-4">
                     <div class="card border-0 shadow-sm rounded-4 h-100">
                       <div class="card-body text-center">
-                        <img id="profileAvatar" class="profile-avatar mb-3" alt="avatar" />
-                        <div>
-                          <input id="avatarInput" type="file" accept="image/*" class="form-control" />
-                          <small class="text-secondary">选择头像后会自动本地保存（base64）</small>
-                        </div>
+                        <button id="avatarPickerBtn" class="avatar-picker-btn" type="button" title="点击更换头像">
+                          <img id="profileAvatar" class="profile-avatar mb-2" alt="avatar" />
+                          <span class="avatar-edit-hint">点击更换头像</span>
+                        </button>
+                        <input id="avatarInput" type="file" accept="image/*" class="d-none" />
+                        <div><small class="text-secondary">选择后自动预览，保存后生效</small></div>
                       </div>
                     </div>
                   </div>
@@ -388,6 +386,56 @@
             <div class="modal-footer">
               <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
               <button id="confirmForwardBtn" class="btn btn-success">一键转发</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史搜索 -->
+      <div class="modal fade" id="historySearchModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">查找聊天记录</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="input-group mb-2">
+                <input id="historySearchInput" class="form-control" placeholder="输入关键词搜索文本消息" />
+                <button id="historySearchDoBtn" class="btn btn-primary" type="button">搜索</button>
+              </div>
+              <div id="historySearchResultList" class="list-group"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史照片 -->
+      <div class="modal fade" id="historyPhotosModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">历史照片</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="historyPhotoGrid" class="history-photo-grid"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 照片预览 -->
+      <div class="modal fade" id="photoPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">照片预览</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+              <img id="photoPreviewImg" class="img-fluid rounded" alt="photo" />
+              <div id="photoPreviewMeta" class="small text-secondary mt-2"></div>
             </div>
           </div>
         </div>

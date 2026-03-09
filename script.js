@@ -48,6 +48,7 @@ let appState = {
   lastSoundAt: 0,
   audioCtx: null,
   readAckTimer: null,
+  roomMuteStateByRoom: {},
   managingGroupId: null,
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
@@ -151,6 +152,22 @@ function showLoginBy401(reason) {
 
 function normalizePhone(input) {
   return String(input || '').trim();
+}
+
+function translateErrorDetail(detail) {
+  const raw = String(detail || '').trim();
+  if (!raw) return '请求失败';
+  const normalized = raw.toLowerCase();
+  if (normalized === 'not found') return '资源不存在';
+  if (normalized.includes('invalid username or password')) return '账号或密码错误';
+  if (normalized.includes('missing authorization') || normalized.includes('not authenticated')) return '登录状态已失效，请重新登录';
+  if (normalized.includes('no permission') || normalized.includes('forbidden')) return '你没有权限执行该操作';
+  if (normalized.includes('already friend')) return '你们已经是好友';
+  if (normalized.includes('you are muted in this group')) return '你已被群主禁言';
+  if (normalized.includes('room not found')) return '会话不存在';
+  if (normalized.includes('user not found')) return '用户不存在';
+  if (normalized.includes('too many requests')) return '请求过于频繁，请稍后重试';
+  return raw;
 }
 
 function phoneToCompatEmail(phone) {
@@ -412,6 +429,7 @@ async function apiFetch(path, options = {}) {
       // ignore parse failure
     }
 
+    detail = translateErrorDetail(detail);
     if (res.status === 401) {
       showLoginBy401(detail);
     }
@@ -767,6 +785,58 @@ function isDmConversation(conv) {
   return ['dm', 'direct', 'private'].includes(conv.type || conv.room_type);
 }
 
+function getFriendSortName(friend) {
+  const name = (appState.friendRemarks[friend.id] || friend.nickname || friend.username || '').trim();
+  return name || `用户${friend.id}`;
+}
+
+function sortFriendsAtoZ(friends) {
+  return [...friends].sort((a, b) => {
+    const an = getFriendSortName(a);
+    const bn = getFriendSortName(b);
+    return an.localeCompare(bn, ['zh-Hans-CN', 'en'], { sensitivity: 'base', numeric: true });
+  });
+}
+
+function applyMuteComposerState(conv) {
+  const muted = !!(conv && conv.type === 'group' && appState.roomMuteStateByRoom[conv.id] === true);
+  const hintBar = document.getElementById('muteHintBar');
+  const input = document.getElementById('messageInput');
+  const sendBtn = document.getElementById('sendMessageBtn');
+  const uploadBtn = document.getElementById('uploadImageBtn');
+  const emojiBar = document.getElementById('emojiBar');
+  if (hintBar) hintBar.classList.toggle('d-none', !muted);
+  if (input) {
+    input.disabled = muted;
+    input.placeholder = muted ? '你已被群主禁言' : '输入消息...';
+  }
+  if (sendBtn) sendBtn.disabled = muted;
+  if (uploadBtn) uploadBtn.disabled = muted;
+  if (emojiBar) {
+    emojiBar.querySelectorAll('button').forEach((btn) => {
+      btn.disabled = muted;
+    });
+  }
+}
+
+async function refreshCurrentUserMuteState(roomId) {
+  const conv = findConversationById(roomId);
+  if (!conv || conv.type !== 'group') {
+    if (roomId) appState.roomMuteStateByRoom[roomId] = false;
+    return false;
+  }
+  try {
+    const members = await apiGetRoomMembers(roomId);
+    const me = (members || []).find((m) => Number(m.user_id) === Number(appState.currentUser?.id));
+    const muted = !!me?.muted;
+    appState.roomMuteStateByRoom[roomId] = muted;
+    return muted;
+  } catch (err) {
+    console.warn('刷新禁言状态失败:', err.message);
+    return !!appState.roomMuteStateByRoom[roomId];
+  }
+}
+
 function getDmConversationWithFriend(friendId) {
   return appState.conversations.find(
     (c) => isDmConversation(c) && c.members.includes(friendId) && c.members.includes(appState.currentUser.id)
@@ -1111,6 +1181,10 @@ function handleWsEvent(evt) {
     console.warn('[WS] server error:', evt.payload?.message);
     const msg = String(evt.payload?.message || '');
     if (msg.toLowerCase().includes('muted')) {
+      const rid = Number(evt.payload?.room_id || appState.activeConversationId || 0);
+      if (rid) appState.roomMuteStateByRoom[rid] = true;
+      const conv = findConversationById(appState.activeConversationId);
+      applyMuteComposerState(conv);
       alert('你已被群主禁言，暂时不能发送消息');
     }
   }
@@ -1722,6 +1796,11 @@ function bindNavigationEvents() {
 function bindProfileEvents() {
   const avatarInput = document.getElementById('avatarInput');
   const profileAvatar = document.getElementById('profileAvatar');
+  const avatarPickerBtn = document.getElementById('avatarPickerBtn');
+
+  if (avatarPickerBtn && avatarInput) {
+    avatarPickerBtn.addEventListener('click', () => avatarInput.click());
+  }
 
   avatarInput.addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
@@ -1791,7 +1870,22 @@ function updateUserHeader() {
 // 好友系统
 // ============================
 function bindFriendEvents() {
-  document.getElementById('friendSearchBtn').addEventListener('click', handleFriendSearch);
+  const searchBtn = document.getElementById('friendSearchBtn');
+  const searchInput = document.getElementById('friendSearchInput');
+  const toggleToolsBtn = document.getElementById('toggleFriendToolsBtn');
+  const toolsPanel = document.getElementById('friendToolsPanel');
+  if (searchBtn) searchBtn.addEventListener('click', handleFriendSearch);
+  if (searchInput) {
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleFriendSearch();
+    });
+  }
+  if (toggleToolsBtn && toolsPanel) {
+    toggleToolsBtn.addEventListener('click', () => {
+      toolsPanel.classList.toggle('d-none');
+      toggleToolsBtn.textContent = toolsPanel.classList.contains('d-none') ? '添加好友' : '收起';
+    });
+  }
 }
 
 async function handleFriendSearch() {
@@ -1862,11 +1956,12 @@ function renderFriendList() {
   box.innerHTML = '';
 
   if (!appState.friends.length) {
-    box.innerHTML = '<div class="text-secondary">还没有好友，去搜索添加吧。</div>';
+    box.innerHTML = '<div class="text-secondary">还没有好友，点击上方“添加好友”开始添加。</div>';
     return;
   }
 
-  appState.friends.forEach((f) => {
+  const sortedFriends = sortFriendsAtoZ(appState.friends);
+  sortedFriends.forEach((f) => {
     const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
     const displayName = getDisplayNameByUserId(f.id);
     const item = document.createElement('button');
@@ -2020,6 +2115,7 @@ async function openPrivateChatWith(friendId) {
   conv.unreadCount = 0;
   clearReplyAndEditState();
   switchView('messagesView', { keepRoom: true });
+  await refreshCurrentUserMuteState(conv.id);
   renderConversationList();
   renderMessages({ autoScroll: true, forceBottom: true });
   startRoomPolling(conv.id);
@@ -2165,11 +2261,20 @@ function renderGroupList() {
       g.unreadCount = 0;
       clearReplyAndEditState();
       switchView('messagesView', { keepRoom: true });
-      renderConversationList();
-      renderMessages({ autoScroll: true, forceBottom: true });
-      startRoomPolling(g.id);
-      updateUnreadBadges();
-      markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
+      refreshCurrentUserMuteState(g.id)
+        .then(() => {
+          renderConversationList();
+          renderMessages({ autoScroll: true, forceBottom: true });
+          startRoomPolling(g.id);
+          updateUnreadBadges();
+          markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
+        })
+        .catch((err) => {
+          console.warn('刷新禁言状态失败', err.message);
+          renderConversationList();
+          renderMessages({ autoScroll: true, forceBottom: true });
+          startRoomPolling(g.id);
+        });
     });
 
     const manageBtn = item.querySelector('.group-manage-btn');
@@ -2416,6 +2521,156 @@ function renderForwardTargetList() {
   });
 }
 
+function getImageUrlFromMessageText(text) {
+  const raw = String(text || '');
+  const match = raw.match(/^!\[img\]\(([^)]+)\)$/);
+  return match ? match[1].trim() : '';
+}
+
+async function ensureConversationHistoryLoaded(conv, options = {}) {
+  const maxPages = Number(options.maxPages || 4);
+  let page = 0;
+  while (conv.hasMore !== false && page < maxPages && conv.messages.length > 0) {
+    const oldest = conv.messages[0];
+    if (!oldest) break;
+    const batch = await apiGetRoomMessagesBefore(conv.id, oldest.id, 50);
+    if (!batch.length) {
+      conv.hasMore = false;
+      break;
+    }
+    const normalized = batch.map(normalizeMessage).reverse();
+    const exists = new Set(conv.messages.map((m) => m.id));
+    const toPrepend = normalized.filter((m) => !exists.has(m.id));
+    if (!toPrepend.length) {
+      conv.hasMore = false;
+      break;
+    }
+    conv.messages = [...toPrepend, ...conv.messages];
+    conv.hasMore = batch.length === 50;
+    page += 1;
+  }
+}
+
+function renderHistorySearchResults(conv, results) {
+  const box = document.getElementById('historySearchResultList');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!results.length) {
+    box.innerHTML = '<div class="text-secondary small">未找到匹配消息</div>';
+    return;
+  }
+  results.forEach((msg) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'list-group-item list-group-item-action';
+    const sender = getDisplayNameByUserId(msg.senderId);
+    row.innerHTML = `
+      <div class="d-flex justify-content-between gap-2">
+        <div class="fw-semibold">${escapeHtml(sender)}</div>
+        <small class="text-secondary">${formatTime(msg.createdAt)}</small>
+      </div>
+      <div class="text-secondary small mt-1">${escapeHtml(summarizeMessageText(msg.text))}</div>
+    `;
+    row.addEventListener('click', () => {
+      appState.activeConversationId = conv.id;
+      clearReplyAndEditState();
+      switchView('messagesView', { keepRoom: true });
+      renderConversationList();
+      renderMessages({ autoScroll: false });
+      startRoomPolling(conv.id);
+      setTimeout(() => {
+        const target = document.querySelector(`.msg-row[data-message-id="${msg.id}"]`);
+        if (target) {
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          target.classList.add('history-hit');
+          setTimeout(() => target.classList.remove('history-hit'), 1300);
+        }
+      }, 80);
+      const modal = bootstrap.Modal.getInstance(document.getElementById('historySearchModal'));
+      if (modal) modal.hide();
+    });
+    box.appendChild(row);
+  });
+}
+
+async function doHistorySearch() {
+  const conv = findConversationById(appState.activeConversationId);
+  const input = document.getElementById('historySearchInput');
+  const box = document.getElementById('historySearchResultList');
+  if (!input || !box) return;
+  if (!conv) {
+    box.innerHTML = '<div class="text-secondary small">请先选择一个会话</div>';
+    return;
+  }
+  const keyword = input.value.trim();
+  if (!keyword) {
+    box.innerHTML = '<div class="text-secondary small">请输入搜索关键词</div>';
+    return;
+  }
+  box.innerHTML = '<div class="text-secondary small">搜索中...</div>';
+  try {
+    await ensureConversationHistoryLoaded(conv, { maxPages: 6 });
+    const lower = keyword.toLowerCase();
+    const results = conv.messages
+      .filter((m) => !isImageMessageText(m.text) && String(m.text || '').toLowerCase().includes(lower))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 80);
+    renderHistorySearchResults(conv, results);
+  } catch (err) {
+    box.innerHTML = `<div class="text-danger small">搜索失败：${escapeHtml(err.message || '未知错误')}</div>`;
+  }
+}
+
+function renderHistoryPhotoGrid(conv) {
+  const grid = document.getElementById('historyPhotoGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const photos = conv.messages
+    .filter((m) => isImageMessageText(m.text))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  if (!photos.length) {
+    grid.innerHTML = '<div class="text-secondary small">当前会话暂无历史图片</div>';
+    return;
+  }
+  photos.forEach((msg) => {
+    const url = getImageUrlFromMessageText(msg.text);
+    if (!url) return;
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'history-photo-item';
+    card.innerHTML = `
+      <img src="${escapeHtml(url)}" alt="历史图片" />
+      <div class="history-photo-meta">${escapeHtml(getDisplayNameByUserId(msg.senderId))} · ${formatConversationTime(msg.createdAt)}</div>
+    `;
+    card.addEventListener('click', () => {
+      const previewImg = document.getElementById('photoPreviewImg');
+      const previewMeta = document.getElementById('photoPreviewMeta');
+      if (previewImg) previewImg.src = url;
+      if (previewMeta) previewMeta.textContent = `${getDisplayNameByUserId(msg.senderId)} · ${formatTime(msg.createdAt)}`;
+      const previewModal = new bootstrap.Modal(document.getElementById('photoPreviewModal'));
+      previewModal.show();
+    });
+    grid.appendChild(card);
+  });
+}
+
+async function openHistoryPhotos() {
+  const conv = findConversationById(appState.activeConversationId);
+  const grid = document.getElementById('historyPhotoGrid');
+  if (!grid) return;
+  if (!conv) {
+    grid.innerHTML = '<div class="text-secondary small">请先选择一个会话</div>';
+    return;
+  }
+  grid.innerHTML = '<div class="text-secondary small">加载中...</div>';
+  try {
+    await ensureConversationHistoryLoaded(conv, { maxPages: 5 });
+    renderHistoryPhotoGrid(conv);
+  } catch (err) {
+    grid.innerHTML = `<div class="text-danger small">加载失败：${escapeHtml(err.message || '未知错误')}</div>`;
+  }
+}
+
 async function forwardMessageToSelectedTargets() {
   const msg = appState.forwardingMessage;
   if (!msg) return;
@@ -2487,6 +2742,10 @@ function bindChatEvents() {
   const callSpeakerBtn = document.getElementById('callSpeakerBtn');
   const callToggleCameraBtn = document.getElementById('callToggleCameraBtn');
   const confirmForwardBtn = document.getElementById('confirmForwardBtn');
+  const historySearchBtn = document.getElementById('historySearchBtn');
+  const historyPhotosBtn = document.getElementById('historyPhotosBtn');
+  const historySearchDoBtn = document.getElementById('historySearchDoBtn');
+  const historySearchInput = document.getElementById('historySearchInput');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -2541,6 +2800,30 @@ function bindChatEvents() {
   if (confirmForwardBtn) confirmForwardBtn.addEventListener('click', () => {
     forwardMessageToSelectedTargets().catch((err) => alert(`转发失败：${err.message}`));
   });
+  if (historySearchBtn) historySearchBtn.addEventListener('click', () => {
+    const box = document.getElementById('historySearchResultList');
+    const input = document.getElementById('historySearchInput');
+    if (box) box.innerHTML = '<div class="text-secondary small">输入关键词后点击搜索</div>';
+    if (input) input.value = '';
+    const modal = new bootstrap.Modal(document.getElementById('historySearchModal'));
+    modal.show();
+  });
+  if (historySearchDoBtn) historySearchDoBtn.addEventListener('click', () => {
+    doHistorySearch().catch((err) => console.warn('历史搜索失败', err.message));
+  });
+  if (historySearchInput) {
+    historySearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doHistorySearch().catch((err) => console.warn('历史搜索失败', err.message));
+      }
+    });
+  }
+  if (historyPhotosBtn) historyPhotosBtn.addEventListener('click', () => {
+    openHistoryPhotos().catch((err) => console.warn('历史图片加载失败', err.message));
+    const modal = new bootstrap.Modal(document.getElementById('historyPhotosModal'));
+    modal.show();
+  });
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
@@ -2586,6 +2869,10 @@ async function handleImageUpload(e) {
   }
   if (appState.editingOwnMessageId) {
     alert('编辑状态下不支持发送图片，请先完成或取消编辑');
+    return;
+  }
+  if (conv.type === 'group' && appState.roomMuteStateByRoom[conv.id]) {
+    alert('你已被群主禁言，暂时不能发送消息');
     return;
   }
 
@@ -2743,11 +3030,20 @@ function renderConversationList() {
       appState.activeConversationId = conv.id;
       conv.unreadCount = 0;
       clearReplyAndEditState();
-      renderConversationList();
-      renderMessages({ autoScroll: true, forceBottom: true });
-      startRoomPolling(conv.id);
-      updateUnreadBadges();
-      markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
+      refreshCurrentUserMuteState(conv.id)
+        .then(() => {
+          renderConversationList();
+          renderMessages({ autoScroll: true, forceBottom: true });
+          startRoomPolling(conv.id);
+          updateUnreadBadges();
+          markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
+        })
+        .catch((err) => {
+          console.warn('刷新禁言状态失败', err.message);
+          renderConversationList();
+          renderMessages({ autoScroll: true, forceBottom: true });
+          startRoomPolling(conv.id);
+        });
     });
 
     box.appendChild(btn);
@@ -2812,6 +3108,7 @@ function buildMessageRow(msg, conv) {
   const sender = appState.userMap[msg.senderId];
   const row = document.createElement('div');
   row.className = `msg-row ${me ? 'me' : 'other'}`;
+  row.dataset.messageId = String(msg.id);
   if (!me) {
     const avatar = document.createElement('img');
     avatar.className = 'conversation-avatar me-2';
@@ -2946,6 +3243,7 @@ function renderMessages(options = {}) {
     loadMoreBtn.classList.add('d-none');
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     composer.classList.add('d-none');
+    applyMuteComposerState(null);
     listEl.innerHTML = '';
     clearReplyAndEditState();
     updateCallButtonsState();
@@ -2954,6 +3252,7 @@ function renderMessages(options = {}) {
   setChatPaneVisible(true);
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
+  applyMuteComposerState(conv);
   loadMoreBtn.disabled = conv.messages.length === 0;
   loadMoreBtn.textContent = conv.messages.length === 0
     ? '暂无历史'
@@ -2977,6 +3276,7 @@ function renderMessages(options = {}) {
     scrollMessagesToBottom({ force: true });
   }
   renderComposerState();
+  refreshCurrentUserMuteState(conv.id).then(() => applyMuteComposerState(conv));
   updateCallButtonsState();
 }
 
@@ -2988,6 +3288,10 @@ async function sendMessage() {
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
     alert('请先选择一个会话');
+    return;
+  }
+  if (conv.type === 'group' && appState.roomMuteStateByRoom[conv.id]) {
+    alert('你已被群主禁言，暂时不能发送消息');
     return;
   }
 
