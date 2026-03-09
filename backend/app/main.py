@@ -48,17 +48,43 @@ manager = ConnectionManager()
 call_sessions: dict[str, dict] = {}
 user_call_index: dict[int, str] = {}
 group_rate_last_sent_at: dict[tuple[int, int], datetime] = {}
-UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
+def _resolve_upload_dir() -> Path:
+    configured = Path(settings.upload_dir)
+    if configured.is_absolute():
+        return configured
+    return Path(__file__).resolve().parents[1] / configured
+
+
+UPLOAD_DIR = _resolve_upload_dir()
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://xuq873031-lang.github.io"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def validate_production_guardrails():
+    is_prod = settings.app_env.strip().lower() == "production"
+    if not is_prod:
+        return
+
+    db_url = settings.database_url.strip().lower()
+    if settings.enforce_non_sqlite_in_production and db_url.startswith("sqlite"):
+        raise RuntimeError(
+            "P0 guardrail: production 禁止使用 SQLite。"
+            "请配置 DATABASE_URL 为 PostgreSQL（postgresql+psycopg://...）"
+        )
+
+    if not settings.allow_local_uploads_in_production:
+        raise RuntimeError(
+            "P0 guardrail: production 默认禁止本地 uploads。"
+            "若短期无法接对象存储，请显式设置 ALLOW_LOCAL_UPLOADS_IN_PRODUCTION=true 后再部署（知晓数据丢失风险）。"
+        )
 
 
 def parse_bearer_token(authorization: str | None) -> str:
@@ -405,6 +431,7 @@ def ensure_message_indexes():
 
 @app.on_event("startup")
 def on_startup():
+    validate_production_guardrails()
     Base.metadata.create_all(bind=engine)
     ensure_compatible_schema()
     ensure_message_indexes()
@@ -536,6 +563,16 @@ def _is_friend(db: Session, user_id: int, friend_id: int) -> bool:
     return row is not None
 
 
+def can_user_send_friend_request(user: User) -> bool:
+    username = (user.username or "").strip().lower()
+    role = (user.role or "").strip().lower()
+    if username in settings.allowed_friend_request_usernames:
+        return True
+    if role in settings.allowed_friend_request_roles:
+        return True
+    return False
+
+
 def _serialize_friend_request(req: FriendRequest) -> FriendRequestOut:
     return FriendRequestOut(
         id=req.id,
@@ -635,6 +672,8 @@ def create_friend_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not can_user_send_friend_request(current_user):
+        raise HTTPException(status_code=403, detail="普通会员无权发起加好友")
     req = _create_friend_request(db, current_user.id, payload.to_user_id)
     return _serialize_friend_request(req)
 
@@ -714,6 +753,8 @@ def reject_friend_request(
 
 @app.post("/api/friends/{friend_id}")
 def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not can_user_send_friend_request(current_user):
+        raise HTTPException(status_code=403, detail="普通会员无权发起加好友")
     req = _create_friend_request(db, current_user.id, friend_id)
     return {"ok": True, "status": req.status, "request_id": req.id}
 
@@ -945,8 +986,11 @@ def update_group_room(
         raise HTTPException(status_code=403, detail="Only owner can update group profile")
 
     if payload.title is not None:
-        room.title = payload.title.strip()
-        room.name = payload.title.strip()
+        title = payload.title.strip()
+        if not title:
+            raise HTTPException(status_code=422, detail="Group title cannot be empty")
+        room.title = title
+        room.name = title
     if payload.avatar is not None:
         room.avatar = payload.avatar
     db.commit()

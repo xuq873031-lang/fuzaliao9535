@@ -55,12 +55,24 @@ backend/
 4. 配置环境变量（Railway Variables）：
    - `APP_ENV=production`
    - `SECRET_KEY=<强随机字符串>`
-   - `DATABASE_URL=sqlite:///./chat_app.db`（演示可用；生产建议 PostgreSQL）
+   - `DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME`
    - `FRONTEND_ORIGINS=https://<你的github-pages域名>`
+   - `ENFORCE_NON_SQLITE_IN_PRODUCTION=true`
+   - `ALLOW_LOCAL_UPLOADS_IN_PRODUCTION=true`（仅临时兜底；正式建议对象存储）
+   - `FRIEND_REQUEST_ALLOWED_ROLES=admin,mentor`
+   - `FRIEND_REQUEST_ALLOWED_USERNAMES=<可选白名单,逗号分隔>`
 5. Railway 会读取 `Procfile` 自动启动：
    - `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}`
 
-## 4) 前端连接说明（ws -> wss）
+## 4) 生产护栏说明（P0）
+
+- 当 `APP_ENV=production` 且 `ENFORCE_NON_SQLITE_IN_PRODUCTION=true` 时：
+  - 若 `DATABASE_URL` 仍是 SQLite，服务会启动失败（防止误上线）。
+- 当 `APP_ENV=production` 且 `ALLOW_LOCAL_UPLOADS_IN_PRODUCTION=false` 时：
+  - 服务会启动失败（防止误把本地 uploads 当持久存储）。
+- 若你短期无法接对象存储，可临时设置 `ALLOW_LOCAL_UPLOADS_IN_PRODUCTION=true`，但需接受容器重启后图片丢失风险。
+
+## 5) 前端连接说明（ws -> wss）
 
 前端根据页面协议自动切换：
 
@@ -76,7 +88,7 @@ const ws = new WebSocket(`${WS_BASE}/ws?token=${token}`);
 - 本地开发：`ws://`
 - 线上 HTTPS 页面（GitHub Pages）：必须 `wss://`
 
-## 5) 关键接口
+## 6) 关键接口
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
@@ -91,7 +103,7 @@ const ws = new WebSocket(`${WS_BASE}/ws?token=${token}`);
 - `PATCH /api/messages/{message_id}`（仅 admin 可编辑）
 - `GET /health`
 
-## 6) WebSocket 协议
+## 7) WebSocket 协议
 
 连接：`/ws?token=<登录token>`
 
