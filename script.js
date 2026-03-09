@@ -55,6 +55,7 @@ let appState = {
   managingGroupId: null,
   mentionCandidates: [],
   pendingMessageSeq: 0,
+  activeFriendProfileId: null,
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
     mode: null, // audio|video
@@ -225,6 +226,15 @@ function updateAppViewportHeight() {
   const vh = window.visualViewport?.height || window.innerHeight || 0;
   if (!vh) return;
   document.documentElement.style.setProperty('--app-dvh', `${vh}px`);
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve(ev.target?.result || '');
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function escapeHtml(str) {
@@ -666,6 +676,13 @@ async function apiSetRoomRateLimit(roomId, seconds) {
   });
 }
 
+async function apiUpdateRoom(roomId, payload) {
+  return apiFetch(`/api/rooms/${roomId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload || {})
+  });
+}
+
 async function apiGetRoomMessages(roomId, limit = 50) {
   return apiFetch(`/api/rooms/${roomId}/messages?limit=${limit}`);
 }
@@ -1090,22 +1107,29 @@ async function pollActiveRoomMessages() {
     const listEl = document.getElementById('messageList');
     const nearBottom = isNearBottom(listEl);
     const newlyAdded = [];
+    let replacedPendingAny = false;
 
     normalized.forEach((msg) => {
-      if (!existing.has(msg.id)) {
+      if (existing.has(msg.id)) return;
+      const replaced = reconcilePendingMessage(conv, msg);
+      if (replaced) {
+        replacedPendingAny = true;
+      }
+      if (!replaced) {
         conv.messages.push(msg);
         newlyAdded.push(msg);
       }
     });
 
-    if (newlyAdded.length) {
+    if (newlyAdded.length || replacedPendingAny) {
       updateLastMessageId(roomId, conv.messages);
       scheduleConversationListRender();
       if (appState.currentView === 'messagesView' && appState.activeConversationId === roomId) {
-        appendMessagesToView(conv, newlyAdded, { autoScroll: nearBottom });
+        if (newlyAdded.length) appendMessagesToView(conv, newlyAdded, { autoScroll: nearBottom });
+        else renderMessages({ autoScroll: nearBottom });
       }
       updateUnreadBadges();
-      await markCurrentRoomRead();
+      if (newlyAdded.length) await markCurrentRoomRead();
     }
   } catch (err) {
     console.warn('轮询消息失败:', err.message);
@@ -2139,6 +2163,37 @@ function bindFriendEvents() {
     });
     observer.observe(friendList, { childList: true });
   }
+
+  const profileChatBtn = document.getElementById('friendProfileChatBtn');
+  if (profileChatBtn) {
+    profileChatBtn.addEventListener('click', async () => {
+      const fid = Number(appState.activeFriendProfileId || 0);
+      if (!fid) return;
+      const modal = bootstrap.Modal.getInstance(document.getElementById('friendProfileModal'));
+      if (modal) modal.hide();
+      await openPrivateChatWith(fid);
+    });
+  }
+  const profileRemarkBtn = document.getElementById('friendProfileRemarkAction');
+  if (profileRemarkBtn) {
+    profileRemarkBtn.addEventListener('click', async () => {
+      const fid = Number(appState.activeFriendProfileId || 0);
+      if (!fid) return;
+      await editFriendRemark(fid);
+      openFriendProfileModal(fid);
+    });
+  }
+  const profileDeleteBtn = document.getElementById('friendProfileDeleteAction');
+  if (profileDeleteBtn) {
+    profileDeleteBtn.addEventListener('click', async () => {
+      const fid = Number(appState.activeFriendProfileId || 0);
+      if (!fid) return;
+      await removeFriend(fid);
+      const modal = bootstrap.Modal.getInstance(document.getElementById('friendProfileModal'));
+      if (modal) modal.hide();
+      appState.activeFriendProfileId = null;
+    });
+  }
 }
 
 async function handleFriendSearch() {
@@ -2206,6 +2261,25 @@ async function addFriendById(friendId) {
   }
 }
 
+function openFriendProfileModal(friendId) {
+  const f = appState.friends.find((x) => Number(x.id) === Number(friendId));
+  if (!f) return;
+  appState.activeFriendProfileId = f.id;
+  const avatarEl = document.getElementById('friendProfileAvatar');
+  const nameEl = document.getElementById('friendProfileName');
+  const accountEl = document.getElementById('friendProfileAccount');
+  const remarkEl = document.getElementById('friendProfileRemark');
+  if (avatarEl) avatarEl.src = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
+  if (nameEl) nameEl.textContent = getDisplayNameByUserId(f.id);
+  if (accountEl) accountEl.textContent = `@${f.username || ''}`;
+  if (remarkEl) {
+    const remark = appState.friendRemarks[f.id] || '';
+    remarkEl.textContent = remark || '未设置';
+  }
+  const modal = new bootstrap.Modal(document.getElementById('friendProfileModal'));
+  modal.show();
+}
+
 function renderFriendList() {
   const box = document.getElementById('friendList');
   box.innerHTML = '';
@@ -2229,19 +2303,13 @@ function renderFriendList() {
           <small class="text-secondary">@${f.username}</small>
         </div>
       </div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
-        <button class="btn btn-sm btn-outline-secondary friend-remark-btn" data-fid="${f.id}" type="button">备注</button>
-        <button class="btn btn-sm btn-outline-danger friend-remove-btn" data-fid="${f.id}" type="button">删除</button>
-      </div>
+      <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
     `;
 
-    item.addEventListener('click', async (e) => {
-      if (e.target && (e.target.classList.contains('friend-remove-btn') || e.target.classList.contains('friend-remark-btn'))) return;
-      await openPrivateChatWith(f.id);
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      openFriendProfileModal(f.id);
     });
-    item.querySelector('.friend-remark-btn').addEventListener('click', () => editFriendRemark(f.id));
-    item.querySelector('.friend-remove-btn').addEventListener('click', () => removeFriend(f.id));
     box.appendChild(item);
   });
 }
@@ -2470,6 +2538,40 @@ function bindGroupEvents() {
       }
     });
   }
+  const groupAvatarEditBtn = document.getElementById('groupAvatarEditBtn');
+  const groupAvatarInput = document.getElementById('groupAvatarInput');
+  if (groupAvatarEditBtn && groupAvatarInput) {
+    groupAvatarEditBtn.addEventListener('click', () => groupAvatarInput.click());
+    groupAvatarInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      const conv = findConversationById(groupId);
+      const me = appState.roomMyMemberMetaByRoom[groupId];
+      if (!conv || conv.type !== 'group' || !me || me.role !== 'owner') {
+        alert('仅群主可修改群头像');
+        return;
+      }
+      try {
+        const base64 = await readFileAsDataURL(file);
+        const updated = await apiUpdateRoom(groupId, { avatar: base64 });
+        conv.avatar = updated?.avatar || base64;
+        await refreshRoomsAndMessages();
+        renderGroupList();
+        renderConversationList();
+        renderMessages();
+        const latest = findConversationById(groupId);
+        const avatarEl = document.getElementById('groupManageAvatar');
+        if (avatarEl && latest) avatarEl.src = getConversationAvatar(latest);
+        await refreshGroupManageModal(groupId);
+        alert('群头像已更新');
+      } catch (err) {
+        alert(`更新群头像失败：${err.message}`);
+      }
+    });
+  }
   const manageModalEl = document.getElementById('groupManageModal');
   if (manageModalEl) {
     manageModalEl.addEventListener('hidden.bs.modal', () => {
@@ -2612,6 +2714,7 @@ async function refreshGroupManageModal(groupId) {
   renderGroupAddMemberOptions(groupId, members || [], actor.isOwner);
   const select = document.getElementById('groupRateLimitSelect');
   const saveBtn = document.getElementById('groupRateLimitSaveBtn');
+  const avatarEditBtn = document.getElementById('groupAvatarEditBtn');
   const conv = findConversationById(groupId);
   if (select) {
     const current = Number(conv?.rateLimitSeconds || 0);
@@ -2619,6 +2722,7 @@ async function refreshGroupManageModal(groupId) {
     select.disabled = !actor.isOwner;
   }
   if (saveBtn) saveBtn.disabled = !actor.isOwner;
+  if (avatarEditBtn) avatarEditBtn.disabled = !actor.isOwner;
 }
 
 function renderGroupAddMemberOptions(groupId, members, isOwner) {
@@ -4034,6 +4138,7 @@ window.__api = {
   apiSetFriendRemark,
   apiGetRooms,
   apiCreateRoom,
+  apiUpdateRoom,
   apiGetRoomMembers,
   apiAddRoomMember,
   apiRemoveRoomMember,
