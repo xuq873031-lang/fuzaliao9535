@@ -646,9 +646,6 @@ def _create_friend_request(db: Session, from_user_id: int, to_user_id: int) -> F
         raise HTTPException(status_code=404, detail="User not found")
     if _is_friend(db, from_user_id, to_user_id):
         raise HTTPException(status_code=400, detail="Already friends")
-    if users_share_group_room(db, from_user_id, to_user_id):
-        raise HTTPException(status_code=403, detail="群成员之间不可直接互加好友")
-
     existing = db.execute(
         select(FriendRequest).where(
             FriendRequest.from_user_id == from_user_id,
@@ -672,8 +669,6 @@ def create_friend_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not can_user_send_friend_request(current_user):
-        raise HTTPException(status_code=403, detail="普通会员无权发起加好友")
     req = _create_friend_request(db, current_user.id, payload.to_user_id)
     return _serialize_friend_request(req)
 
@@ -753,8 +748,6 @@ def reject_friend_request(
 
 @app.post("/api/friends/{friend_id}")
 def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if not can_user_send_friend_request(current_user):
-        raise HTTPException(status_code=403, detail="普通会员无权发起加好友")
     req = _create_friend_request(db, current_user.id, friend_id)
     return {"ok": True, "status": req.status, "request_id": req.id}
 

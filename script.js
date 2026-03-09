@@ -881,6 +881,16 @@ function getDisplayNameByUserId(userId) {
   return user.nickname || user.username || `用户${userId}`;
 }
 
+// 群场景展示名：不暴露真实注册账号（username/ID）
+function getGroupPublicDisplayNameByUserId(userId) {
+  const remark = appState.friendRemarks[userId];
+  if (remark) return remark;
+  const user = appState.userMap[userId] || appState.friends.find((f) => f.id === userId);
+  const nickname = (user?.nickname || '').trim();
+  if (nickname) return nickname;
+  return '群成员';
+}
+
 function getConversationTitle(conv) {
   if (conv.type === 'group') return conv.title || conv.name;
   const other = getOtherUserInPrivateConversation(conv);
@@ -983,7 +993,7 @@ function getCurrentGroupMembersForMention(conv) {
     .filter((id) => Number(id) !== Number(appState.currentUser?.id))
     .map((id) => ({
       id,
-      name: getDisplayNameByUserId(id)
+      name: getGroupPublicDisplayNameByUserId(id)
     }));
 }
 
@@ -2608,7 +2618,7 @@ function renderGroupMemberOptions() {
     wrap.innerHTML = `
       <input class="form-check-input group-member-check" type="checkbox" value="${f.id}" />
       <img src="${avatar}" width="28" height="28" class="rounded-circle" alt="avatar" />
-      <span>${f.nickname || f.username}</span>
+      <span>${getDisplayNameByUserId(f.id)}</span>
     `;
     box.appendChild(wrap);
   });
@@ -2626,7 +2636,7 @@ function renderGroupList() {
 
   groups.forEach((g) => {
     const names = g.members
-      .map((id) => appState.userMap[id]?.nickname || appState.userMap[id]?.username || `用户${id}`)
+      .map((id) => getGroupPublicDisplayNameByUserId(id))
       .join('、');
 
     const item = document.createElement('button');
@@ -2784,8 +2794,8 @@ function renderGroupManageMembers(members, actor) {
     row.className = 'list-group-item d-flex justify-content-between align-items-center';
     row.innerHTML = `
       <div>
-        <div class="fw-semibold"><span class="online-dot ${dotClass}"></span>${escapeHtml(m.nickname || m.username)} ${roleBadge} ${delegatedBadge}</div>
-        <small class="text-secondary">ID: ${m.user_id} · ${onlineText} ${m.muted ? '· 已禁言' : ''}</small>
+        <div class="fw-semibold"><span class="online-dot ${dotClass}"></span>${escapeHtml(getGroupPublicDisplayNameByUserId(m.user_id))} ${roleBadge} ${delegatedBadge}</div>
+        <small class="text-secondary">${onlineText} ${m.muted ? '· 已禁言' : ''}</small>
       </div>
       <div class="d-flex gap-2">
         ${grantKickBtn}
@@ -3700,7 +3710,7 @@ function buildMessageRow(msg, conv) {
   bubble.className = `msg-bubble ${msg.localPending ? 'pending' : ''} ${msg.localFailed ? 'failed' : ''}`;
 
   const senderName = !me && conv.type === 'group'
-    ? `<div class="small fw-bold mb-1">${sender?.nickname || sender?.username || '用户'}</div>`
+    ? `<div class="small fw-bold mb-1">${escapeHtml(getGroupPublicDisplayNameByUserId(msg.senderId))}</div>`
     : '';
   const messageContent = renderMessageContent(msg.text);
   const replySenderName = msg.replyToSenderId ? getDisplayNameByUserId(msg.replyToSenderId) : '';
