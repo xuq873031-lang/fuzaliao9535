@@ -221,6 +221,12 @@ function formatConversationTime(ts) {
   }
 }
 
+function updateAppViewportHeight() {
+  const vh = window.visualViewport?.height || window.innerHeight || 0;
+  if (!vh) return;
+  document.documentElement.style.setProperty('--app-dvh', `${vh}px`);
+}
+
 function escapeHtml(str) {
   return String(str)
     .replaceAll('&', '&amp;')
@@ -3957,6 +3963,9 @@ async function init() {
   getApiBase();
   renderApiBaseIndicator();
   registerServiceWorker();
+  updateAppViewportHeight();
+  window.addEventListener('resize', updateAppViewportHeight, { passive: true });
+  window.visualViewport?.addEventListener('resize', updateAppViewportHeight, { passive: true });
 
   // 向后兼容：旧版本 token key 为 "token"
   const legacyToken = localStorage.getItem('token');

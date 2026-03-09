@@ -5,6 +5,7 @@
   --tg-surface: #ffffff;
   --tg-bubble-in: #e9ecef;
   --tg-bubble-out: #cfeeff;
+  --app-dvh: 100dvh;
 }
 
 [data-bs-theme="dark"] {
@@ -193,6 +194,8 @@ body {
 
 .message-list {
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: linear-gradient(180deg, rgba(34, 158, 217, 0.04), rgba(62, 207, 142, 0.03));
   min-height: 300px;
 }
@@ -472,29 +475,96 @@ body {
 }
 
 @media (max-width: 767.98px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  #appRoot {
+    padding: 0 !important;
+    min-height: var(--app-dvh);
+    height: var(--app-dvh);
+    overflow: hidden;
+  }
+
   #mainContainer {
-    padding-bottom: 56px;
+    padding: 0 0 calc(56px + env(safe-area-inset-bottom, 0px)) 0;
+    min-height: var(--app-dvh);
+    height: var(--app-dvh);
+    overflow: hidden;
+  }
+
+  .app-shell {
+    margin: 0;
+    min-height: 100%;
+    height: 100%;
   }
 
   .main-card {
-    min-height: calc(100vh - 1.5rem);
+    min-height: 100%;
+    height: 100%;
+    border-radius: 0 !important;
+  }
+
+  .main-card > .card-body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #messagesView,
+  #messagesView > .row {
+    height: 100%;
+    min-height: 0;
+  }
+
+  #messagesView .conversation-pane,
+  #messagesView .chat-pane {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .conversation-list {
-    max-height: 220px;
-  }
-
-  .chat-pane {
-    min-height: calc(100vh - 160px);
+    max-height: none;
+    height: calc(100% - 58px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   #chatHeader {
     padding-top: 10px !important;
     padding-bottom: 10px !important;
+    flex: 0 0 auto;
   }
 
   #chatComposer {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px) !important;
+    flex: 0 0 auto;
+    padding: 10px 10px calc(env(safe-area-inset-bottom, 0px) + 10px) 10px !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    background: var(--tg-surface);
+  }
+
+  .message-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-top: 10px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .chat-tools-row .btn,
+  #chatComposer .input-group .btn {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  #messageInput {
+    min-height: 42px;
+    font-size: 16px;
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
 
   .call-local-video {
@@ -518,21 +588,22 @@ body {
 
   #messagesView.mobile-chat-active .chat-pane {
     display: flex !important;
+    flex-direction: column;
     width: 100%;
     flex: 1 1 auto;
-    min-height: 100%;
+    min-height: 0;
+    height: 100%;
   }
 
   #messagesView.mobile-chat-active #chatHeader {
-    position: sticky;
-    top: 0;
-    z-index: 5;
+    position: relative;
+    top: auto;
+    z-index: 4;
   }
 
   #messagesView.mobile-chat-active #chatComposer {
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    position: relative;
+    bottom: auto;
+    z-index: 4;
   }
 }
