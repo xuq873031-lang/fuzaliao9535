@@ -323,6 +323,10 @@
                   <div id="groupManageName" class="fw-semibold">群聊</div>
                   <div id="groupManageNotice" class="small text-secondary">群公告：暂无公告</div>
                 </div>
+                <div class="ms-auto">
+                  <button id="groupAvatarEditBtn" class="btn btn-sm btn-outline-secondary" type="button">修改群头像</button>
+                  <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
+                </div>
               </div>
               <div class="d-flex gap-2 flex-wrap mb-3">
                 <button id="groupManageHistorySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
@@ -376,6 +380,37 @@
                 <button id="directDetailsHistorySearchBtn" class="btn btn-outline-secondary" type="button">查找聊天记录</button>
                 <button id="directDetailsHistoryPhotosBtn" class="btn btn-outline-secondary" type="button">查看历史照片</button>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 好友资料 -->
+      <div class="modal fade" id="friendProfileModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">好友资料</h5>
+              <div class="dropdown ms-auto me-2">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">更多</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><button id="friendProfileRemarkAction" class="dropdown-item" type="button">修改备注</button></li>
+                  <li><hr class="dropdown-divider" /></li>
+                  <li><button id="friendProfileDeleteAction" class="dropdown-item text-danger" type="button">删除好友</button></li>
+                </ul>
+              </div>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex align-items-center gap-3 mb-3">
+                <img id="friendProfileAvatar" class="chat-header-avatar" alt="friend-avatar" />
+                <div>
+                  <div id="friendProfileName" class="fw-semibold">好友</div>
+                  <div id="friendProfileAccount" class="small text-secondary">@账号</div>
+                </div>
+              </div>
+              <div class="small text-secondary mb-3">备注：<span id="friendProfileRemark">未设置</span></div>
+              <button id="friendProfileChatBtn" class="btn btn-primary w-100" type="button">发消息</button>
             </div>
           </div>
         </div>
