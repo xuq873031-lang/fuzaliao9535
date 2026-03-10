@@ -425,10 +425,11 @@ def ensure_compatible_schema():
             conn.execute(text("UPDATE chat_rooms SET rate_limit_seconds=0 WHERE rate_limit_seconds IS NULL"))
             conn.execute(text("UPDATE chat_rooms SET description='' WHERE description IS NULL"))
             conn.execute(text("UPDATE chat_rooms SET notice='' WHERE notice IS NULL"))
-            conn.execute(text("UPDATE chat_rooms SET allow_member_friend_add=0 WHERE allow_member_friend_add IS NULL"))
-            conn.execute(text("UPDATE chat_rooms SET allow_member_invite=0 WHERE allow_member_invite IS NULL"))
-            conn.execute(text("UPDATE chat_rooms SET invite_need_approval=1 WHERE invite_need_approval IS NULL"))
-            conn.execute(text("UPDATE chat_rooms SET global_mute=0 WHERE global_mute IS NULL"))
+            # PostgreSQL 布尔列必须使用 true/false，不能写 0/1
+            conn.execute(text("UPDATE chat_rooms SET allow_member_friend_add=false WHERE allow_member_friend_add IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET allow_member_invite=false WHERE allow_member_invite IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET invite_need_approval=true WHERE invite_need_approval IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET global_mute=false WHERE global_mute IS NULL"))
 
         if "room_members" in table_names:
             member_columns = {col["name"] for col in inspector.get_columns("room_members")}
@@ -445,8 +446,8 @@ def ensure_compatible_schema():
                     conn.execute(text("ALTER TABLE room_members ADD COLUMN joined_at TIMESTAMP NULL"))
 
             conn.execute(text("UPDATE room_members SET role='member' WHERE role IS NULL"))
-            conn.execute(text("UPDATE room_members SET can_kick=0 WHERE can_kick IS NULL"))
-            conn.execute(text("UPDATE room_members SET can_mute=0 WHERE can_mute IS NULL"))
+            conn.execute(text("UPDATE room_members SET can_kick=false WHERE can_kick IS NULL"))
+            conn.execute(text("UPDATE room_members SET can_mute=false WHERE can_mute IS NULL"))
             conn.execute(text("UPDATE room_members SET joined_at=CURRENT_TIMESTAMP WHERE joined_at IS NULL"))
 
         if "messages" in table_names:
