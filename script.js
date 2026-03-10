@@ -18,6 +18,8 @@ const DEFAULT_WS_BASE = String(
 const APP_BUILD = '20260308_1';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
+const MESSAGE_RENDER_INITIAL_LIMIT = 80;
+const MESSAGE_RENDER_STEP = 50;
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -60,6 +62,8 @@ let appState = {
   readAckTimer: null,
   roomMuteStateByRoom: {},
   roomMyMemberMetaByRoom: {},
+  messageRenderLimitByRoom: {},
+  pinnedRoomOrder: [],
   emojiPanelOpen: false,
   managingGroupId: null,
   mentionCandidates: [],
@@ -120,6 +124,88 @@ function getWsBase() {
   if (stored && /^wss?:\/\//i.test(stored)) return stored;
   const fromApi = getApiBase().replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
   return fromApi || DEFAULT_WS_BASE;
+}
+
+function getPinnedStorageKey() {
+  const uid = appState.currentUser?.id || 'guest';
+  return `chat_pinned_rooms_${uid}`;
+}
+
+function loadPinnedRoomOrder() {
+  try {
+    const raw = localStorage.getItem(getPinnedStorageKey());
+    const arr = JSON.parse(raw || '[]');
+    appState.pinnedRoomOrder = Array.isArray(arr)
+      ? arr.map((x) => Number(x)).filter((x) => Number.isFinite(x))
+      : [];
+  } catch (_) {
+    appState.pinnedRoomOrder = [];
+  }
+}
+
+function savePinnedRoomOrder() {
+  try {
+    localStorage.setItem(getPinnedStorageKey(), JSON.stringify(appState.pinnedRoomOrder));
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+
+function isConversationPinned(conv) {
+  return !!conv && appState.pinnedRoomOrder.includes(Number(conv.id));
+}
+
+function getPinnedIndex(roomId) {
+  return appState.pinnedRoomOrder.indexOf(Number(roomId));
+}
+
+function setMessageRenderLimit(roomId, limit) {
+  if (!roomId) return;
+  appState.messageRenderLimitByRoom[roomId] = Math.max(MESSAGE_RENDER_INITIAL_LIMIT, Number(limit) || MESSAGE_RENDER_INITIAL_LIMIT);
+}
+
+function getMessageRenderLimit(roomId) {
+  if (!roomId) return MESSAGE_RENDER_INITIAL_LIMIT;
+  const v = Number(appState.messageRenderLimitByRoom[roomId] || 0);
+  if (v > 0) return v;
+  appState.messageRenderLimitByRoom[roomId] = MESSAGE_RENDER_INITIAL_LIMIT;
+  return MESSAGE_RENDER_INITIAL_LIMIT;
+}
+
+function getHiddenMessageCount(conv) {
+  if (!conv) return 0;
+  return Math.max(0, conv.messages.length - getMessageRenderLimit(conv.id));
+}
+
+function getRenderableMessages(conv) {
+  if (!conv) return [];
+  const limit = getMessageRenderLimit(conv.id);
+  if (conv.messages.length <= limit) return conv.messages;
+  return conv.messages.slice(-limit);
+}
+
+function toggleConversationPin(roomId) {
+  const id = Number(roomId);
+  if (!id) return;
+  const idx = appState.pinnedRoomOrder.indexOf(id);
+  if (idx >= 0) {
+    appState.pinnedRoomOrder.splice(idx, 1);
+  } else {
+    appState.pinnedRoomOrder.unshift(id);
+  }
+  savePinnedRoomOrder();
+  renderConversationList();
+}
+
+function applyConversationLocalState() {
+  const currentIds = new Set(appState.conversations.map((c) => Number(c.id)));
+  appState.pinnedRoomOrder = appState.pinnedRoomOrder.filter((id) => currentIds.has(Number(id)));
+  appState.conversations.forEach((conv) => {
+    conv.isPinned = isConversationPinned(conv);
+    if (!appState.messageRenderLimitByRoom[conv.id]) {
+      appState.messageRenderLimitByRoom[conv.id] = MESSAGE_RENDER_INITIAL_LIMIT;
+    }
+  });
 }
 
 function renderApiBaseIndicator() {
@@ -266,7 +352,7 @@ function renderMessageContent(text) {
   if (match) {
     const url = match[1].trim();
     const safeUrl = escapeHtml(url);
-    return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer"><img src="${safeUrl}" class="msg-image" alt="image" /></a>`;
+    return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer"><img src="${safeUrl}" class="msg-image" alt="image" loading="lazy" decoding="async" /></a>`;
   }
   return applyAtMentionHighlight(raw).replaceAll('\n', '<br>');
 }
@@ -888,6 +974,7 @@ async function refreshRoomsAndMessages() {
       conv.hasMore = msgs.length === 50;
     })
   );
+  applyConversationLocalState();
 
   // 交互要求：不自动选中会话，必须用户主动点好友/会话进入聊天
   if (appState.activeConversationId && !findConversationById(appState.activeConversationId)) {
@@ -2038,6 +2125,8 @@ function logout() {
   appState.userMap = {};
   appState.conversations = [];
   appState.activeConversationId = null;
+  appState.messageRenderLimitByRoom = {};
+  appState.pinnedRoomOrder = [];
 
   if (appState.ws) {
     appState.ws.onclose = null;
@@ -3966,10 +4055,7 @@ async function handleImageUpload(e) {
 async function loadMoreMessages() {
   if (appState.loadingMore) return;
   const conv = findConversationById(appState.activeConversationId);
-  if (!conv || !conv.messages.length || conv.hasMore === false) return;
-
-  const oldest = conv.messages[0];
-  if (!oldest) return;
+  if (!conv || !conv.messages.length) return;
 
   const listEl = document.getElementById('messageList');
   const beforeHeight = listEl.scrollHeight;
@@ -3980,6 +4066,20 @@ async function loadMoreMessages() {
   btn.textContent = '加载中...';
 
   try {
+    const hiddenCount = getHiddenMessageCount(conv);
+    if (hiddenCount > 0) {
+      setMessageRenderLimit(conv.id, getMessageRenderLimit(conv.id) + MESSAGE_RENDER_STEP);
+      renderMessages({ autoScroll: false });
+      const afterHeight = listEl.scrollHeight;
+      listEl.scrollTop = afterHeight - beforeHeight;
+      return;
+    }
+    if (conv.hasMore === false) {
+      btn.textContent = '没有更多';
+      return;
+    }
+    const oldest = conv.messages[0];
+    if (!oldest) return;
     const batch = await apiGetRoomMessagesBefore(conv.id, oldest.id, 50);
     if (!batch.length) {
       conv.hasMore = false;
@@ -3992,6 +4092,7 @@ async function loadMoreMessages() {
     const toPrepend = normalized.filter((m) => !exists.has(m.id));
     conv.messages = [...toPrepend, ...conv.messages];
     conv.hasMore = batch.length === 50;
+    setMessageRenderLimit(conv.id, getMessageRenderLimit(conv.id) + Math.max(MESSAGE_RENDER_STEP, toPrepend.length));
 
     renderMessages({ autoScroll: false });
     const afterHeight = listEl.scrollHeight;
@@ -4001,7 +4102,10 @@ async function loadMoreMessages() {
   } finally {
     appState.loadingMore = false;
     btn.disabled = false;
-    btn.textContent = conv.hasMore === false ? '没有更多' : '加载更多';
+    const hiddenLeft = getHiddenMessageCount(conv);
+    btn.textContent = hiddenLeft > 0
+      ? `加载更早消息(${hiddenLeft})`
+      : (conv.hasMore === false ? '没有更多' : '加载更多');
   }
 }
 
@@ -4048,6 +4152,10 @@ function renderConversationList() {
   box.innerHTML = '';
 
   const list = getVisibleConversations().sort((a, b) => {
+    const ap = isConversationPinned(a);
+    const bp = isConversationPinned(b);
+    if (ap !== bp) return bp ? 1 : -1;
+    if (ap && bp) return getPinnedIndex(a.id) - getPinnedIndex(b.id);
     const ta = a.messages.length ? a.messages[a.messages.length - 1].createdAt : 0;
     const tb = b.messages.length ? b.messages[b.messages.length - 1].createdAt : 0;
     return tb - ta;
@@ -4066,7 +4174,7 @@ function renderConversationList() {
       : '';
     const lastTime = lastMsg ? formatConversationTime(lastMsg.createdAt) : '';
     const avatar = getConversationAvatar(conv);
-    const isPinned = !!(conv.isPinned || conv.pinned || conv.pin || (conv.unreadCount || 0) >= 10);
+    const isPinned = isConversationPinned(conv);
     const btn = document.createElement('button');
     btn.className = `list-group-item list-group-item-action conversation-item-btn ${appState.activeConversationId === conv.id ? 'active' : ''} ${isPinned ? 'tg-pinned' : ''}`;
 
@@ -4090,11 +4198,29 @@ function renderConversationList() {
             <div class="conversation-preview ${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">
               ${onlineText}${lastPreview ? ` · ${lastPreview}` : ''}
             </div>
-            ${badge}
+            <div class="d-flex align-items-center gap-2">
+              ${isPinned ? '<span class="pin-badge" title="已置顶">置顶</span>' : ''}
+              ${badge}
+            </div>
           </div>
         </div>
       </div>
     `;
+
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      toggleConversationPin(conv.id);
+    });
+    let pinLongPressTimer = null;
+    btn.addEventListener('touchstart', () => {
+      pinLongPressTimer = setTimeout(() => toggleConversationPin(conv.id), 600);
+    }, { passive: true });
+    ['touchend', 'touchcancel', 'touchmove'].forEach((ev) => {
+      btn.addEventListener(ev, () => {
+        if (pinLongPressTimer) clearTimeout(pinLongPressTimer);
+        pinLongPressTimer = null;
+      }, { passive: true });
+    });
 
     btn.addEventListener('click', () => {
       appState.activeConversationId = conv.id;
@@ -4244,7 +4370,6 @@ function buildMessageRow(msg, conv) {
 
   const stateText = msg.localFailed ? '发送失败' : (msg.localPending ? '发送中...' : '');
   bubble.innerHTML = `
-    <button class="msg-action-btn" type="button" aria-label="消息操作">⋮</button>
     ${appState.multiSelectMode ? '<input class="form-check-input msg-select-check me-2" type="checkbox" />' : ''}
     ${senderName}
     ${replyBlock}
@@ -4261,16 +4386,9 @@ function buildMessageRow(msg, conv) {
       });
     }
     bubble.addEventListener('click', (e) => {
-      if (e.target.closest('.msg-action-btn')) return;
       toggleMultiSelectMessage(msg.id);
     });
   }
-
-  const actionBtn = bubble.querySelector('.msg-action-btn');
-  if (actionBtn) actionBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openMessageActionMenu(msg);
-  });
 
   bubble.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -4389,10 +4507,14 @@ function renderMessages(options = {}) {
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
   applyMuteComposerState(conv);
-  loadMoreBtn.disabled = conv.messages.length === 0;
+  const hiddenCount = getHiddenMessageCount(conv);
+  const canLoadServerMore = conv.hasMore !== false;
+  loadMoreBtn.disabled = conv.messages.length === 0 || (!hiddenCount && !canLoadServerMore);
   loadMoreBtn.textContent = conv.messages.length === 0
     ? '暂无历史'
-    : (conv.hasMore === false ? '没有更多' : '加载更多');
+    : (hiddenCount > 0
+      ? `加载更早消息(${hiddenCount})`
+      : (canLoadServerMore ? '加载更多' : '没有更多'));
 
   titleEl.textContent = getConversationTitle(conv);
   if (avatarEl) avatarEl.src = getConversationAvatar(conv);
@@ -4408,7 +4530,7 @@ function renderMessages(options = {}) {
   }
   if (appState.localTypingActive) setLocalTypingHint(true);
 
-  appendMessagesToView(conv, conv.messages, { autoScroll });
+  appendMessagesToView(conv, getRenderableMessages(conv), { autoScroll });
   if (forceBottom) {
     appState.userNearBottom = true;
     scrollMessagesToBottom({ force: true });
@@ -4583,6 +4705,7 @@ async function bootstrapAfterLogin(userFromAuth = null) {
   };
 
   mergeUserToMap(me);
+  loadPinnedRoomOrder();
   enterApp({ skipDataRefresh: true });
   connectWebSocket();
   setAuthLoading(true, '正在同步数据...');
