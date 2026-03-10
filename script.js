@@ -68,6 +68,8 @@ let appState = {
   groupMemberSearchKeyword: '',
   multiSelectMode: false,
   multiSelectedMessageIds: new Set(),
+  localTypingTimer: null,
+  localTypingActive: false,
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
     mode: null, // audio|video
@@ -3685,6 +3687,9 @@ function bindChatEvents() {
   });
   if (msgInput) {
     msgInput.addEventListener('input', () => {
+      setLocalTypingHint(!!msgInput.value.trim());
+      if (appState.localTypingTimer) clearTimeout(appState.localTypingTimer);
+      appState.localTypingTimer = setTimeout(() => setLocalTypingHint(false), 1400);
       const conv = findConversationById(appState.activeConversationId);
       if (!conv || conv.type !== 'group') {
         hideMentionSuggestions();
@@ -3699,6 +3704,8 @@ function bindChatEvents() {
       renderMentionSuggestions(conv, found.keyword || '');
     });
     msgInput.addEventListener('blur', () => {
+      if (appState.localTypingTimer) clearTimeout(appState.localTypingTimer);
+      setLocalTypingHint(false);
       setTimeout(() => hideMentionSuggestions(), 120);
     });
   }
@@ -4055,10 +4062,18 @@ function renderConversationList() {
       : '';
     const lastTime = lastMsg ? formatConversationTime(lastMsg.createdAt) : '';
     const avatar = getConversationAvatar(conv);
+    const isPinned = !!(conv.isPinned || conv.pinned || conv.pin || (conv.unreadCount || 0) >= 10);
     const btn = document.createElement('button');
-    btn.className = `list-group-item list-group-item-action ${appState.activeConversationId === conv.id ? 'active' : ''}`;
+    btn.className = `list-group-item list-group-item-action conversation-item-btn ${appState.activeConversationId === conv.id ? 'active' : ''} ${isPinned ? 'tg-pinned' : ''}`;
 
-    const badge = conv.unreadCount > 0 ? `<span class="badge rounded-pill text-bg-danger">${conv.unreadCount}</span>` : '';
+    const badge = conv.unreadCount > 0 ? `<span class="unread-dot">${conv.unreadCount > 99 ? '99+' : conv.unreadCount}</span>` : '';
+    const onlineText = conv.type === 'group'
+      ? `${conv.memberCount || conv.members.length}人群聊`
+      : (() => {
+        const other = getOtherUserInPrivateConversation(conv);
+        const on = !!other?.online;
+        return `<span class="online-dot ${on ? 'on' : 'off'}"></span>${on ? '在线' : '离线'}`;
+      })();
     btn.innerHTML = `
       <div class="conversation-item">
         <img src="${avatar}" class="conversation-avatar" alt="avatar" />
@@ -4069,7 +4084,7 @@ function renderConversationList() {
           </div>
           <div class="conversation-bottom">
             <div class="conversation-preview ${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">
-              ${conv.type === 'group' ? `${conv.memberCount || conv.members.length}人群聊` : '单聊'}${lastPreview ? ` · ${lastPreview}` : ''}
+              ${onlineText}${lastPreview ? ` · ${lastPreview}` : ''}
             </div>
             ${badge}
           </div>
@@ -4103,6 +4118,30 @@ function renderConversationList() {
   });
 
   updateUnreadBadges();
+}
+
+function setLocalTypingHint(active) {
+  const subEl = document.getElementById('chatSubTitle');
+  if (!subEl) return;
+  appState.localTypingActive = !!active;
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv) {
+    subEl.classList.remove('typing-active');
+    return;
+  }
+  if (active) {
+    subEl.textContent = '正在输入...';
+    subEl.classList.add('typing-active');
+    return;
+  }
+  subEl.classList.remove('typing-active');
+  if (conv.type === 'group') {
+    const onlineCount = (conv.members || []).filter((id) => appState.onlineUserIds.has(Number(id))).length;
+    subEl.textContent = `${conv.members.length} 人 · 在线 ${onlineCount}`;
+  } else {
+    const other = getOtherUserInPrivateConversation(conv);
+    subEl.textContent = other?.online ? '在线' : '离线';
+  }
 }
 
 function setChatPaneVisible(visible) {
@@ -4337,6 +4376,7 @@ function renderMessages(options = {}) {
     toggleEmojiPanel(false);
     hideMentionSuggestions();
     updateCallButtonsState();
+    setLocalTypingHint(false);
     return;
   }
   setChatPaneVisible(true);
@@ -4362,6 +4402,7 @@ function renderMessages(options = {}) {
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     hideMentionSuggestions();
   }
+  if (appState.localTypingActive) setLocalTypingHint(true);
 
   appendMessagesToView(conv, conv.messages, { autoScroll });
   if (forceBottom) {
@@ -4451,6 +4492,8 @@ async function sendMessage() {
   }
 
   input.value = '';
+  if (appState.localTypingTimer) clearTimeout(appState.localTypingTimer);
+  setLocalTypingHint(false);
   clearReplyAndEditState();
   toggleEmojiPanel(false);
   hideMentionSuggestions();
