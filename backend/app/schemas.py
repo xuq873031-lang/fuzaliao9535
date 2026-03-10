@@ -177,6 +177,21 @@ class FriendRemarkOut(BaseModel):
     remark: str
 
 
+class AdminUserOut(BaseModel):
+    id: int
+    username: str
+    nickname: str
+    role: str
+    is_online: bool
+    created_at: datetime
+    last_seen_at: datetime | None = None
+
+
+class AdminResetPasswordIn(BaseModel):
+    new_password: str = Field(min_length=6, max_length=64)
+    confirm_password: str = Field(min_length=6, max_length=64)
+
+
 class PresenceOnlineUserOut(BaseModel):
     id: int
     username: str

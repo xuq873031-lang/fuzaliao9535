@@ -13,6 +13,8 @@ from .db import Base, SessionLocal, engine, get_db
 from .manager import ConnectionManager
 from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, friends, room_members
 from .schemas import (
+    AdminResetPasswordIn,
+    AdminUserOut,
     AddRoomMemberIn,
     CreateFriendRequestIn,
     CreateGroupRoomIn,
@@ -369,6 +371,11 @@ def ensure_user_in_room(db: Session, user_id: int, room_id: int):
         raise HTTPException(status_code=403, detail="You are not a member of this room")
 
 
+def ensure_admin_user(current_user: User):
+    if (current_user.role or "").lower() != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+
 def ensure_compatible_schema():
     """
     向后兼容迁移：
@@ -562,6 +569,45 @@ def update_me(payload: UserUpdateIn, db: Session = Depends(get_db), current_user
     db.commit()
     db.refresh(current_user)
     return UserOut.model_validate(current_user)
+
+
+@app.get("/api/admin/users", response_model=list[AdminUserOut])
+def list_admin_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_admin_user(current_user)
+    rows = db.execute(select(User).order_by(desc(User.created_at))).scalars().all()
+    return [
+        AdminUserOut(
+            id=u.id,
+            username=u.username,
+            nickname=u.nickname,
+            role=u.role,
+            is_online=bool(u.is_online),
+            created_at=u.created_at,
+            last_seen_at=u.last_seen_at,
+        )
+        for u in rows
+    ]
+
+
+@app.post("/api/admin/users/{user_id}/reset-password")
+def admin_reset_user_password(
+    user_id: int,
+    payload: AdminResetPasswordIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_admin_user(current_user)
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=422, detail="两次密码不一致")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True, "user_id": user_id}
 
 
 @app.get("/api/users/search", response_model=list[SearchUserOut])
@@ -1345,6 +1391,52 @@ async def unmute_room_member(
     db.refresh(system_msg)
     await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
     return RoomMuteOut(room_id=room_id, user_id=user_id, muted=False)
+
+
+@app.delete("/api/rooms/{room_id}/members/{user_id}/messages")
+async def delete_member_messages_in_room(
+    room_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room supports this action")
+
+    if not can_actor_manage_member(db, room_id, current_user.id, user_id, "kick"):
+        raise HTTPException(status_code=403, detail="No permission to delete this member messages")
+
+    member_exists = db.execute(
+        select(room_members.c.user_id).where(room_members.c.room_id == room_id, room_members.c.user_id == user_id)
+    ).first()
+    if not member_exists:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    result = db.execute(delete(Message).where(Message.room_id == room_id, Message.sender_id == user_id))
+    deleted_count = int(result.rowcount or 0)
+    db.commit()
+
+    actor = current_user.nickname or current_user.username
+    system_msg = Message(
+        room_id=room_id,
+        sender_id=current_user.id,
+        content=f"[system] {actor} 删除了成员 {user_id} 的历史发言（{deleted_count}条）",
+    )
+    db.add(system_msg)
+    db.commit()
+    db.refresh(system_msg)
+
+    await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
+    await manager.broadcast_to_room(
+        room_id,
+        {"type": "member_messages_deleted", "room_id": room_id, "user_id": user_id},
+    )
+
+    return {"ok": True, "room_id": room_id, "user_id": user_id, "deleted_count": deleted_count}
 
 
 @app.get("/api/rooms/{room_id}/mute-list", response_model=list[RoomMuteMemberOut])
