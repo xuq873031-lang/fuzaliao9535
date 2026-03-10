@@ -67,6 +67,8 @@ let appState = {
   messageRenderLimitByRoom: {},
   pinnedRoomOrder: [],
   emojiPanelOpen: false,
+  conversationFilter: 'all',
+  conversationSearchKeyword: '',
   managingGroupId: null,
   mentionCandidates: [],
   pendingMessageSeq: 0,
@@ -550,6 +552,21 @@ function setButtonLoading(btn, loading, loadingText, normalText) {
   btn.textContent = loading ? loadingText : normalText;
 }
 
+function setConversationFilter(filter) {
+  const allowed = ['all', 'unread', 'mention'];
+  appState.conversationFilter = allowed.includes(filter) ? filter : 'all';
+  const map = {
+    all: 'conversationTabAll',
+    unread: 'conversationTabUnread',
+    mention: 'conversationTabMention'
+  };
+  Object.entries(map).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', key === appState.conversationFilter);
+  });
+  renderConversationList();
+}
+
 function switchView(viewId, options = {}) {
   if (viewId === 'adminView' && !ENABLE_IN_APP_ADMIN_VIEW) {
     viewId = 'messagesView';
@@ -1018,7 +1035,22 @@ async function refreshUnreadCounts() {
 }
 
 function getVisibleConversations() {
-  return appState.conversations;
+  const keyword = String(appState.conversationSearchKeyword || '').trim().toLowerCase();
+  const mentionKey = (appState.currentUser?.nickname || appState.currentUser?.username || '').trim();
+  return appState.conversations.filter((conv) => {
+    if (appState.conversationFilter === 'unread' && !(conv.unreadCount > 0)) return false;
+    if (appState.conversationFilter === 'mention') {
+      if (!mentionKey) return false;
+      const mentionToken = `@${mentionKey}`;
+      const hasMention = (conv.messages || []).some((m) => String(m.text || '').includes(mentionToken));
+      if (!hasMention) return false;
+    }
+    if (!keyword) return true;
+    const title = getConversationTitle(conv).toLowerCase();
+    const lastMsg = conv.messages[conv.messages.length - 1];
+    const preview = String(lastMsg?.text || '').toLowerCase();
+    return title.includes(keyword) || preview.includes(keyword);
+  });
 }
 
 function findConversationById(roomId) {
@@ -2221,6 +2253,21 @@ function bindNavigationEvents() {
   document.getElementById('logoutBtn').addEventListener('click', logout);
   document.getElementById('mobileLogoutBtn').addEventListener('click', logout);
 
+  const conversationSearchInput = document.getElementById('conversationSearchInput');
+  if (conversationSearchInput) {
+    conversationSearchInput.addEventListener('input', (e) => {
+      appState.conversationSearchKeyword = String(e.target.value || '');
+      renderConversationList();
+    });
+  }
+
+  const tabAll = document.getElementById('conversationTabAll');
+  const tabUnread = document.getElementById('conversationTabUnread');
+  const tabMention = document.getElementById('conversationTabMention');
+  if (tabAll) tabAll.addEventListener('click', () => setConversationFilter('all'));
+  if (tabUnread) tabUnread.addEventListener('click', () => setConversationFilter('unread'));
+  if (tabMention) tabMention.addEventListener('click', () => setConversationFilter('mention'));
+
   const adminRefreshBtn = document.getElementById('adminRefreshBtn');
   if (adminRefreshBtn) {
     adminRefreshBtn.addEventListener('click', () => {
@@ -2344,13 +2391,19 @@ function bindProfileEvents() {
 }
 
 function renderProfile() {
-  document.getElementById('profileAvatar').src = appState.currentUser.avatar || DEFAULT_AVATAR;
+  const avatar = appState.currentUser.avatar || DEFAULT_AVATAR;
+  const profileAvatar = document.getElementById('profileAvatar');
+  const desktopRailAvatar = document.getElementById('desktopRailAvatar');
+  if (profileAvatar) profileAvatar.src = avatar;
+  if (desktopRailAvatar) desktopRailAvatar.src = avatar;
   document.getElementById('nicknameInput').value = appState.currentUser.nickname || '';
   document.getElementById('signatureInput').value = appState.currentUser.signature || '';
 }
 
 function updateUserHeader() {
   document.getElementById('sidebarUsername').textContent = appState.currentUser.nickname || appState.currentUser.username;
+  const desktopRailAvatar = document.getElementById('desktopRailAvatar');
+  if (desktopRailAvatar) desktopRailAvatar.src = appState.currentUser.avatar || DEFAULT_AVATAR;
 }
 
 function isAdminUser() {
@@ -4675,9 +4728,11 @@ function renderMessages(options = {}) {
   const titleEl = document.getElementById('chatTitle');
   const subEl = document.getElementById('chatSubTitle');
   const avatarEl = document.getElementById('chatAvatar');
+  const emptyStateEl = document.getElementById('chatEmptyState');
   const loadMoreBtn = document.getElementById('loadMoreBtn');
   const groupMembersBtn = document.getElementById('groupMembersBtn');
   const composer = document.getElementById('chatComposer');
+  const chatHeader = document.getElementById('chatHeader');
   const chatDetailsBtn = document.getElementById('chatDetailsBtn');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
 
@@ -4688,10 +4743,14 @@ function renderMessages(options = {}) {
     appState.multiSelectMode = false;
     appState.multiSelectedMessageIds = new Set();
     updateMultiSelectBar();
-    setChatPaneVisible(false);
-    titleEl.textContent = '未选择会话';
+    const isMobile = window.matchMedia('(max-width: 991.98px)').matches;
+    setChatPaneVisible(!isMobile);
+    titleEl.textContent = '即时聊天';
     subEl.textContent = '请选择会话';
     if (avatarEl) avatarEl.src = DEFAULT_AVATAR;
+    if (chatHeader) chatHeader.classList.add('d-none');
+    if (emptyStateEl) emptyStateEl.classList.remove('d-none');
+    listEl.classList.add('d-none');
     if (chatDetailsBtn) chatDetailsBtn.disabled = true;
     loadMoreBtn.classList.add('d-none');
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
@@ -4706,6 +4765,9 @@ function renderMessages(options = {}) {
     return;
   }
   setChatPaneVisible(true);
+  if (chatHeader) chatHeader.classList.remove('d-none');
+  if (emptyStateEl) emptyStateEl.classList.add('d-none');
+  listEl.classList.remove('d-none');
   updateMultiSelectBar();
   if (chatDetailsBtn) chatDetailsBtn.disabled = false;
   loadMoreBtn.classList.remove('d-none');
