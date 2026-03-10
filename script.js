@@ -377,6 +377,19 @@ function canEditOwnMessage(msg) {
   return true;
 }
 
+function canRecallMessage(msg) {
+  if (!msg || !appState.currentUser) return false;
+  if (isImageMessageText(msg.text)) return false;
+  if (String(msg.text || '').startsWith('[已撤回]')) return false;
+  return Number(msg.senderId) === Number(appState.currentUser.id);
+}
+
+function canUseSuperDelete() {
+  const me = appState.currentUser;
+  if (!me) return false;
+  return me.role === 'admin' || !!me.canKickMembers;
+}
+
 function toggleEmojiPanel(open) {
   const emojiBar = document.getElementById('emojiBar');
   const emojiToggleBtn = document.getElementById('emojiToggleBtn');
@@ -838,6 +851,14 @@ async function apiEditMessage(messageId, content) {
     method: 'PATCH',
     body: JSON.stringify({ content })
   });
+}
+
+async function apiRecallMessage(messageId) {
+  return apiFetch(`/api/messages/${messageId}/recall`, { method: 'POST' });
+}
+
+async function apiSuperDeleteMessage(messageId) {
+  return apiFetch(`/api/messages/${messageId}/super-delete`, { method: 'DELETE' });
 }
 
 async function apiUploadImage(file) {
@@ -1467,6 +1488,18 @@ function handleWsEvent(evt) {
       target.editedByAdmin = msg.editedByAdmin;
     }
 
+    scheduleConversationListRender();
+    if (appState.activeConversationId === conv.id) renderMessages({ autoScroll: false });
+    return;
+  }
+
+  if (evt.type === 'message_deleted') {
+    const payload = evt.payload || {};
+    const roomId = Number(payload.room_id);
+    const messageId = Number(payload.id);
+    const conv = findConversationById(roomId);
+    if (!conv || !messageId) return;
+    conv.messages = conv.messages.filter((m) => Number(m.id) !== messageId);
     scheduleConversationListRender();
     if (appState.activeConversationId === conv.id) renderMessages({ autoScroll: false });
     return;
@@ -3431,7 +3464,11 @@ function startEditOwnMessage(msg) {
 function openMessageActionMenu(msg) {
   appState.actionTargetMessage = msg;
   const editBtn = document.getElementById('msgActionEditBtn');
+  const recallBtn = document.getElementById('msgActionRecallBtn');
+  const deleteBtn = document.getElementById('msgActionDeleteBtn');
   if (editBtn) editBtn.classList.toggle('d-none', !canEditOwnMessage(msg));
+  if (recallBtn) recallBtn.classList.toggle('d-none', !canRecallMessage(msg));
+  if (deleteBtn) deleteBtn.textContent = canUseSuperDelete() ? '删除/超级删除' : '删除';
   const modal = new bootstrap.Modal(document.getElementById('messageActionModal'));
   modal.show();
 }
@@ -3814,8 +3851,12 @@ function bindChatEvents() {
   const clearReplyBtn = document.getElementById('clearReplyBtn');
   const actionReplyBtn = document.getElementById('msgActionReplyBtn');
   const actionEditBtn = document.getElementById('msgActionEditBtn');
+  const actionRecallBtn = document.getElementById('msgActionRecallBtn');
   const actionMultiBtn = document.getElementById('msgActionMultiBtn');
   const actionForwardBtn = document.getElementById('msgActionForwardBtn');
+  const actionDeleteBtn = document.getElementById('msgActionDeleteBtn');
+  const deleteForPeerCheck = document.getElementById('deleteForPeerCheck');
+  const confirmDeleteMessageBtn = document.getElementById('confirmDeleteMessageBtn');
   const mobileBackBtn = document.getElementById('mobileBackToListBtn');
   const voiceCallBtn = document.getElementById('voiceCallBtn');
   const videoCallBtn = document.getElementById('videoCallBtn');
@@ -3899,12 +3940,50 @@ function bindChatEvents() {
     const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
     if (modal) modal.hide();
   });
+  if (actionRecallBtn) actionRecallBtn.addEventListener('click', async () => {
+    const msg = appState.actionTargetMessage;
+    if (!msg) return;
+    const actionModal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
+    if (actionModal) actionModal.hide();
+    if (!canRecallMessage(msg)) {
+      alert('该消息不可撤回');
+      return;
+    }
+    try {
+      const updated = await apiRecallMessage(msg.id);
+      const conv = findConversationById(updated.room_id);
+      if (conv) {
+        const target = conv.messages.find((m) => Number(m.id) === Number(updated.id));
+        if (target) {
+          target.text = updated.content;
+          target.updatedAt = updated.updated_at ? new Date(updated.updated_at).getTime() : target.updatedAt;
+        }
+      }
+      renderMessages({ autoScroll: false });
+      scheduleConversationListRender();
+    } catch (err) {
+      alert(`撤回失败：${err.message}`);
+    }
+  });
   if (actionForwardBtn) actionForwardBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     const msg = appState.actionTargetMessage;
     const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
     if (modal) modal.hide();
     openForwardModal(msg);
+  });
+  if (actionDeleteBtn) actionDeleteBtn.addEventListener('click', () => {
+    if (!appState.actionTargetMessage) return;
+    const conv = findConversationById(appState.activeConversationId);
+    const allowSuperDelete = !!(conv && isDmConversation(conv) && canUseSuperDelete());
+    if (deleteForPeerCheck) {
+      deleteForPeerCheck.checked = false;
+      deleteForPeerCheck.disabled = !allowSuperDelete;
+    }
+    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
+    if (modal) modal.hide();
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteMessageModal'));
+    deleteModal.show();
   });
   if (actionMultiBtn) actionMultiBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
@@ -3934,6 +4013,29 @@ function bindChatEvents() {
         return;
       }
       openForwardModal(selected);
+    });
+  }
+  if (confirmDeleteMessageBtn) {
+    confirmDeleteMessageBtn.addEventListener('click', async () => {
+      const msg = appState.actionTargetMessage;
+      if (!msg) return;
+      const conv = findConversationById(appState.activeConversationId);
+      if (!conv) return;
+      const deleteForPeer = !!(deleteForPeerCheck && deleteForPeerCheck.checked);
+      const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteMessageModal'));
+      try {
+        if (deleteForPeer) {
+          await apiSuperDeleteMessage(msg.id);
+          conv.messages = conv.messages.filter((m) => Number(m.id) !== Number(msg.id));
+        } else {
+          conv.messages = conv.messages.filter((m) => Number(m.id) !== Number(msg.id));
+        }
+        renderMessages({ autoScroll: false });
+        scheduleConversationListRender();
+        if (deleteModal) deleteModal.hide();
+      } catch (err) {
+        alert(`删除失败：${err.message}`);
+      }
     });
   }
   if (multiSelectSelectAllBtn) {
@@ -4946,6 +5048,8 @@ window.__api = {
   apiGetUnreadCounts,
   apiMarkRoomRead,
   apiEditMessage,
+  apiRecallMessage,
+  apiSuperDeleteMessage,
   apiSendMessage,
   apiUploadImage,
   apiAdminListUsers,

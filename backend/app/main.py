@@ -1743,6 +1743,64 @@ async def edit_message(
     return build_message_out(db, msg)
 
 
+@app.post("/api/messages/{message_id}/recall", response_model=MessageOut)
+async def recall_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    msg = db.get(Message, message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    ensure_user_in_room(db, current_user.id, msg.room_id)
+
+    is_sender = msg.sender_id == current_user.id
+    has_recall_permission = bool(current_user.role == "admin" or has_permission(current_user, "can_use_edit_feature"))
+    if not is_sender and not has_recall_permission:
+        raise HTTPException(status_code=403, detail="No permission to recall message")
+
+    if msg.content == "[已撤回]":
+        return build_message_out(db, msg)
+
+    msg.content = "[已撤回]"
+    msg.updated_at = datetime.utcnow()
+    msg.edited_by_admin = bool(not is_sender)
+    db.commit()
+    db.refresh(msg)
+
+    await manager.broadcast_to_room(msg.room_id, {"type": "message_edited", "payload": serialize_message(db, msg)})
+    return build_message_out(db, msg)
+
+
+@app.delete("/api/messages/{message_id}/super-delete")
+async def super_delete_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    msg = db.get(Message, message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    ensure_user_in_room(db, current_user.id, msg.room_id)
+
+    room = db.get(ChatRoom, msg.room_id)
+    if not room or room_effective_type(room) != "dm":
+        raise HTTPException(status_code=400, detail="Super delete only supports direct chat")
+
+    if not (current_user.role == "admin" or has_permission(current_user, "can_kick_members")):
+        raise HTTPException(status_code=403, detail="后台未授予超级删除权限")
+
+    room_id = msg.room_id
+    db.delete(msg)
+    db.commit()
+
+    await manager.broadcast_to_room(
+        room_id,
+        {"type": "message_deleted", "payload": {"id": message_id, "room_id": room_id}},
+    )
+    return {"ok": True, "message_id": message_id, "room_id": room_id}
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     payload = verify_access_token(token)
