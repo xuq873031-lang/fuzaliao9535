@@ -17,6 +17,7 @@ const DEFAULT_WS_BASE = String(
 ).trim().replace(/\/$/, '');
 const APP_BUILD = '20260308_1';
 const SHOW_DEBUG_BADGE = false;
+const ENABLE_IN_APP_ADMIN_VIEW = false;
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -449,6 +450,9 @@ function setButtonLoading(btn, loading, loadingText, normalText) {
 }
 
 function switchView(viewId, options = {}) {
+  if (viewId === 'adminView' && !ENABLE_IN_APP_ADMIN_VIEW) {
+    viewId = 'messagesView';
+  }
   const keepRoom = !!options.keepRoom;
   const silentRefresh = !!options.silentRefresh;
   if (viewId === 'messagesView' && !keepRoom) {
@@ -2230,7 +2234,7 @@ function isAdminUser() {
 }
 
 function updateAdminNavVisibility() {
-  const visible = isAdminUser();
+  const visible = ENABLE_IN_APP_ADMIN_VIEW && isAdminUser();
   const desktopBtn = document.getElementById('adminNavDesktop');
   const drawerBtn = document.getElementById('adminNavDrawer');
   if (desktopBtn) desktopBtn.classList.toggle('d-none', !visible);
