@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # 生产护栏：默认禁止本地 uploads（需显式放开）
     allow_local_uploads_in_production: bool = False
     # 好友申请权限（后端强校验）
-    friend_request_allowed_roles: str = "admin,mentor"
+    friend_request_allowed_roles: str = "admin,mentor,member"
     friend_request_allowed_usernames: str = ""
     # 上传目录（相对 backend 目录）
     upload_dir: str = "uploads"
