@@ -6,12 +6,12 @@ from .config import settings
 
 def normalize_database_url(url: str) -> str:
     raw = (url or "").strip()
-    # Railway Postgres 常给 postgresql://，项目当前依赖是 psycopg（非 psycopg2）
-    # 统一转成 postgresql+psycopg://，避免因驱动名不一致导致启动崩溃。
-    if raw.startswith("postgresql://"):
-        return raw.replace("postgresql://", "postgresql+psycopg://", 1)
-    if raw.startswith("postgres://"):
-        return raw.replace("postgres://", "postgresql+psycopg://", 1)
+    # Railway Postgres 常给 postgresql://（甚至可能被手动写成 Postgresql://）
+    # 当前项目主驱动是 psycopg（非 psycopg2），统一归一化为 postgresql+psycopg://。
+    raw_lower = raw.lower()
+    if raw_lower.startswith("postgresql://") or raw_lower.startswith("postgres://"):
+        suffix = raw.split("://", 1)[1] if "://" in raw else raw
+        return f"postgresql+psycopg://{suffix}"
     return raw
 
 
