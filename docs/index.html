@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="zh-CN" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="theme-color" content="#0d6efd" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Fuzaliao" />
+  <title>即时聊天应用</title>
+  <link rel="manifest" href="./manifest.json?v=20260308_1" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=20260308_1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css?v=20260308_1" />
+  <script>
+    // 前后端分离部署配置：前端固定静态域名，后端固定 API/WS 域名
+    window.__CHAT_CONFIG = {
+      API_BASE: "https://web-production-be9f.up.railway.app"
+      // 可选：WS_BASE: "wss://web-production-be9f.up.railway.app"
+    };
+  </script>
+</head>
+<body>
+  <div id="appRoot" class="app-gradient min-vh-100 p-3 p-md-4">
+    <!-- 登录/注册容器：未登录时显示 -->
+    <div id="authContainer" class="container">
+      <div class="row justify-content-center align-items-center min-vh-100">
+        <div class="col-12 col-md-8 col-lg-6">
+          <div class="card border-0 shadow-lg auth-card rounded-4">
+            <div class="card-body p-4 p-md-5">
+              <h2 class="fw-bold mb-2 text-center">即时聊天应用</h2>
+              <p class="text-secondary text-center mb-4">欢迎使用</p>
+              <div id="authLoadingHint" class="alert alert-info py-2 d-none">正在恢复登录...</div>
+
+              <!-- 登录页 -->
+              <section id="loginPage">
+                <h5 class="mb-3">登录</h5>
+                <form id="loginForm" class="needs-validation" novalidate>
+                  <div class="mb-3">
+                    <label for="loginPhone" class="form-label">账号</label>
+                    <input id="loginPhone" class="form-control" placeholder="请输入 6 位以上账号" required />
+                  </div>
+                  <div class="mb-3">
+                    <label for="loginPassword" class="form-label">密码</label>
+                    <input id="loginPassword" type="password" class="form-control" required />
+                  </div>
+                  <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="loginAgree" />
+                    <label class="form-check-label small text-secondary" for="loginAgree">我已阅读并同意相关协议</label>
+                  </div>
+                  <button class="btn btn-primary w-100 rounded-3" type="submit">登录</button>
+                </form>
+                <div class="text-center mt-3">
+                  <button id="toRegisterBtn" class="btn btn-link">还没有账号？去注册</button>
+                </div>
+              </section>
+
+              <!-- 注册页 -->
+              <section id="registerPage" class="d-none">
+                <h5 class="mb-3">注册</h5>
+                <form id="registerForm" class="needs-validation" novalidate>
+                  <div class="mb-3">
+                    <label for="regPhone" class="form-label">账号</label>
+                    <input id="regPhone" class="form-control" placeholder="请输入 6 位以上账号" required />
+                  </div>
+                  <div class="mb-3">
+                    <label for="regPassword" class="form-label">密码</label>
+                    <input id="regPassword" type="password" class="form-control" required />
+                  </div>
+                  <div class="mb-3">
+                    <label for="regPasswordConfirm" class="form-label">确认密码</label>
+                    <input id="regPasswordConfirm" type="password" class="form-control" required />
+                  </div>
+                  <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="registerAgree" />
+                    <label class="form-check-label small text-secondary" for="registerAgree">我已阅读并同意相关协议</label>
+                  </div>
+                  <button class="btn btn-success w-100 rounded-3" type="submit">注册并登录</button>
+                </form>
+                <div class="text-center mt-3">
+                  <button id="toLoginBtn" class="btn btn-link">已有账号？去登录</button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 主应用容器：已登录时显示 -->
+    <div id="mainContainer" class="container-fluid d-none">
+      <div class="row g-3 app-shell">
+        <!-- 桌面左侧侧边栏 -->
+        <aside class="col-md-3 col-lg-2 d-none d-md-block">
+          <div class="card border-0 shadow-sm rounded-4 h-100 sidebar-card">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-bold">导航</h6>
+                <button id="logoutBtn" class="btn btn-sm btn-outline-danger">退出</button>
+              </div>
+
+              <button class="btn nav-btn text-start mb-2 active" data-view="messagesView">
+                消息 <span id="totalUnreadDesktop" class="badge text-bg-danger ms-2">0</span>
+              </button>
+              <button class="btn nav-btn text-start mb-2" data-view="friendsView">
+                好友 <span id="friendReqBadgeDesktop" class="badge text-bg-warning ms-2 d-none">0</span>
+              </button>
+              <button class="btn nav-btn text-start mb-2" data-view="groupsView">群组</button>
+              <button class="btn nav-btn text-start mb-2" data-view="profileView">个人资料</button>
+              <button id="adminNavDesktop" class="btn nav-btn text-start mb-2 d-none" data-view="adminView">后台管理</button>
+
+              <div class="mt-auto small text-secondary">
+                <div>用户：<span id="sidebarUsername">-</span></div>
+                <div>状态：<span class="text-success">在线</span></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 右侧主内容区 -->
+        <main class="col-12 col-md-9 col-lg-10">
+          <div class="card border-0 shadow-sm rounded-4 h-100 main-card">
+            <div class="card-body p-0 d-flex flex-column">
+              <!-- 手机顶部栏 -->
+              <div class="d-md-none border-bottom p-2 d-flex justify-content-between align-items-center">
+                <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="offcanvas" data-bs-target="#mobileDrawer">菜单</button>
+                <strong>即时聊天</strong>
+                <button id="mobileLogoutBtn" class="btn btn-outline-danger btn-sm">退出</button>
+              </div>
+
+              <!-- 消息页 -->
+              <section id="messagesView" class="view-section d-flex flex-column h-100">
+                <div class="row g-0 h-100 flex-grow-1">
+                  <div class="col-12 col-lg-4 border-end conversation-pane">
+                    <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                      <h6 class="mb-0">会话列表</h6>
+                      <span id="totalUnreadText" class="badge text-bg-danger">0</span>
+                    </div>
+                    <div id="conversationList" class="list-group list-group-flush conversation-list"></div>
+                  </div>
+
+                  <div class="col-12 col-lg-8 d-flex flex-column chat-pane">
+                    <div id="chatHeader" class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                      <div id="chatHeaderMain" class="d-flex align-items-center gap-2 chat-header-main">
+                        <img id="chatAvatar" class="chat-header-avatar" alt="avatar" />
+                        <div>
+                          <h6 id="chatTitle" class="mb-1">请选择会话</h6>
+                          <small id="chatSubTitle" class="text-secondary">支持单聊和群聊</small>
+                        </div>
+                      </div>
+                      <div class="d-flex align-items-center gap-2">
+                        <button id="chatDetailsBtn" class="btn btn-outline-secondary btn-sm" type="button">详情</button>
+                        <button id="multiSelectToggleBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">多选</button>
+                        <button id="mobileBackToListBtn" class="btn btn-outline-secondary btn-sm d-lg-none d-none">返回</button>
+                        <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm d-none">加载更多</button>
+                      </div>
+                    </div>
+
+                    <div id="multiSelectBar" class="border-bottom px-3 py-2 d-none">
+                      <div class="d-flex align-items-center justify-content-between gap-2">
+                        <div class="small text-secondary">已选 <span id="multiSelectCount">0</span> 条消息</div>
+                        <div class="d-flex gap-2">
+                          <button id="multiForwardBtn" class="btn btn-sm btn-success" type="button">批量转发</button>
+                          <button id="multiSelectCancelBtn" class="btn btn-sm btn-outline-secondary" type="button">退出多选</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="messageList" class="flex-grow-1 p-3 message-list"></div>
+
+                    <div id="chatComposer" class="border-top p-2 p-md-3">
+                      <div id="muteHintBar" class="alert alert-warning py-2 px-3 mb-2 d-none">你已被群主禁言，当前无法发送消息</div>
+                      <div id="replyPreviewBar" class="alert alert-secondary py-2 px-3 mb-2 d-none">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                          <div>
+                            <div id="replyPreviewTitle" class="fw-semibold small"></div>
+                            <div id="replyPreviewText" class="small text-secondary"></div>
+                          </div>
+                          <button id="clearReplyBtn" class="btn btn-sm btn-outline-secondary" type="button">取消</button>
+                        </div>
+                      </div>
+                      <div class="d-flex flex-wrap gap-1 mb-2 d-none" id="emojiBar"></div>
+                      <div class="chat-tools-row mb-2">
+                        <button id="emojiToggleBtn" class="btn btn-outline-secondary btn-sm" type="button" title="表情">😊</button>
+                        <button id="voiceCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="语音通话">语音</button>
+                        <button id="videoCallBtn" class="btn btn-outline-primary btn-sm" type="button" title="视频通话">视频</button>
+                      </div>
+                      <div id="mentionSuggestBox" class="list-group mention-suggest-box d-none"></div>
+                      <div class="input-group">
+                        <button id="uploadImageBtn" class="btn btn-outline-secondary" type="button">图片</button>
+                        <input id="imageInput" type="file" accept="image/*" class="d-none" />
+                        <input id="messageInput" class="form-control" placeholder="输入消息..." />
+                        <button id="sendMessageBtn" class="btn btn-primary">发送</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 好友页 -->
+              <section id="friendsView" class="view-section d-none p-3">
+                <div class="card border-0 shadow-sm rounded-4">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h6 class="mb-0">我的好友</h6>
+                      <button id="toggleFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">新朋友</button>
+                    </div>
+                    <div class="input-group mb-3">
+                      <input id="friendSearchInput" class="form-control" placeholder="搜索好友账号" />
+                      <button id="friendSearchBtn" class="btn btn-primary">搜索</button>
+                    </div>
+                    <div id="friendSearchResults" class="list-group mb-3"></div>
+                    <div id="friendList" class="list-group mb-3"></div>
+
+                    <div id="friendToolsPanel" class="d-none border-top pt-3">
+                      <h6 class="mb-2">新朋友（收到的申请）</h6>
+                      <div id="incomingRequestList" class="list-group mb-3"></div>
+                      <h6 class="mb-2">我发出的申请</h6>
+                      <div id="outgoingRequestList" class="list-group"></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 群组页 -->
+              <section id="groupsView" class="view-section d-none p-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h6 class="mb-0">群组管理</h6>
+                  <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createGroupModal">创建群聊</button>
+                </div>
+                <div id="groupList" class="list-group"></div>
+              </section>
+
+              <!-- 个人资料页 -->
+              <section id="profileView" class="view-section d-none p-3">
+                <div class="row g-3">
+                  <div class="col-12 col-lg-4">
+                    <div class="card border-0 shadow-sm rounded-4 h-100">
+                      <div class="card-body text-center">
+                        <button id="avatarPickerBtn" class="avatar-picker-btn" type="button" title="点击更换头像">
+                          <img id="profileAvatar" class="profile-avatar mb-2" alt="avatar" />
+                          <span class="avatar-edit-hint">点击更换头像</span>
+                        </button>
+                        <input id="avatarInput" type="file" accept="image/*" class="d-none" />
+                        <div><small class="text-secondary">选择后自动预览，保存后生效</small></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-12 col-lg-8">
+                    <div class="card border-0 shadow-sm rounded-4 h-100">
+                      <div class="card-body">
+                        <h6 class="mb-3">资料编辑</h6>
+                        <div class="mb-3">
+                          <label for="nicknameInput" class="form-label">昵称</label>
+                          <input id="nicknameInput" class="form-control" />
+                        </div>
+                        <div class="mb-3">
+                          <label for="signatureInput" class="form-label">签名</label>
+                          <input id="signatureInput" class="form-control" />
+                        </div>
+                        <div class="mb-3 d-flex align-items-center gap-2">
+                          <label class="form-label mb-0">主题</label>
+                          <button id="toggleThemeBtn" class="btn btn-outline-secondary btn-sm">切换明/暗</button>
+                        </div>
+                        <button id="saveProfileBtn" class="btn btn-primary">保存资料</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="adminView" class="view-section d-none p-3">
+                <div class="card border-0 shadow-sm rounded-4">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h6 class="mb-0">后台管理</h6>
+                      <button id="adminRefreshBtn" class="btn btn-sm btn-outline-secondary" type="button">刷新</button>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table align-middle">
+                        <thead>
+                          <tr>
+                            <th>账号</th>
+                            <th>昵称</th>
+                            <th>角色</th>
+                            <th>注册时间</th>
+                            <th>最后在线</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody id="adminUserTableBody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <!-- 手机抽屉导航 -->
+      <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileDrawer">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title">导航</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body d-grid gap-2">
+          <button class="btn nav-btn text-start active" data-view="messagesView" data-mobile-nav="1">
+            消息 <span id="totalUnreadMobile" class="badge text-bg-danger ms-2">0</span>
+          </button>
+          <button class="btn nav-btn text-start" data-view="friendsView" data-mobile-nav="1">
+            好友 <span id="friendReqBadgeDrawer" class="badge text-bg-warning ms-2 d-none">0</span>
+          </button>
+          <button class="btn nav-btn text-start" data-view="groupsView" data-mobile-nav="1">群组</button>
+          <button class="btn nav-btn text-start" data-view="profileView" data-mobile-nav="1">个人资料</button>
+          <button id="adminNavDrawer" class="btn nav-btn text-start d-none" data-view="adminView" data-mobile-nav="1">后台管理</button>
+        </div>
+      </div>
+
+      <!-- 手机底部 tab -->
+      <nav class="mobile-tabbar d-md-none">
+        <button class="mobile-tab active" data-view="messagesView">消息</button>
+        <button class="mobile-tab" data-view="friendsView">
+          好友 <span id="friendReqBadgeMobileTab" class="badge text-bg-warning d-none">0</span>
+        </button>
+        <button class="mobile-tab" data-view="groupsView">群组</button>
+        <button class="mobile-tab" data-view="profileView">我</button>
+      </nav>
+
+      <!-- 创建群聊弹窗 -->
+      <div class="modal fade" id="createGroupModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">创建群聊</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="groupNameInput" class="form-label">群名称</label>
+                <input id="groupNameInput" class="form-control" placeholder="例如：前端学习群" />
+              </div>
+              <div>
+                <label class="form-label">选择成员（从好友中选择）</label>
+                <div id="groupMemberOptions" class="group-member-options"></div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button id="createGroupBtn" class="btn btn-success">创建</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 群资料与管理 -->
+      <div class="modal fade" id="groupManageModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title" id="groupManageTitle">群资料</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <img id="groupManageAvatar" class="chat-header-avatar" alt="group-avatar" />
+                <div>
+                  <div id="groupManageName" class="fw-semibold">群聊</div>
+                  <div id="groupManageMemberCount" class="small text-secondary">0 人</div>
+                </div>
+              </div>
+
+              <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#groupInfoTabPane" type="button" role="tab">群信息</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#groupMembersTabPane" type="button" role="tab">群成员</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#groupSettingsTabPane" type="button" role="tab">群管理</button>
+                </li>
+              </ul>
+
+              <div class="tab-content">
+                <div class="tab-pane fade show active" id="groupInfoTabPane" role="tabpanel">
+                  <div class="mb-2">
+                    <label class="form-label">群简介</label>
+                    <div id="groupManageDescription" class="form-control bg-body-tertiary">暂无简介</div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">群公告</label>
+                    <div id="groupManageNotice" class="form-control bg-body-tertiary">暂无公告</div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">群主</label>
+                    <div id="groupOwnerName" class="form-control bg-body-tertiary">未知</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">本群昵称</label>
+                    <div id="groupMyNickname" class="form-control bg-body-tertiary">未设置</div>
+                  </div>
+                  <div class="d-flex gap-2 flex-wrap">
+                    <button id="groupAvatarEditBtn" class="btn btn-sm btn-outline-secondary" type="button">修改群头像</button>
+                    <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
+                    <button id="groupManageHistorySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
+                    <button id="groupManageHistoryPhotosBtn" class="btn btn-outline-secondary btn-sm" type="button">历史照片</button>
+                    <button id="groupExitBtn" class="btn btn-outline-danger btn-sm" type="button">退出群</button>
+                  </div>
+                </div>
+
+                <div class="tab-pane fade" id="groupMembersTabPane" role="tabpanel">
+                  <div class="mb-3">
+                    <label for="groupMemberSearchInput" class="form-label">搜索群成员</label>
+                    <input id="groupMemberSearchInput" class="form-control" placeholder="输入昵称搜索" />
+                  </div>
+                  <div class="mb-3">
+                    <label for="groupAddMemberSelect" class="form-label">拉人进群</label>
+                    <div class="input-group">
+                      <select id="groupAddMemberSelect" class="form-select"></select>
+                      <button id="groupAddMemberBtn" class="btn btn-primary" type="button">添加</button>
+                    </div>
+                  </div>
+                  <div class="border-top pt-3">
+                    <div class="fw-semibold mb-2">成员列表</div>
+                    <div id="groupMemberManageList" class="list-group"></div>
+                  </div>
+                </div>
+
+                <div class="tab-pane fade" id="groupSettingsTabPane" role="tabpanel">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="groupAllowFriendAddSwitch" />
+                    <label class="form-check-label" for="groupAllowFriendAddSwitch">群内互加好友</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="groupAllowInviteSwitch" />
+                    <label class="form-check-label" for="groupAllowInviteSwitch">开启成员邀请</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="groupInviteApproveSwitch" />
+                    <label class="form-check-label" for="groupInviteApproveSwitch">邀请审核</label>
+                  </div>
+                  <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="groupGlobalMuteSwitch" />
+                    <label class="form-check-label" for="groupGlobalMuteSwitch">全员禁言</label>
+                  </div>
+                  <div class="mb-3">
+                    <label for="groupRateLimitSelect" class="form-label">发言频率限制（仅群主可设置）</label>
+                    <div class="input-group">
+                      <select id="groupRateLimitSelect" class="form-select">
+                        <option value="0">关闭限制</option>
+                        <option value="3">3 秒 1 条</option>
+                        <option value="5">5 秒 1 条</option>
+                        <option value="10">10 秒 1 条</option>
+                      </select>
+                      <button id="groupRateLimitSaveBtn" class="btn btn-outline-primary" type="button">保存</button>
+                    </div>
+                  </div>
+                  <div class="d-grid gap-2">
+                    <button id="groupMuteListBtn" class="btn btn-outline-secondary btn-sm" type="button">禁言名单</button>
+                    <button id="groupSettingsSaveBtn" class="btn btn-primary btn-sm" type="button">保存群管理设置</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="groupMuteListModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">禁言名单</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="groupMuteListBox" class="list-group"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 会话详情（单聊） -->
+      <div class="modal fade" id="directDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">会话详情</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <img id="directDetailsAvatar" class="chat-header-avatar" alt="direct-avatar" />
+                <div>
+                  <div id="directDetailsName" class="fw-semibold">好友</div>
+                  <div id="directDetailsStatus" class="small text-secondary">离线</div>
+                </div>
+              </div>
+              <div class="d-grid gap-2">
+                <button id="directDetailsHistorySearchBtn" class="btn btn-outline-secondary" type="button">查找聊天记录</button>
+                <button id="directDetailsHistoryPhotosBtn" class="btn btn-outline-secondary" type="button">查看历史照片</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 好友资料 -->
+      <div class="modal fade" id="friendProfileModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">好友资料</h5>
+              <div class="dropdown ms-auto me-2">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">更多</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><button id="friendProfileRemarkAction" class="dropdown-item" type="button">修改备注</button></li>
+                  <li><hr class="dropdown-divider" /></li>
+                  <li><button id="friendProfileDeleteAction" class="dropdown-item text-danger" type="button">删除好友</button></li>
+                </ul>
+              </div>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex align-items-center gap-3 mb-3">
+                <img id="friendProfileAvatar" class="chat-header-avatar" alt="friend-avatar" />
+                <div>
+                  <div id="friendProfileName" class="fw-semibold">好友</div>
+                  <div id="friendProfileAccount" class="small text-secondary">@账号</div>
+                </div>
+              </div>
+              <div class="small text-secondary mb-3">备注：<span id="friendProfileRemark">未设置</span></div>
+              <button id="friendProfileChatBtn" class="btn btn-primary w-100" type="button">发消息</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 编辑消息弹窗：仅管理员能触发 -->
+      <div class="modal fade" id="editMessageModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">编辑消息（管理员）</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="editMessageId" />
+              <label for="editMessageText" class="form-label">消息内容</label>
+              <textarea id="editMessageText" class="form-control" rows="4"></textarea>
+              <small class="text-secondary">保存后会更新时间戳。</small>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button id="saveEditMessageBtn" class="btn btn-primary">保存修改</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 消息操作弹窗：用于回复/编辑（移动端长按、桌面右键/按钮） -->
+      <div class="modal fade" id="messageActionModal" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">消息操作</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body d-grid gap-2">
+              <button id="msgActionReplyBtn" class="btn btn-outline-primary">回复</button>
+              <button id="msgActionEditBtn" class="btn btn-outline-secondary d-none">编辑</button>
+              <button id="msgActionMultiBtn" class="btn btn-outline-secondary">多选</button>
+              <button id="msgActionForwardBtn" class="btn btn-outline-success">转发</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 消息转发弹窗 -->
+      <div class="modal fade" id="forwardMessageModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">转发消息</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="forwardPreviewText" class="small text-secondary mb-2"></div>
+              <div class="small fw-semibold mb-2">选择目标会话（可多选）</div>
+              <div id="forwardTargetList" class="list-group"></div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button id="confirmForwardBtn" class="btn btn-success">一键转发</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史搜索 -->
+      <div class="modal fade" id="historySearchModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">查找聊天记录</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="input-group mb-2">
+                <input id="historySearchInput" class="form-control" placeholder="输入关键词搜索文本消息" />
+                <button id="historySearchDoBtn" class="btn btn-primary" type="button">搜索</button>
+              </div>
+              <div id="historySearchResultList" class="list-group"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史照片 -->
+      <div class="modal fade" id="historyPhotosModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">历史照片</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="historyPhotoGrid" class="history-photo-grid"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 照片预览 -->
+      <div class="modal fade" id="photoPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">照片预览</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+              <img id="photoPreviewImg" class="img-fluid rounded" alt="photo" />
+              <div id="photoPreviewMeta" class="small text-secondary mt-2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="adminResetPasswordModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">重置密码</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <input id="adminResetUserId" type="hidden" />
+              <div class="mb-2">
+                <label for="adminResetPassword" class="form-label">新密码</label>
+                <input id="adminResetPassword" type="password" class="form-control" />
+              </div>
+              <div class="mb-2">
+                <label for="adminResetPasswordConfirm" class="form-label">确认新密码</label>
+                <input id="adminResetPasswordConfirm" type="password" class="form-control" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button id="adminResetPasswordSubmitBtn" class="btn btn-danger" type="button">确认重置</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 来电提示 -->
+      <div id="incomingCallPanel" class="call-panel-overlay d-none">
+        <div class="call-panel-card text-center">
+          <img id="incomingCallAvatar" class="call-avatar mb-2" alt="avatar" />
+          <h6 id="incomingCallName" class="mb-1">来电</h6>
+          <div id="incomingCallTypeText" class="text-secondary small mb-3">语音通话</div>
+          <div class="d-flex justify-content-center gap-2">
+            <button id="incomingRejectBtn" class="btn btn-outline-danger btn-sm">拒绝</button>
+            <button id="incomingAcceptBtn" class="btn btn-success btn-sm">接听</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 通话中面板 -->
+      <div id="activeCallPanel" class="call-panel-overlay d-none">
+        <div class="call-panel-card call-active-card">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center gap-2">
+              <img id="activeCallAvatar" class="call-avatar" alt="avatar" />
+              <div>
+                <div id="activeCallName" class="fw-semibold">通话中</div>
+                <div id="activeCallStatus" class="small text-secondary">连接中...</div>
+              </div>
+            </div>
+            <span id="activeCallTypeBadge" class="badge text-bg-primary">语音</span>
+          </div>
+          <div id="activeCallVideoWrap" class="call-video-wrap d-none">
+            <video id="remoteVideo" class="call-remote-video" autoplay playsinline></video>
+            <video id="localVideo" class="call-local-video" autoplay playsinline muted></video>
+          </div>
+          <div class="d-flex justify-content-center gap-2 mt-3">
+            <button id="callSpeakerBtn" class="btn btn-outline-secondary btn-sm">扩音</button>
+            <button id="callMuteBtn" class="btn btn-outline-secondary btn-sm">静音</button>
+            <button id="callToggleCameraBtn" class="btn btn-outline-secondary btn-sm d-none">关闭摄像头</button>
+            <button id="callHangupBtn" class="btn btn-danger btn-sm">挂断</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="./script.js?v=20260308_1" defer></script>
+</body>
+</html>
+<-Xms2g pages-trigger-1773150810 -->
