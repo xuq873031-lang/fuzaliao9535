@@ -13,6 +13,7 @@ from .db import Base, SessionLocal, engine, get_db
 from .manager import ConnectionManager
 from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, friends, room_members
 from .schemas import (
+    AdminUserPermissionsIn,
     AdminResetPasswordIn,
     AdminUserOut,
     AddRoomMemberIn,
@@ -198,6 +199,13 @@ def can_actor_manage_member(db: Session, room_id: int, actor_id: int, target_id:
     target_role = get_room_member_role(db, room_id, target_id)
     if not actor_role or not target_role:
         return False
+    actor_user = db.get(User, actor_id)
+    if not actor_user:
+        return False
+    if action == "kick" and not has_permission(actor_user, "can_kick_members"):
+        return False
+    if action == "mute" and not has_permission(actor_user, "can_mute_members"):
+        return False
     if actor_role == "owner":
         return target_role != "owner" and actor_id != target_id
     can_kick, can_mute = get_room_member_permissions(db, room_id, actor_id)
@@ -376,6 +384,15 @@ def ensure_admin_user(current_user: User):
         raise HTTPException(status_code=403, detail="Admin only")
 
 
+def has_permission(user: User, field_name: str) -> bool:
+    return bool(getattr(user, field_name, False))
+
+
+def ensure_permission(user: User, field_name: str, detail: str):
+    if not has_permission(user, field_name):
+        raise HTTPException(status_code=403, detail=detail)
+
+
 def ensure_compatible_schema():
     """
     向后兼容迁移：
@@ -394,6 +411,17 @@ def ensure_compatible_schema():
                     conn.execute(text("ALTER TABLE users ADD COLUMN last_seen_at DATETIME"))
                 else:
                     conn.execute(text("ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMP NULL"))
+            if "can_kick_members" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN can_kick_members BOOLEAN"))
+            if "can_mute_members" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN can_mute_members BOOLEAN"))
+            if "can_use_edit_feature" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN can_use_edit_feature BOOLEAN"))
+            conn.execute(text("UPDATE users SET can_kick_members=false WHERE can_kick_members IS NULL"))
+            conn.execute(text("UPDATE users SET can_mute_members=false WHERE can_mute_members IS NULL"))
+            conn.execute(text("UPDATE users SET can_use_edit_feature=false WHERE can_use_edit_feature IS NULL"))
+            # 管理员账号默认具备三项全局能力，便于后台初始化后立即可用
+            conn.execute(text("UPDATE users SET can_kick_members=true, can_mute_members=true, can_use_edit_feature=true WHERE role='admin'"))
 
         if "chat_rooms" in table_names:
             room_columns = {col["name"] for col in inspector.get_columns("chat_rooms")}
@@ -482,8 +510,16 @@ def on_startup():
                 role="admin",
                 nickname="管理员",
                 signature="系统管理员",
+                can_kick_members=True,
+                can_mute_members=True,
+                can_use_edit_feature=True,
             )
             db.add(admin)
+            db.commit()
+        else:
+            admin.can_kick_members = True
+            admin.can_mute_members = True
+            admin.can_use_edit_feature = True
             db.commit()
     finally:
         db.close()
@@ -588,6 +624,9 @@ def list_admin_users(
             is_online=bool(u.is_online),
             created_at=u.created_at,
             last_seen_at=u.last_seen_at,
+            can_kick_members=bool(u.can_kick_members),
+            can_mute_members=bool(u.can_mute_members),
+            can_use_edit_feature=bool(u.can_use_edit_feature),
         )
         for u in rows
     ]
@@ -607,6 +646,25 @@ def admin_reset_user_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True, "user_id": user_id}
+
+
+@app.put("/api/admin/users/{user_id}/permissions")
+def admin_update_user_permissions(
+    user_id: int,
+    payload: AdminUserPermissionsIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_admin_user(current_user)
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.can_kick_members = bool(payload.can_kick_members)
+    user.can_mute_members = bool(payload.can_mute_members)
+    user.can_use_edit_feature = bool(payload.can_use_edit_feature)
     db.commit()
     return {"ok": True, "user_id": user_id}
 
@@ -1243,6 +1301,8 @@ async def remove_room_member(
     if room_effective_type(room) != "group":
         raise HTTPException(status_code=400, detail="Only group room supports member management")
 
+    if current_user.id != user_id:
+        ensure_permission(current_user, "can_kick_members", "后台未授予踢人权限")
     if current_user.id != user_id and not can_actor_manage_member(db, room_id, current_user.id, user_id, "kick"):
         raise HTTPException(status_code=403, detail="No permission to remove this member")
 
@@ -1335,6 +1395,7 @@ async def mute_room_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    ensure_permission(current_user, "can_mute_members", "后台未授予禁言权限")
     ensure_user_in_room(db, current_user.id, room_id)
     room = db.get(ChatRoom, room_id)
     if not room:
@@ -1373,6 +1434,7 @@ async def unmute_room_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    ensure_permission(current_user, "can_mute_members", "后台未授予禁言权限")
     ensure_user_in_room(db, current_user.id, room_id)
     room = db.get(ChatRoom, room_id)
     if not room:
@@ -1595,6 +1657,7 @@ async def edit_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    ensure_permission(current_user, "can_use_edit_feature", "后台未授予编辑权限")
     msg = db.get(Message, message_id)
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -1744,6 +1807,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     await websocket.send_json({"type": "error", "payload": {"message": "message_id/content required"}})
                     continue
 
+                db.refresh(user)
+                if not has_permission(user, "can_use_edit_feature"):
+                    await websocket.send_json({"type": "error", "payload": {"message": "后台未授予编辑权限"}})
+                    continue
                 msg = db.get(Message, data.message_id)
                 if not msg or msg.room_id != data.room_id:
                     await websocket.send_json({"type": "error", "payload": {"message": "Message not found"}})

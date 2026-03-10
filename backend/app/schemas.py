@@ -30,6 +30,9 @@ class UserOut(BaseModel):
     role: str
     is_online: bool
     last_seen_at: datetime | None = None
+    can_kick_members: bool = False
+    can_mute_members: bool = False
+    can_use_edit_feature: bool = False
 
     class Config:
         from_attributes = True
@@ -185,11 +188,20 @@ class AdminUserOut(BaseModel):
     is_online: bool
     created_at: datetime
     last_seen_at: datetime | None = None
+    can_kick_members: bool = False
+    can_mute_members: bool = False
+    can_use_edit_feature: bool = False
 
 
 class AdminResetPasswordIn(BaseModel):
     new_password: str = Field(min_length=6, max_length=64)
     confirm_password: str = Field(min_length=6, max_length=64)
+
+
+class AdminUserPermissionsIn(BaseModel):
+    can_kick_members: bool = False
+    can_mute_members: bool = False
+    can_use_edit_feature: bool = False
 
 
 class PresenceOnlineUserOut(BaseModel):

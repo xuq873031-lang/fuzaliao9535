@@ -280,6 +280,7 @@ function summarizeMessageText(text) {
 
 function canEditOwnMessage(msg) {
   if (!msg) return false;
+  if (!appState.currentUser?.canUseEditFeature) return false;
   if (msg.senderId !== appState.currentUser?.id) return false;
   if (isImageMessageText(msg.text)) return false;
   return true;
@@ -2665,8 +2666,8 @@ function bindGroupEvents() {
       const me = appState.roomMyMemberMetaByRoom[groupId];
       const actor = {
         isOwner: me?.role === 'owner',
-        canKick: !!(me?.role === 'owner' || me?.canKick),
-        canMute: !!(me?.role === 'owner' || me?.canMute)
+        canKick: !!appState.currentUser?.canKickMembers && !!(me?.role === 'owner' || me?.canKick),
+        canMute: !!appState.currentUser?.canMuteMembers && !!(me?.role === 'owner' || me?.canMute)
       };
       renderGroupManageMembers(appState.managingGroupMembers || [], actor);
     });
@@ -2757,7 +2758,7 @@ function bindGroupEvents() {
       const groupId = appState.managingGroupId;
       if (!groupId) return;
       const me = appState.roomMyMemberMetaByRoom[groupId];
-      if (!me || (me.role !== 'owner' && !me.canMute)) {
+      if (!me || !appState.currentUser?.canMuteMembers || (me.role !== 'owner' && !me.canMute)) {
         alert('无权限查看禁言名单');
         return;
       }
@@ -2981,8 +2982,8 @@ async function refreshGroupManageModal(groupId) {
   const me = (members || []).find((m) => Number(m.user_id) === Number(appState.currentUser?.id));
   const actor = {
     isOwner: me?.role === 'owner',
-    canKick: !!(me?.role === 'owner' || me?.can_kick),
-    canMute: !!(me?.role === 'owner' || me?.can_mute)
+    canKick: !!appState.currentUser?.canKickMembers && !!(me?.role === 'owner' || me?.can_kick),
+    canMute: !!appState.currentUser?.canMuteMembers && !!(me?.role === 'owner' || me?.can_mute)
   };
   appState.roomMyMemberMetaByRoom[groupId] = {
     role: me?.role || 'member',
@@ -3994,7 +3995,7 @@ async function loadMoreMessages() {
 }
 
 function openEditMessageModal(msg) {
-  if (appState.currentUser.role !== 'admin') return;
+  if (!appState.currentUser?.canUseEditFeature) return;
   appState.editingMessageId = msg.id;
   document.getElementById('editMessageId').value = String(msg.id);
   document.getElementById('editMessageText').value = msg.text;
@@ -4003,7 +4004,7 @@ function openEditMessageModal(msg) {
 }
 
 async function saveEditedMessage() {
-  if (appState.currentUser.role !== 'admin') return;
+  if (!appState.currentUser?.canUseEditFeature) return;
   const messageId = appState.editingMessageId;
   const text = document.getElementById('editMessageText').value.trim();
   if (!messageId || !text) return;
@@ -4528,7 +4529,10 @@ async function bootstrapAfterLogin(userFromAuth = null) {
     signature: me.signature || '',
     avatar: me.avatar_base64 || DEFAULT_AVATAR,
     role: me.role || 'member',
-    online: !!me.is_online
+    online: !!me.is_online,
+    canKickMembers: !!me.can_kick_members,
+    canMuteMembers: !!me.can_mute_members,
+    canUseEditFeature: !!me.can_use_edit_feature
   };
 
   mergeUserToMap(me);

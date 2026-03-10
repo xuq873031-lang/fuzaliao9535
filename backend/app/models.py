@@ -40,6 +40,9 @@ class User(Base):
     avatar_base64 = Column(Text, nullable=True)
     is_online = Column(Boolean, default=False, nullable=False)
     last_seen_at = Column(DateTime, nullable=True)
+    can_kick_members = Column(Boolean, default=False, nullable=False)
+    can_mute_members = Column(Boolean, default=False, nullable=False)
+    can_use_edit_feature = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     messages = relationship("Message", back_populates="sender", cascade="all, delete")
