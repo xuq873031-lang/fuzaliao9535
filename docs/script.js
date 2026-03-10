@@ -44,6 +44,8 @@ let appState = {
   actionTargetMessage: null,
   forwardingMessage: null,
   forwardingMessages: [],
+  forwardTargetKeyword: '',
+  forwardSelectedRoomIds: new Set(),
   ws: null,
   wsReconnectTimer: null,
   wsReconnectTried: false,
@@ -2939,6 +2941,10 @@ function bindGroupEvents() {
     forwardModalEl.addEventListener('hidden.bs.modal', () => {
       appState.forwardingMessage = null;
       appState.forwardingMessages = [];
+      appState.forwardTargetKeyword = '';
+      appState.forwardSelectedRoomIds = new Set();
+      const searchInput = document.getElementById('forwardTargetSearchInput');
+      if (searchInput) searchInput.value = '';
       const checks = document.querySelectorAll('.forward-target-check');
       checks.forEach((c) => {
         c.checked = false;
@@ -3460,18 +3466,25 @@ function updateMultiSelectBar() {
   const bar = document.getElementById('multiSelectBar');
   const countEl = document.getElementById('multiSelectCount');
   const toggleBtn = document.getElementById('multiSelectToggleBtn');
+  const clearBtn = document.getElementById('multiSelectClearBtn');
+  const forwardBtn = document.getElementById('multiForwardBtn');
   if (bar) bar.classList.toggle('d-none', !appState.multiSelectMode);
-  if (countEl) countEl.textContent = String(appState.multiSelectedMessageIds.size);
+  const selectedCount = appState.multiSelectedMessageIds.size;
+  if (countEl) countEl.textContent = String(selectedCount);
   if (toggleBtn) {
     toggleBtn.classList.toggle('d-none', !appState.activeConversationId);
     toggleBtn.textContent = appState.multiSelectMode ? '退出多选' : '多选';
   }
+  if (clearBtn) clearBtn.disabled = selectedCount === 0;
+  if (forwardBtn) forwardBtn.disabled = selectedCount === 0;
 }
 
 function openForwardModal(msg) {
   const list = Array.isArray(msg) ? msg : [msg];
   appState.forwardingMessages = list.filter(Boolean);
   appState.forwardingMessage = appState.forwardingMessages[0] || null;
+  appState.forwardTargetKeyword = '';
+  appState.forwardSelectedRoomIds = new Set();
   const preview = document.getElementById('forwardPreviewText');
   if (preview) {
     if (appState.forwardingMessages.length > 1) {
@@ -3483,22 +3496,30 @@ function openForwardModal(msg) {
         : `将转发：${summarizeMessageText(only?.text || '')}`;
     }
   }
+  const searchInput = document.getElementById('forwardTargetSearchInput');
+  if (searchInput) searchInput.value = '';
   renderForwardTargetList();
   const modal = new bootstrap.Modal(document.getElementById('forwardMessageModal'));
   modal.show();
+  if (searchInput) setTimeout(() => searchInput.focus(), 120);
 }
 
 function renderForwardTargetList() {
   const box = document.getElementById('forwardTargetList');
   if (!box) return;
   box.innerHTML = '';
+  const selected = new Set(appState.forwardSelectedRoomIds || []);
+  const keyword = String(appState.forwardTargetKeyword || '').trim().toLowerCase();
   const list = (appState.conversations || []).slice().sort((a, b) => {
     const ta = a.messages.length ? a.messages[a.messages.length - 1].createdAt : 0;
     const tb = b.messages.length ? b.messages[b.messages.length - 1].createdAt : 0;
     return tb - ta;
+  }).filter((conv) => {
+    if (!keyword) return true;
+    return getConversationTitle(conv).toLowerCase().includes(keyword);
   });
   if (!list.length) {
-    box.innerHTML = '<div class="text-secondary small">暂无可转发会话</div>';
+    box.innerHTML = '<div class="text-secondary small">没有匹配的目标会话</div>';
     return;
   }
   list.forEach((conv) => {
@@ -3513,8 +3534,18 @@ function renderForwardTargetList() {
         <small class="text-secondary">${isGroup ? '群聊' : '单聊'}</small>
       </div>
     `;
+    const check = row.querySelector('.forward-target-check');
+    if (check) {
+      check.checked = selected.has(Number(conv.id));
+      check.addEventListener('change', () => {
+        if (check.checked) selected.add(Number(conv.id));
+        else selected.delete(Number(conv.id));
+        appState.forwardSelectedRoomIds = selected;
+      });
+    }
     box.appendChild(row);
   });
+  appState.forwardSelectedRoomIds = selected;
 }
 
 function getImageUrlFromMessageText(text) {
@@ -3591,6 +3622,41 @@ function jumpToMessageById(messageId) {
       setTimeout(() => target.classList.remove('history-hit'), 1300);
     }
   }, 80);
+}
+
+async function revealAndJumpToMessage(messageId) {
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv || !messageId) return;
+  const targetId = Number(messageId);
+  let found = conv.messages.some((m) => Number(m.id) === targetId);
+  let page = 0;
+  while (!found && conv.hasMore !== false && page < 8) {
+    const oldest = conv.messages[0];
+    if (!oldest) break;
+    const batch = await apiGetRoomMessagesBefore(conv.id, oldest.id, 50);
+    if (!batch.length) {
+      conv.hasMore = false;
+      break;
+    }
+    const normalized = batch.map(normalizeMessage).reverse();
+    const exists = new Set(conv.messages.map((m) => Number(m.id)));
+    const toPrepend = normalized.filter((m) => !exists.has(Number(m.id)));
+    if (!toPrepend.length) {
+      conv.hasMore = false;
+      break;
+    }
+    conv.messages = [...toPrepend, ...conv.messages];
+    conv.hasMore = batch.length === 50;
+    page += 1;
+    found = conv.messages.some((m) => Number(m.id) === targetId);
+  }
+  if (!found) {
+    alert('未找到被引用的原消息');
+    return;
+  }
+  setMessageRenderLimit(conv.id, Math.max(getMessageRenderLimit(conv.id), conv.messages.length));
+  renderMessages({ autoScroll: false });
+  jumpToMessageById(targetId);
 }
 
 async function doHistorySearch() {
@@ -3688,8 +3754,8 @@ async function forwardMessageToSelectedTargets() {
     ? appState.forwardingMessages
     : (appState.forwardingMessage ? [appState.forwardingMessage] : []);
   if (!messages.length) return;
-  const checks = [...document.querySelectorAll('.forward-target-check:checked')];
-  if (!checks.length) {
+  const targets = [...(appState.forwardSelectedRoomIds || [])].map((id) => Number(id)).filter(Boolean);
+  if (!targets.length) {
     alert('请至少选择一个目标会话');
     return;
   }
@@ -3697,7 +3763,6 @@ async function forwardMessageToSelectedTargets() {
   const btn = document.getElementById('confirmForwardBtn');
   setButtonLoading(btn, true, '转发中...', '一键转发');
 
-  const targets = checks.map((c) => Number(c.value)).filter(Boolean);
   const success = [];
   const failed = [];
 
@@ -3769,6 +3834,9 @@ function bindChatEvents() {
   const multiSelectToggleBtn = document.getElementById('multiSelectToggleBtn');
   const multiSelectCancelBtn = document.getElementById('multiSelectCancelBtn');
   const multiForwardBtn = document.getElementById('multiForwardBtn');
+  const multiSelectSelectAllBtn = document.getElementById('multiSelectSelectAllBtn');
+  const multiSelectClearBtn = document.getElementById('multiSelectClearBtn');
+  const forwardTargetSearchInput = document.getElementById('forwardTargetSearchInput');
   const chatHeaderMain = document.getElementById('chatHeaderMain');
   const emojiToggleBtn = document.getElementById('emojiToggleBtn');
   const directDetailsHistorySearchBtn = document.getElementById('directDetailsHistorySearchBtn');
@@ -3866,6 +3934,31 @@ function bindChatEvents() {
         return;
       }
       openForwardModal(selected);
+    });
+  }
+  if (multiSelectSelectAllBtn) {
+    multiSelectSelectAllBtn.addEventListener('click', () => {
+      if (!appState.multiSelectMode) return;
+      const conv = findConversationById(appState.activeConversationId);
+      if (!conv) return;
+      const visible = getRenderableMessages(conv);
+      visible.forEach((m) => appState.multiSelectedMessageIds.add(Number(m.id)));
+      updateMultiSelectBar();
+      renderMessages({ autoScroll: false });
+    });
+  }
+  if (multiSelectClearBtn) {
+    multiSelectClearBtn.addEventListener('click', () => {
+      if (!appState.multiSelectMode) return;
+      appState.multiSelectedMessageIds = new Set();
+      updateMultiSelectBar();
+      renderMessages({ autoScroll: false });
+    });
+  }
+  if (forwardTargetSearchInput) {
+    forwardTargetSearchInput.addEventListener('input', () => {
+      appState.forwardTargetKeyword = forwardTargetSearchInput.value || '';
+      renderForwardTargetList();
     });
   }
   if (mobileBackBtn) mobileBackBtn.addEventListener('click', () => {
@@ -4365,7 +4458,7 @@ function buildMessageRow(msg, conv) {
   const replySenderName = msg.replyToSenderId ? getDisplayNameByUserId(msg.replyToSenderId) : '';
   const replyText = msg.replyToContent ? summarizeMessageText(msg.replyToContent) : '';
   const replyBlock = msg.replyToMessageId
-    ? `<div class="msg-reply-preview"><div class="fw-semibold">${escapeHtml(replySenderName || '消息')}</div><div>${escapeHtml(replyText || '引用消息')}</div></div>`
+    ? `<div class="msg-reply-preview" data-reply-to-id="${msg.replyToMessageId}"><div class="fw-semibold">${escapeHtml(replySenderName || '消息')}</div><div>${escapeHtml(replyText || '引用消息')}</div></div>`
     : '';
 
   const stateText = msg.localFailed ? '发送失败' : (msg.localPending ? '发送中...' : '');
@@ -4376,6 +4469,15 @@ function buildMessageRow(msg, conv) {
     <div>${messageContent}</div>
     <div class="msg-meta">${formatTime(msg.createdAt)} ${stateText ? ` · ${stateText}` : ''}</div>
   `;
+  const replyPreviewEl = bubble.querySelector('.msg-reply-preview');
+  if (replyPreviewEl && msg.replyToMessageId) {
+    replyPreviewEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      revealAndJumpToMessage(msg.replyToMessageId).catch((err) => {
+        console.warn('定位引用消息失败', err.message);
+      });
+    });
+  }
   if (appState.multiSelectMode) {
     const check = bubble.querySelector('.msg-select-check');
     if (check) {

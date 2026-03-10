@@ -162,6 +162,8 @@
                       <div class="d-flex align-items-center justify-content-between gap-2">
                         <div class="small text-secondary">已选 <span id="multiSelectCount">0</span> 条消息</div>
                         <div class="d-flex gap-2">
+                          <button id="multiSelectSelectAllBtn" class="btn btn-sm btn-outline-secondary" type="button">全选当前页</button>
+                          <button id="multiSelectClearBtn" class="btn btn-sm btn-outline-secondary" type="button">清空选择</button>
                           <button id="multiForwardBtn" class="btn btn-sm btn-success" type="button">批量转发</button>
                           <button id="multiSelectCancelBtn" class="btn btn-sm btn-outline-secondary" type="button">退出多选</button>
                         </div>
@@ -565,6 +567,10 @@
             <div class="modal-body">
               <div id="forwardPreviewText" class="small text-secondary mb-2"></div>
               <div class="small fw-semibold mb-2">选择目标会话（可多选）</div>
+              <div class="input-group input-group-sm mb-2">
+                <span class="input-group-text">搜索</span>
+                <input id="forwardTargetSearchInput" class="form-control" placeholder="输入会话名筛选目标" />
+              </div>
               <div id="forwardTargetList" class="list-group"></div>
             </div>
             <div class="modal-footer">
@@ -693,7 +699,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="./script.js?v=20260308_1" defer></script>
+  <script src="./script.js?v=20260310_2" defer></script>
 </body>
 </html>
 <-Xms2g pages-trigger-1773150810 -->
