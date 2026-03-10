@@ -55,6 +55,12 @@ class CreateGroupRoomIn(BaseModel):
 class RoomUpdateIn(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=120)
     avatar: str | None = None
+    description: str | None = Field(default=None, max_length=300)
+    notice: str | None = Field(default=None, max_length=300)
+    allow_member_friend_add: bool | None = None
+    allow_member_invite: bool | None = None
+    invite_need_approval: bool | None = None
+    global_mute: bool | None = None
 
 
 class RoomOut(BaseModel):
@@ -64,6 +70,12 @@ class RoomOut(BaseModel):
     type: str | None = None
     title: str | None = None
     avatar: str | None = None
+    description: str | None = ""
+    notice: str | None = ""
+    allow_member_friend_add: bool = False
+    allow_member_invite: bool = False
+    invite_need_approval: bool = True
+    global_mute: bool = False
     created_by: int
     member_ids: list[int]
     member_count: int | None = None
@@ -95,6 +107,13 @@ class RoomMuteOut(BaseModel):
     room_id: int
     user_id: int
     muted: bool
+
+
+class RoomMuteMemberOut(BaseModel):
+    user_id: int
+    nickname: str
+    avatar_base64: str | None = None
+    muted: bool = True
 
 
 class RoomRateLimitIn(BaseModel):

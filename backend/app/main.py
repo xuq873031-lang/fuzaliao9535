@@ -32,6 +32,7 @@ from .schemas import (
     RoomMemberOut,
     RoomMemberPermissionIn,
     RoomMuteOut,
+    RoomMuteMemberOut,
     RoomRateLimitIn,
     RoomUpdateIn,
     SendMessageIn,
@@ -205,6 +206,14 @@ def can_actor_manage_member(db: Session, room_id: int, actor_id: int, target_id:
     if action == "mute":
         return can_mute and target_role != "owner" and actor_id != target_id and not target_is_delegated_admin
     return False
+
+
+def can_bypass_group_global_mute(db: Session, room_id: int, user_id: int) -> bool:
+    role = get_room_member_role(db, room_id, user_id)
+    if role == "owner":
+        return True
+    can_kick, can_mute = get_room_member_permissions(db, room_id, user_id)
+    return bool(can_kick or can_mute)
 
 
 def should_bypass_group_rate_limit(db: Session, room_id: int, user_id: int) -> bool:
@@ -389,12 +398,30 @@ def ensure_compatible_schema():
                 conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN avatar TEXT"))
             if "rate_limit_seconds" not in room_columns:
                 conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN rate_limit_seconds INTEGER"))
+            if "description" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN description VARCHAR(300)"))
+            if "notice" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN notice VARCHAR(300)"))
+            if "allow_member_friend_add" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN allow_member_friend_add BOOLEAN"))
+            if "allow_member_invite" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN allow_member_invite BOOLEAN"))
+            if "invite_need_approval" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN invite_need_approval BOOLEAN"))
+            if "global_mute" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN global_mute BOOLEAN"))
 
             # 数据回填：旧 room_type=private -> type=dm，其余保留 group
             conn.execute(text("UPDATE chat_rooms SET type='dm' WHERE type IS NULL AND room_type='private'"))
             conn.execute(text("UPDATE chat_rooms SET type='group' WHERE type IS NULL AND room_type!='private'"))
             conn.execute(text("UPDATE chat_rooms SET title=name WHERE title IS NULL"))
             conn.execute(text("UPDATE chat_rooms SET rate_limit_seconds=0 WHERE rate_limit_seconds IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET description='' WHERE description IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET notice='' WHERE notice IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET allow_member_friend_add=0 WHERE allow_member_friend_add IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET allow_member_invite=0 WHERE allow_member_invite IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET invite_need_approval=1 WHERE invite_need_approval IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET global_mute=0 WHERE global_mute IS NULL"))
 
         if "room_members" in table_names:
             member_columns = {col["name"] for col in inspector.get_columns("room_members")}
@@ -912,6 +939,12 @@ def _create_group_room_impl(
         type=room_effective_type(room),
         title=room_effective_title(room),
         avatar=room.avatar,
+        description=room.description or "",
+        notice=room.notice or "",
+        allow_member_friend_add=bool(room.allow_member_friend_add),
+        allow_member_invite=bool(room.allow_member_invite),
+        invite_need_approval=(bool(room.invite_need_approval) if room.invite_need_approval is not None else True),
+        global_mute=bool(room.global_mute),
         rate_limit_seconds=int(room.rate_limit_seconds or 0),
         created_by=room.created_by,
         member_ids=list(valid_ids),
@@ -953,6 +986,12 @@ def list_my_rooms(db: Session = Depends(get_db), current_user: User = Depends(ge
                 type=room_effective_type(room),
                 title=room_effective_title(room),
                 avatar=room.avatar,
+                description=room.description or "",
+                notice=room.notice or "",
+                allow_member_friend_add=bool(room.allow_member_friend_add),
+                allow_member_invite=bool(room.allow_member_invite),
+                invite_need_approval=(bool(room.invite_need_approval) if room.invite_need_approval is not None else True),
+                global_mute=bool(room.global_mute),
                 rate_limit_seconds=int(room.rate_limit_seconds or 0),
                 created_by=room.created_by,
                 member_ids=member_ids,
@@ -986,6 +1025,18 @@ def update_group_room(
         room.name = title
     if payload.avatar is not None:
         room.avatar = payload.avatar
+    if payload.description is not None:
+        room.description = (payload.description or "").strip()
+    if payload.notice is not None:
+        room.notice = (payload.notice or "").strip()
+    if payload.allow_member_friend_add is not None:
+        room.allow_member_friend_add = bool(payload.allow_member_friend_add)
+    if payload.allow_member_invite is not None:
+        room.allow_member_invite = bool(payload.allow_member_invite)
+    if payload.invite_need_approval is not None:
+        room.invite_need_approval = bool(payload.invite_need_approval)
+    if payload.global_mute is not None:
+        room.global_mute = bool(payload.global_mute)
     db.commit()
     db.refresh(room)
 
@@ -1000,6 +1051,12 @@ def update_group_room(
         type=room_effective_type(room),
         title=room_effective_title(room),
         avatar=room.avatar,
+        description=room.description or "",
+        notice=room.notice or "",
+        allow_member_friend_add=bool(room.allow_member_friend_add),
+        allow_member_invite=bool(room.allow_member_invite),
+        invite_need_approval=(bool(room.invite_need_approval) if room.invite_need_approval is not None else True),
+        global_mute=bool(room.global_mute),
         rate_limit_seconds=int(room.rate_limit_seconds or 0),
         created_by=room.created_by,
         member_ids=member_ids,
@@ -1290,6 +1347,38 @@ async def unmute_room_member(
     return RoomMuteOut(room_id=room_id, user_id=user_id, muted=False)
 
 
+@app.get("/api/rooms/{room_id}/mute-list", response_model=list[RoomMuteMemberOut])
+def get_room_mute_list(
+    room_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_user_in_room(db, current_user.id, room_id)
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room_effective_type(room) != "group":
+        raise HTTPException(status_code=400, detail="Only group room supports mute list")
+    if not can_bypass_group_global_mute(db, room_id, current_user.id):
+        raise HTTPException(status_code=403, detail="No permission to view mute list")
+
+    rows = db.execute(select(RoomMute).where(RoomMute.room_id == room_id).order_by(desc(RoomMute.created_at))).scalars().all()
+    if not rows:
+        return []
+    user_ids = [r.user_id for r in rows]
+    users = db.execute(select(User).where(User.id.in_(user_ids))).scalars().all()
+    user_map = {u.id: u for u in users}
+    return [
+        RoomMuteMemberOut(
+            user_id=r.user_id,
+            nickname=(user_map[r.user_id].nickname if r.user_id in user_map else f"用户{r.user_id}"),
+            avatar_base64=(user_map[r.user_id].avatar_base64 if r.user_id in user_map else None),
+            muted=True,
+        )
+        for r in rows
+    ]
+
+
 @app.get("/api/rooms/unread", response_model=list[RoomUnreadOut])
 def get_rooms_unread(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     room_ids = get_room_ids_for_user(db, current_user.id)
@@ -1362,6 +1451,8 @@ async def post_room_message(
 ):
     ensure_user_in_room(db, current_user.id, room_id)
     room = db.get(ChatRoom, room_id)
+    if room and room_effective_type(room) == "group" and bool(room.global_mute) and not can_bypass_group_global_mute(db, room_id, current_user.id):
+        raise HTTPException(status_code=403, detail="该群已开启全员禁言")
     if room and room_effective_type(room) == "group" and is_user_muted_in_room(db, room_id, current_user.id):
         raise HTTPException(status_code=403, detail="You are muted in this group")
     if room:
@@ -1505,6 +1596,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
 
                 room = db.get(ChatRoom, data.room_id)
+                if room and room_effective_type(room) == "group" and bool(room.global_mute) and not can_bypass_group_global_mute(db, data.room_id, user_id):
+                    await websocket.send_json({"type": "error", "payload": {"message": "该群已开启全员禁言"}})
+                    continue
                 if room and room_effective_type(room) == "group" and is_user_muted_in_room(db, data.room_id, user_id):
                     await websocket.send_json({"type": "error", "payload": {"message": "You are muted in this group"}})
                     continue
