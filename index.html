@@ -110,7 +110,6 @@
               </button>
               <button class="btn nav-btn text-start mb-2" data-view="groupsView">群组</button>
               <button class="btn nav-btn text-start mb-2" data-view="profileView">个人资料</button>
-              <button id="adminNavDesktop" class="btn nav-btn text-start mb-2 d-none" data-view="adminView">后台管理</button>
 
               <div class="mt-auto small text-secondary">
                 <div>用户：<span id="sidebarUsername">-</span></div>
@@ -272,31 +271,6 @@
                 </div>
               </section>
 
-              <section id="adminView" class="view-section d-none p-3">
-                <div class="card border-0 shadow-sm rounded-4">
-                  <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                      <h6 class="mb-0">后台管理</h6>
-                      <button id="adminRefreshBtn" class="btn btn-sm btn-outline-secondary" type="button">刷新</button>
-                    </div>
-                    <div class="table-responsive">
-                      <table class="table align-middle">
-                        <thead>
-                          <tr>
-                            <th>账号</th>
-                            <th>昵称</th>
-                            <th>角色</th>
-                            <th>注册时间</th>
-                            <th>最后在线</th>
-                            <th>操作</th>
-                          </tr>
-                        </thead>
-                        <tbody id="adminUserTableBody"></tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </section>
             </div>
           </div>
         </main>
@@ -317,7 +291,6 @@
           </button>
           <button class="btn nav-btn text-start" data-view="groupsView" data-mobile-nav="1">群组</button>
           <button class="btn nav-btn text-start" data-view="profileView" data-mobile-nav="1">个人资料</button>
-          <button id="adminNavDrawer" class="btn nav-btn text-start d-none" data-view="adminView" data-mobile-nav="1">后台管理</button>
         </div>
       </div>
 
