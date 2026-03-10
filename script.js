@@ -32,6 +32,7 @@ let appState = {
   replyingToMessage: null,
   actionTargetMessage: null,
   forwardingMessage: null,
+  forwardingMessages: [],
   ws: null,
   wsReconnectTimer: null,
   wsReconnectTried: false,
@@ -56,6 +57,10 @@ let appState = {
   mentionCandidates: [],
   pendingMessageSeq: 0,
   activeFriendProfileId: null,
+  managingGroupMembers: [],
+  groupMemberSearchKeyword: '',
+  multiSelectMode: false,
+  multiSelectedMessageIds: new Set(),
   call: {
     status: 'idle', // idle|ringing|incoming|connecting|active|ended
     mode: null, // audio|video
@@ -676,6 +681,10 @@ async function apiSetRoomRateLimit(roomId, seconds) {
   });
 }
 
+async function apiGetRoomMuteList(roomId) {
+  return apiFetch(`/api/rooms/${roomId}/mute-list`);
+}
+
 async function apiUpdateRoom(roomId, payload) {
   return apiFetch(`/api/rooms/${roomId}`, {
     method: 'PATCH',
@@ -770,6 +779,12 @@ function roomToConversation(room) {
     createdBy: room.created_by,
     memberCount: room.member_count || (room.member_ids || []).length,
     rateLimitSeconds: Number(room.rate_limit_seconds || 0),
+    description: room.description || '',
+    notice: room.notice || '',
+    allowMemberFriendAdd: !!room.allow_member_friend_add,
+    allowMemberInvite: !!room.allow_member_invite,
+    inviteNeedApproval: room.invite_need_approval !== false,
+    globalMute: !!room.global_mute,
     hasMore: true
   };
 }
@@ -915,7 +930,11 @@ function sortFriendsAtoZ(friends) {
 }
 
 function applyMuteComposerState(conv) {
-  const muted = !!(conv && conv.type === 'group' && appState.roomMuteStateByRoom[conv.id] === true);
+  const isGroup = !!(conv && conv.type === 'group');
+  const roleMeta = isGroup ? appState.roomMyMemberMetaByRoom[conv.id] : null;
+  const bypassGlobalMute = !!(roleMeta && (roleMeta.role === 'owner' || roleMeta.canKick || roleMeta.canMute));
+  const globalMuted = !!(isGroup && conv.globalMute && !bypassGlobalMute);
+  const muted = !!(isGroup && (appState.roomMuteStateByRoom[conv.id] === true || globalMuted));
   const hintBar = document.getElementById('muteHintBar');
   const input = document.getElementById('messageInput');
   const sendBtn = document.getElementById('sendMessageBtn');
@@ -924,7 +943,7 @@ function applyMuteComposerState(conv) {
   if (hintBar) hintBar.classList.toggle('d-none', !muted);
   if (input) {
     input.disabled = muted;
-    input.placeholder = muted ? '你已被群主禁言' : '输入消息...';
+    input.placeholder = muted ? (globalMuted ? '该群已开启全员禁言' : '你已被群主禁言') : '输入消息...';
   }
   if (sendBtn) sendBtn.disabled = muted;
   if (uploadBtn) uploadBtn.disabled = muted;
@@ -2445,6 +2464,8 @@ async function openPrivateChatWith(friendId) {
   }
 
   appState.activeConversationId = conv.id;
+  appState.multiSelectMode = false;
+  appState.multiSelectedMessageIds = new Set();
   conv.unreadCount = 0;
   clearReplyAndEditState();
   switchView('messagesView', { keepRoom: true });
@@ -2505,6 +2526,21 @@ function bindGroupEvents() {
       openHistoryPhotosModal();
     });
   }
+  const memberSearchInput = document.getElementById('groupMemberSearchInput');
+  if (memberSearchInput) {
+    memberSearchInput.addEventListener('input', () => {
+      appState.groupMemberSearchKeyword = memberSearchInput.value || '';
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      const me = appState.roomMyMemberMetaByRoom[groupId];
+      const actor = {
+        isOwner: me?.role === 'owner',
+        canKick: !!(me?.role === 'owner' || me?.canKick),
+        canMute: !!(me?.role === 'owner' || me?.canMute)
+      };
+      renderGroupManageMembers(appState.managingGroupMembers || [], actor);
+    });
+  }
   const addBtn = document.getElementById('groupAddMemberBtn');
   if (addBtn) {
     addBtn.addEventListener('click', async () => {
@@ -2543,8 +2579,88 @@ function bindGroupEvents() {
         const res = await apiSetRoomRateLimit(groupId, seconds);
         conv.rateLimitSeconds = Number(res?.rate_limit_seconds || seconds || 0);
         alert('群发言频率设置已保存');
+        await refreshGroupManageModal(groupId);
       } catch (err) {
         alert(`保存失败：${err.message}`);
+      }
+    });
+  }
+  const settingsSaveBtn = document.getElementById('groupSettingsSaveBtn');
+  if (settingsSaveBtn) {
+    settingsSaveBtn.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      const me = appState.roomMyMemberMetaByRoom[groupId];
+      if (!me || me.role !== 'owner') {
+        alert('仅群主可修改群管理设置');
+        return;
+      }
+      const allowFriendAdd = !!document.getElementById('groupAllowFriendAddSwitch')?.checked;
+      const allowInvite = !!document.getElementById('groupAllowInviteSwitch')?.checked;
+      const inviteNeedApproval = !!document.getElementById('groupInviteApproveSwitch')?.checked;
+      const globalMute = !!document.getElementById('groupGlobalMuteSwitch')?.checked;
+      try {
+        const updated = await apiUpdateRoom(groupId, {
+          allow_member_friend_add: allowFriendAdd,
+          allow_member_invite: allowInvite,
+          invite_need_approval: inviteNeedApproval,
+          global_mute: globalMute
+        });
+        const conv = findConversationById(groupId);
+        if (conv) {
+          conv.allowMemberFriendAdd = !!updated?.allow_member_friend_add;
+          conv.allowMemberInvite = !!updated?.allow_member_invite;
+          conv.inviteNeedApproval = updated?.invite_need_approval !== false;
+          conv.globalMute = !!updated?.global_mute;
+          renderMessages({ autoScroll: false });
+          renderConversationList();
+        }
+        alert('群管理设置已保存');
+      } catch (err) {
+        alert(`保存失败：${err.message}`);
+      }
+    });
+  }
+  const muteListBtn = document.getElementById('groupMuteListBtn');
+  if (muteListBtn) {
+    muteListBtn.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      const me = appState.roomMyMemberMetaByRoom[groupId];
+      if (!me || (me.role !== 'owner' && !me.canMute)) {
+        alert('无权限查看禁言名单');
+        return;
+      }
+      try {
+        const rows = await apiGetRoomMuteList(groupId);
+        renderGroupMuteList(rows || []);
+        const modal = new bootstrap.Modal(document.getElementById('groupMuteListModal'));
+        modal.show();
+      } catch (err) {
+        alert(`加载禁言名单失败：${err.message}`);
+      }
+    });
+  }
+  const exitGroupBtn = document.getElementById('groupExitBtn');
+  if (exitGroupBtn) {
+    exitGroupBtn.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      if (!confirm('确定退出该群？')) return;
+      try {
+        await apiRemoveRoomMember(groupId, appState.currentUser.id);
+        const manageModal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
+        if (manageModal) manageModal.hide();
+        if (appState.activeConversationId === groupId) {
+          appState.activeConversationId = null;
+          stopRoomPolling();
+          renderMessages({ autoScroll: false });
+        }
+        await refreshRoomsAndMessages();
+        renderGroupList();
+        renderConversationList();
+      } catch (err) {
+        alert(`退出群失败：${err.message}`);
       }
     });
   }
@@ -2586,12 +2702,17 @@ function bindGroupEvents() {
   if (manageModalEl) {
     manageModalEl.addEventListener('hidden.bs.modal', () => {
       appState.managingGroupId = null;
+      appState.managingGroupMembers = [];
+      appState.groupMemberSearchKeyword = '';
+      const search = document.getElementById('groupMemberSearchInput');
+      if (search) search.value = '';
     });
   }
   const forwardModalEl = document.getElementById('forwardMessageModal');
   if (forwardModalEl) {
     forwardModalEl.addEventListener('hidden.bs.modal', () => {
       appState.forwardingMessage = null;
+      appState.forwardingMessages = [];
       const checks = document.querySelectorAll('.forward-target-check');
       checks.forEach((c) => {
         c.checked = false;
@@ -2693,14 +2814,19 @@ async function openGroupManageModal(groupId) {
   const conv = findConversationById(groupId);
   if (!conv || conv.type !== 'group') return;
   appState.managingGroupId = groupId;
+  appState.groupMemberSearchKeyword = '';
   const titleEl = document.getElementById('groupManageTitle');
-  if (titleEl) titleEl.textContent = `群管理 · ${conv.title || conv.name}`;
+  if (titleEl) titleEl.textContent = `群资料 · ${conv.title || conv.name}`;
   const avatarEl = document.getElementById('groupManageAvatar');
   if (avatarEl) avatarEl.src = getConversationAvatar(conv);
   const nameEl = document.getElementById('groupManageName');
   if (nameEl) nameEl.textContent = conv.title || conv.name || '群聊';
+  const countEl = document.getElementById('groupManageMemberCount');
+  if (countEl) countEl.textContent = `${conv.memberCount || (conv.members || []).length} 人`;
+  const descEl = document.getElementById('groupManageDescription');
+  if (descEl) descEl.textContent = conv.description || '暂无简介';
   const noticeEl = document.getElementById('groupManageNotice');
-  if (noticeEl) noticeEl.textContent = `群公告：${conv.notice || '暂无公告'}`;
+  if (noticeEl) noticeEl.textContent = conv.notice || '暂无公告';
   await refreshGroupManageModal(groupId);
   const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
   modal.show();
@@ -2708,6 +2834,20 @@ async function openGroupManageModal(groupId) {
 
 async function refreshGroupManageModal(groupId) {
   const [members, _friends] = await Promise.all([apiGetRoomMembers(groupId), refreshFriends()]);
+  appState.managingGroupMembers = members || [];
+  const countEl = document.getElementById('groupManageMemberCount');
+  if (countEl) countEl.textContent = `${(members || []).length} 人`;
+  (members || []).forEach((m) => {
+    mergeUserToMap({
+      id: Number(m.user_id),
+      username: m.username || '',
+      nickname: m.nickname || '',
+      email: '',
+      avatar_base64: appState.userMap[m.user_id]?.avatar || DEFAULT_AVATAR,
+      is_online: appState.onlineUserIds.has(Number(m.user_id)),
+      role: m.role || 'member'
+    });
+  });
   const me = (members || []).find((m) => Number(m.user_id) === Number(appState.currentUser?.id));
   const actor = {
     isOwner: me?.role === 'owner',
@@ -2720,12 +2860,31 @@ async function refreshGroupManageModal(groupId) {
     canMute: !!me?.can_mute,
     muted: !!me?.muted
   };
+  const owner = (members || []).find((m) => m.role === 'owner');
+  const ownerEl = document.getElementById('groupOwnerName');
+  if (ownerEl) ownerEl.textContent = owner ? getGroupPublicDisplayNameByUserId(owner.user_id) : '未知';
+  const myNickEl = document.getElementById('groupMyNickname');
+  if (myNickEl) myNickEl.textContent = appState.currentUser?.nickname || '未设置';
+
+  const conv = findConversationById(groupId);
+  const allowFriendAddEl = document.getElementById('groupAllowFriendAddSwitch');
+  const allowInviteEl = document.getElementById('groupAllowInviteSwitch');
+  const inviteApproveEl = document.getElementById('groupInviteApproveSwitch');
+  const globalMuteEl = document.getElementById('groupGlobalMuteSwitch');
+  const settingsControls = [allowFriendAddEl, allowInviteEl, inviteApproveEl, globalMuteEl];
+  settingsControls.forEach((el) => {
+    if (el) el.disabled = !actor.isOwner;
+  });
+  if (allowFriendAddEl) allowFriendAddEl.checked = !!conv?.allowMemberFriendAdd;
+  if (allowInviteEl) allowInviteEl.checked = !!conv?.allowMemberInvite;
+  if (inviteApproveEl) inviteApproveEl.checked = !!conv?.inviteNeedApproval;
+  if (globalMuteEl) globalMuteEl.checked = !!conv?.globalMute;
+
   renderGroupManageMembers(members || [], actor);
   renderGroupAddMemberOptions(groupId, members || [], actor.isOwner);
   const select = document.getElementById('groupRateLimitSelect');
   const saveBtn = document.getElementById('groupRateLimitSaveBtn');
   const avatarEditBtn = document.getElementById('groupAvatarEditBtn');
-  const conv = findConversationById(groupId);
   if (select) {
     const current = Number(conv?.rateLimitSeconds || 0);
     select.value = String([0, 3, 5, 10].includes(current) ? current : 0);
@@ -2754,7 +2913,7 @@ function renderGroupAddMemberOptions(groupId, members, isOwner) {
   }
   select.disabled = false;
   select.innerHTML = candidates
-    .map((u) => `<option value="${u.id}">${escapeHtml(u.nickname || u.username)}</option>`)
+    .map((u) => `<option value="${u.id}">${escapeHtml(getDisplayNameByUserId(u.id))}</option>`)
     .join('');
 }
 
@@ -2766,12 +2925,23 @@ function renderGroupManageMembers(members, actor) {
     box.innerHTML = '<div class="text-secondary small">暂无成员</div>';
     return;
   }
-  members.forEach((m) => {
+  const keyword = (appState.groupMemberSearchKeyword || '').trim().toLowerCase();
+  const filtered = keyword
+    ? members.filter((m) => getGroupPublicDisplayNameByUserId(m.user_id).toLowerCase().includes(keyword))
+    : members;
+  if (!filtered.length) {
+    box.innerHTML = '<div class="text-secondary small">未找到匹配成员</div>';
+    return;
+  }
+  filtered.forEach((m) => {
     const isSelf = Number(m.user_id) === Number(appState.currentUser?.id);
     const targetDelegated = !!(m.can_kick || m.can_mute);
     const roleBadge = m.role === 'owner' ? '<span class="badge text-bg-warning ms-1">群主</span>' : '';
+    const roleText = m.role === 'owner'
+      ? '群主'
+      : (m.can_kick && m.can_mute ? '管理员' : (m.can_kick ? '可踢人' : (m.can_mute ? '可禁言' : '成员')));
     const delegatedBadge = m.role !== 'owner' && (m.can_kick || m.can_mute)
-      ? `<span class="badge text-bg-info ms-1">${m.can_kick && m.can_mute ? '管理员' : (m.can_kick ? '可踢人' : '可禁言')}</span>`
+      ? `<span class="badge text-bg-info ms-1">${roleText}</span>`
       : '';
     const isOnline = appState.onlineUserIds.has(Number(m.user_id)) || !!appState.userMap[m.user_id]?.online;
     const dotClass = isOnline ? 'on' : 'off';
@@ -2795,7 +2965,7 @@ function renderGroupManageMembers(members, actor) {
     row.innerHTML = `
       <div>
         <div class="fw-semibold"><span class="online-dot ${dotClass}"></span>${escapeHtml(getGroupPublicDisplayNameByUserId(m.user_id))} ${roleBadge} ${delegatedBadge}</div>
-        <small class="text-secondary">${onlineText} ${m.muted ? '· 已禁言' : ''}</small>
+        <small class="text-secondary">${onlineText} · ${roleText} ${m.muted ? '· 已禁言' : ''}</small>
       </div>
       <div class="d-flex gap-2">
         ${grantKickBtn}
@@ -2854,6 +3024,47 @@ function renderGroupManageMembers(members, actor) {
           await refreshGroupManageModal(appState.managingGroupId);
         } catch (err) {
           alert(`设置权限失败：${err.message}`);
+        }
+      });
+    }
+    box.appendChild(row);
+  });
+}
+
+function renderGroupMuteList(rows) {
+  const box = document.getElementById('groupMuteListBox');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!rows || !rows.length) {
+    box.innerHTML = '<div class="text-secondary small">当前没有被禁言成员</div>';
+    return;
+  }
+  rows.forEach((m) => {
+    const row = document.createElement('div');
+    row.className = 'list-group-item d-flex align-items-center justify-content-between';
+    row.innerHTML = `
+      <div class="d-flex align-items-center gap-2">
+        <img src="${m.avatar_base64 || DEFAULT_AVATAR}" class="conversation-avatar" style="width:32px;height:32px;" alt="avatar" />
+        <div>
+          <div class="fw-semibold">${escapeHtml(getGroupPublicDisplayNameByUserId(m.user_id) || m.nickname || '群成员')}</div>
+          <small class="text-secondary">已禁言</small>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary">解除</button>
+    `;
+    const btn = row.querySelector('button');
+    if (btn) {
+      btn.addEventListener('click', async () => {
+        const groupId = appState.managingGroupId;
+        if (!groupId) return;
+        try {
+          await apiUnmuteRoomMember(groupId, m.user_id);
+          const list = await apiGetRoomMuteList(groupId);
+          renderGroupMuteList(list || []);
+          await refreshGroupManageModal(groupId);
+          await refreshRoomsAndMessages();
+        } catch (err) {
+          alert(`解除禁言失败：${err.message}`);
         }
       });
     }
@@ -2956,13 +3167,58 @@ function openMessageActionMenu(msg) {
   modal.show();
 }
 
+function enterMultiSelectMode(initialMessageId = null) {
+  appState.multiSelectMode = true;
+  appState.multiSelectedMessageIds = new Set();
+  if (initialMessageId) appState.multiSelectedMessageIds.add(Number(initialMessageId));
+  updateMultiSelectBar();
+  renderMessages({ autoScroll: false });
+}
+
+function exitMultiSelectMode() {
+  appState.multiSelectMode = false;
+  appState.multiSelectedMessageIds = new Set();
+  updateMultiSelectBar();
+  renderMessages({ autoScroll: false });
+}
+
+function toggleMultiSelectMessage(messageId) {
+  const id = Number(messageId);
+  if (appState.multiSelectedMessageIds.has(id)) appState.multiSelectedMessageIds.delete(id);
+  else appState.multiSelectedMessageIds.add(id);
+  updateMultiSelectBar();
+  const row = document.querySelector(`.msg-row[data-message-id="${id}"]`);
+  if (row) row.classList.toggle('selected', appState.multiSelectedMessageIds.has(id));
+  const checkbox = row?.querySelector('.msg-select-check');
+  if (checkbox) checkbox.checked = appState.multiSelectedMessageIds.has(id);
+}
+
+function updateMultiSelectBar() {
+  const bar = document.getElementById('multiSelectBar');
+  const countEl = document.getElementById('multiSelectCount');
+  const toggleBtn = document.getElementById('multiSelectToggleBtn');
+  if (bar) bar.classList.toggle('d-none', !appState.multiSelectMode);
+  if (countEl) countEl.textContent = String(appState.multiSelectedMessageIds.size);
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('d-none', !appState.activeConversationId);
+    toggleBtn.textContent = appState.multiSelectMode ? '退出多选' : '多选';
+  }
+}
+
 function openForwardModal(msg) {
-  appState.forwardingMessage = msg;
+  const list = Array.isArray(msg) ? msg : [msg];
+  appState.forwardingMessages = list.filter(Boolean);
+  appState.forwardingMessage = appState.forwardingMessages[0] || null;
   const preview = document.getElementById('forwardPreviewText');
   if (preview) {
-    preview.textContent = isImageMessageText(msg.text)
-      ? '将转发一条图片消息'
-      : `将转发：${summarizeMessageText(msg.text)}`;
+    if (appState.forwardingMessages.length > 1) {
+      preview.textContent = `将批量转发 ${appState.forwardingMessages.length} 条消息`;
+    } else {
+      const only = appState.forwardingMessage;
+      preview.textContent = isImageMessageText(only?.text)
+        ? '将转发一条图片消息'
+        : `将转发：${summarizeMessageText(only?.text || '')}`;
+    }
   }
   renderForwardTargetList();
   const modal = new bootstrap.Modal(document.getElementById('forwardMessageModal'));
@@ -3165,8 +3421,10 @@ async function openHistoryPhotos() {
 }
 
 async function forwardMessageToSelectedTargets() {
-  const msg = appState.forwardingMessage;
-  if (!msg) return;
+  const messages = (appState.forwardingMessages && appState.forwardingMessages.length)
+    ? appState.forwardingMessages
+    : (appState.forwardingMessage ? [appState.forwardingMessage] : []);
+  if (!messages.length) return;
   const checks = [...document.querySelectorAll('.forward-target-check:checked')];
   if (!checks.length) {
     alert('请至少选择一个目标会话');
@@ -3183,17 +3441,19 @@ async function forwardMessageToSelectedTargets() {
   for (const roomId of targets) {
     const conv = findConversationById(roomId);
     try {
-      const sent = await apiSendMessageDirect(roomId, msg.text);
+      for (const msg of messages) {
+        const sent = await apiSendMessageDirect(roomId, msg.text);
+        const normalized = normalizeMessage(sent);
+        if (conv) {
+          const exists = conv.messages.some((m) => m.id === normalized.id);
+          if (!exists) conv.messages.push(normalized);
+        }
+        if (appState.activeConversationId === roomId && conv) {
+          appendMessagesToView(conv, [normalized], { autoScroll: true });
+          await markCurrentRoomRead();
+        }
+      }
       success.push(conv?.title || conv?.name || `会话${roomId}`);
-      const normalized = normalizeMessage(sent);
-      if (conv) {
-        const exists = conv.messages.some((m) => m.id === normalized.id);
-        if (!exists) conv.messages.push(normalized);
-      }
-      if (appState.activeConversationId === roomId && conv) {
-        appendMessagesToView(conv, [normalized], { autoScroll: true });
-        await markCurrentRoomRead();
-      }
     } catch (err) {
       failed.push(`${conv?.title || conv?.name || roomId}: ${err.message}`);
     }
@@ -3203,6 +3463,8 @@ async function forwardMessageToSelectedTargets() {
   const modal = bootstrap.Modal.getInstance(document.getElementById('forwardMessageModal'));
   if (modal) modal.hide();
   appState.forwardingMessage = null;
+  appState.forwardingMessages = [];
+  if (appState.multiSelectMode) exitMultiSelectMode();
   renderConversationList();
   updateUnreadBadges();
 
@@ -3224,6 +3486,7 @@ function bindChatEvents() {
   const clearReplyBtn = document.getElementById('clearReplyBtn');
   const actionReplyBtn = document.getElementById('msgActionReplyBtn');
   const actionEditBtn = document.getElementById('msgActionEditBtn');
+  const actionMultiBtn = document.getElementById('msgActionMultiBtn');
   const actionForwardBtn = document.getElementById('msgActionForwardBtn');
   const mobileBackBtn = document.getElementById('mobileBackToListBtn');
   const voiceCallBtn = document.getElementById('voiceCallBtn');
@@ -3240,6 +3503,9 @@ function bindChatEvents() {
   const historySearchDoBtn = document.getElementById('historySearchDoBtn');
   const historySearchInput = document.getElementById('historySearchInput');
   const chatDetailsBtn = document.getElementById('chatDetailsBtn');
+  const multiSelectToggleBtn = document.getElementById('multiSelectToggleBtn');
+  const multiSelectCancelBtn = document.getElementById('multiSelectCancelBtn');
+  const multiForwardBtn = document.getElementById('multiForwardBtn');
   const chatHeaderMain = document.getElementById('chatHeaderMain');
   const emojiToggleBtn = document.getElementById('emojiToggleBtn');
   const directDetailsHistorySearchBtn = document.getElementById('directDetailsHistorySearchBtn');
@@ -3304,8 +3570,40 @@ function bindChatEvents() {
     if (modal) modal.hide();
     openForwardModal(msg);
   });
+  if (actionMultiBtn) actionMultiBtn.addEventListener('click', () => {
+    if (!appState.actionTargetMessage) return;
+    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
+    if (modal) modal.hide();
+    enterMultiSelectMode(appState.actionTargetMessage.id);
+  });
+  if (multiSelectToggleBtn) {
+    multiSelectToggleBtn.addEventListener('click', () => {
+      if (!appState.activeConversationId) return;
+      if (appState.multiSelectMode) exitMultiSelectMode();
+      else enterMultiSelectMode();
+    });
+  }
+  if (multiSelectCancelBtn) multiSelectCancelBtn.addEventListener('click', exitMultiSelectMode);
+  if (multiForwardBtn) {
+    multiForwardBtn.addEventListener('click', () => {
+      if (!appState.multiSelectMode || appState.multiSelectedMessageIds.size === 0) {
+        alert('请先选择要转发的消息');
+        return;
+      }
+      const conv = findConversationById(appState.activeConversationId);
+      if (!conv) return;
+      const selected = conv.messages.filter((m) => appState.multiSelectedMessageIds.has(Number(m.id)));
+      if (!selected.length) {
+        alert('未找到可转发消息');
+        return;
+      }
+      openForwardModal(selected);
+    });
+  }
   if (mobileBackBtn) mobileBackBtn.addEventListener('click', () => {
     appState.activeConversationId = null;
+    appState.multiSelectMode = false;
+    appState.multiSelectedMessageIds = new Set();
     clearReplyAndEditState({ resetInput: true });
     stopRoomPolling();
     renderConversationList();
@@ -3397,6 +3695,7 @@ function bindChatEvents() {
     }
     const conv = findConversationById(appState.activeConversationId);
     setChatPaneVisible(!!conv);
+    updateMultiSelectBar();
     updateCallButtonsState();
   });
 
@@ -3443,6 +3742,14 @@ async function handleImageUpload(e) {
   if (conv.type === 'group' && appState.roomMuteStateByRoom[conv.id]) {
     alert('你已被群主禁言，暂时不能发送消息');
     return;
+  }
+  if (conv.type === 'group') {
+    const meta = appState.roomMyMemberMetaByRoom[conv.id];
+    const bypassGlobalMute = !!(meta && (meta.role === 'owner' || meta.canKick || meta.canMute));
+    if (conv.globalMute && !bypassGlobalMute) {
+      alert('该群已开启全员禁言');
+      return;
+    }
   }
   const localRateState = checkLocalGroupRateLimit(conv);
   if (localRateState.blocked) {
@@ -3604,6 +3911,8 @@ function renderConversationList() {
 
     btn.addEventListener('click', () => {
       appState.activeConversationId = conv.id;
+      appState.multiSelectMode = false;
+      appState.multiSelectedMessageIds = new Set();
       conv.unreadCount = 0;
       clearReplyAndEditState();
       refreshCurrentUserMuteState(conv.id)
@@ -3692,6 +4001,9 @@ function buildMessageRow(msg, conv) {
   const row = document.createElement('div');
   row.className = `msg-row ${me ? 'me' : 'other'} ${isSystem ? 'system' : ''}`;
   row.dataset.messageId = String(msg.id);
+  if (appState.multiSelectMode && appState.multiSelectedMessageIds.has(Number(msg.id))) {
+    row.classList.add('selected');
+  }
   if (isSystem) {
     row.classList.remove('me', 'other');
     row.classList.add('system');
@@ -3707,7 +4019,7 @@ function buildMessageRow(msg, conv) {
   }
 
   const bubble = document.createElement('div');
-  bubble.className = `msg-bubble ${msg.localPending ? 'pending' : ''} ${msg.localFailed ? 'failed' : ''}`;
+  bubble.className = `msg-bubble ${appState.multiSelectMode ? 'selecting' : ''} ${msg.localPending ? 'pending' : ''} ${msg.localFailed ? 'failed' : ''}`;
 
   const senderName = !me && conv.type === 'group'
     ? `<div class="small fw-bold mb-1">${escapeHtml(getGroupPublicDisplayNameByUserId(msg.senderId))}</div>`
@@ -3722,11 +4034,26 @@ function buildMessageRow(msg, conv) {
   const stateText = msg.localFailed ? '发送失败' : (msg.localPending ? '发送中...' : '');
   bubble.innerHTML = `
     <button class="msg-action-btn" type="button" aria-label="消息操作">⋮</button>
+    ${appState.multiSelectMode ? '<input class="form-check-input msg-select-check me-2" type="checkbox" />' : ''}
     ${senderName}
     ${replyBlock}
     <div>${messageContent}</div>
     <div class="msg-meta">${formatTime(msg.createdAt)} ${stateText ? ` · ${stateText}` : ''}</div>
   `;
+  if (appState.multiSelectMode) {
+    const check = bubble.querySelector('.msg-select-check');
+    if (check) {
+      check.checked = appState.multiSelectedMessageIds.has(Number(msg.id));
+      check.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMultiSelectMessage(msg.id);
+      });
+    }
+    bubble.addEventListener('click', (e) => {
+      if (e.target.closest('.msg-action-btn')) return;
+      toggleMultiSelectMessage(msg.id);
+    });
+  }
 
   const actionBtn = bubble.querySelector('.msg-action-btn');
   if (actionBtn) actionBtn.addEventListener('click', (e) => {
@@ -3825,6 +4152,9 @@ function renderMessages(options = {}) {
 
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
+    appState.multiSelectMode = false;
+    appState.multiSelectedMessageIds = new Set();
+    updateMultiSelectBar();
     setChatPaneVisible(false);
     titleEl.textContent = '未选择会话';
     subEl.textContent = '请选择会话';
@@ -3842,6 +4172,7 @@ function renderMessages(options = {}) {
     return;
   }
   setChatPaneVisible(true);
+  updateMultiSelectBar();
   if (chatDetailsBtn) chatDetailsBtn.disabled = false;
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
@@ -3887,6 +4218,14 @@ async function sendMessage() {
   if (conv.type === 'group' && appState.roomMuteStateByRoom[conv.id]) {
     alert('你已被群主禁言，暂时不能发送消息');
     return;
+  }
+  if (conv.type === 'group') {
+    const meta = appState.roomMyMemberMetaByRoom[conv.id];
+    const bypassGlobalMute = !!(meta && (meta.role === 'owner' || meta.canKick || meta.canMute));
+    if (conv.globalMute && !bypassGlobalMute) {
+      alert('该群已开启全员禁言');
+      return;
+    }
   }
 
   // TODO: 后端 WebSocket 发送消息
@@ -4154,6 +4493,7 @@ window.__api = {
   apiRemoveRoomMember,
   apiMuteRoomMember,
   apiUnmuteRoomMember,
+  apiGetRoomMuteList,
   apiSetRoomMemberPermissions,
   apiSetRoomRateLimit,
   apiGetRoomMessages,

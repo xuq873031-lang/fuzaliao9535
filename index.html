@@ -141,8 +141,19 @@
                       </div>
                       <div class="d-flex align-items-center gap-2">
                         <button id="chatDetailsBtn" class="btn btn-outline-secondary btn-sm" type="button">详情</button>
+                        <button id="multiSelectToggleBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">多选</button>
                         <button id="mobileBackToListBtn" class="btn btn-outline-secondary btn-sm d-lg-none d-none">返回</button>
                         <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm d-none">加载更多</button>
+                      </div>
+                    </div>
+
+                    <div id="multiSelectBar" class="border-bottom px-3 py-2 d-none">
+                      <div class="d-flex align-items-center justify-content-between gap-2">
+                        <div class="small text-secondary">已选 <span id="multiSelectCount">0</span> 条消息</div>
+                        <div class="d-flex gap-2">
+                          <button id="multiForwardBtn" class="btn btn-sm btn-success" type="button">批量转发</button>
+                          <button id="multiSelectCancelBtn" class="btn btn-sm btn-outline-secondary" type="button">退出多选</button>
+                        </div>
                       </div>
                     </div>
 
@@ -308,12 +319,12 @@
         </div>
       </div>
 
-      <!-- 群管理弹窗（仅群主） -->
+      <!-- 群资料与管理 -->
       <div class="modal fade" id="groupManageModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content rounded-4">
             <div class="modal-header">
-              <h5 class="modal-title" id="groupManageTitle">群管理</h5>
+              <h5 class="modal-title" id="groupManageTitle">群资料</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -321,40 +332,116 @@
                 <img id="groupManageAvatar" class="chat-header-avatar" alt="group-avatar" />
                 <div>
                   <div id="groupManageName" class="fw-semibold">群聊</div>
-                  <div id="groupManageNotice" class="small text-secondary">群公告：暂无公告</div>
-                </div>
-                <div class="ms-auto">
-                  <button id="groupAvatarEditBtn" class="btn btn-sm btn-outline-secondary" type="button">修改群头像</button>
-                  <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
+                  <div id="groupManageMemberCount" class="small text-secondary">0 人</div>
                 </div>
               </div>
-              <div class="d-flex gap-2 flex-wrap mb-3">
-                <button id="groupManageHistorySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
-                <button id="groupManageHistoryPhotosBtn" class="btn btn-outline-secondary btn-sm" type="button">历史照片</button>
-              </div>
-              <div class="mb-3">
-                <label for="groupAddMemberSelect" class="form-label">拉人进群</label>
-                <div class="input-group">
-                  <select id="groupAddMemberSelect" class="form-select"></select>
-                  <button id="groupAddMemberBtn" class="btn btn-primary" type="button">添加</button>
+
+              <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#groupInfoTabPane" type="button" role="tab">群信息</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#groupMembersTabPane" type="button" role="tab">群成员</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#groupSettingsTabPane" type="button" role="tab">群管理</button>
+                </li>
+              </ul>
+
+              <div class="tab-content">
+                <div class="tab-pane fade show active" id="groupInfoTabPane" role="tabpanel">
+                  <div class="mb-2">
+                    <label class="form-label">群简介</label>
+                    <div id="groupManageDescription" class="form-control bg-body-tertiary">暂无简介</div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">群公告</label>
+                    <div id="groupManageNotice" class="form-control bg-body-tertiary">暂无公告</div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">群主</label>
+                    <div id="groupOwnerName" class="form-control bg-body-tertiary">未知</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">本群昵称</label>
+                    <div id="groupMyNickname" class="form-control bg-body-tertiary">未设置</div>
+                  </div>
+                  <div class="d-flex gap-2 flex-wrap">
+                    <button id="groupAvatarEditBtn" class="btn btn-sm btn-outline-secondary" type="button">修改群头像</button>
+                    <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
+                    <button id="groupManageHistorySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
+                    <button id="groupManageHistoryPhotosBtn" class="btn btn-outline-secondary btn-sm" type="button">历史照片</button>
+                    <button id="groupExitBtn" class="btn btn-outline-danger btn-sm" type="button">退出群</button>
+                  </div>
+                </div>
+
+                <div class="tab-pane fade" id="groupMembersTabPane" role="tabpanel">
+                  <div class="mb-3">
+                    <label for="groupMemberSearchInput" class="form-label">搜索群成员</label>
+                    <input id="groupMemberSearchInput" class="form-control" placeholder="输入昵称搜索" />
+                  </div>
+                  <div class="mb-3">
+                    <label for="groupAddMemberSelect" class="form-label">拉人进群</label>
+                    <div class="input-group">
+                      <select id="groupAddMemberSelect" class="form-select"></select>
+                      <button id="groupAddMemberBtn" class="btn btn-primary" type="button">添加</button>
+                    </div>
+                  </div>
+                  <div class="border-top pt-3">
+                    <div class="fw-semibold mb-2">成员列表</div>
+                    <div id="groupMemberManageList" class="list-group"></div>
+                  </div>
+                </div>
+
+                <div class="tab-pane fade" id="groupSettingsTabPane" role="tabpanel">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="groupAllowFriendAddSwitch" />
+                    <label class="form-check-label" for="groupAllowFriendAddSwitch">群内互加好友</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="groupAllowInviteSwitch" />
+                    <label class="form-check-label" for="groupAllowInviteSwitch">开启成员邀请</label>
+                  </div>
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="groupInviteApproveSwitch" />
+                    <label class="form-check-label" for="groupInviteApproveSwitch">邀请审核</label>
+                  </div>
+                  <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="groupGlobalMuteSwitch" />
+                    <label class="form-check-label" for="groupGlobalMuteSwitch">全员禁言</label>
+                  </div>
+                  <div class="mb-3">
+                    <label for="groupRateLimitSelect" class="form-label">发言频率限制（仅群主可设置）</label>
+                    <div class="input-group">
+                      <select id="groupRateLimitSelect" class="form-select">
+                        <option value="0">关闭限制</option>
+                        <option value="3">3 秒 1 条</option>
+                        <option value="5">5 秒 1 条</option>
+                        <option value="10">10 秒 1 条</option>
+                      </select>
+                      <button id="groupRateLimitSaveBtn" class="btn btn-outline-primary" type="button">保存</button>
+                    </div>
+                  </div>
+                  <div class="d-grid gap-2">
+                    <button id="groupMuteListBtn" class="btn btn-outline-secondary btn-sm" type="button">禁言名单</button>
+                    <button id="groupSettingsSaveBtn" class="btn btn-primary btn-sm" type="button">保存群管理设置</button>
+                  </div>
                 </div>
               </div>
-              <div class="mb-3">
-                <label for="groupRateLimitSelect" class="form-label">发言频率限制（仅群主可设置）</label>
-                <div class="input-group">
-                  <select id="groupRateLimitSelect" class="form-select">
-                    <option value="0">关闭限制</option>
-                    <option value="3">3 秒 1 条</option>
-                    <option value="5">5 秒 1 条</option>
-                    <option value="10">10 秒 1 条</option>
-                  </select>
-                  <button id="groupRateLimitSaveBtn" class="btn btn-outline-primary" type="button">保存</button>
-                </div>
-              </div>
-              <div class="border-top pt-3">
-                <div class="fw-semibold mb-2">成员管理</div>
-                <div id="groupMemberManageList" class="list-group"></div>
-              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="groupMuteListModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">禁言名单</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="groupMuteListBox" class="list-group"></div>
             </div>
           </div>
         </div>
@@ -449,6 +536,7 @@
             <div class="modal-body d-grid gap-2">
               <button id="msgActionReplyBtn" class="btn btn-outline-primary">回复</button>
               <button id="msgActionEditBtn" class="btn btn-outline-secondary d-none">编辑</button>
+              <button id="msgActionMultiBtn" class="btn btn-outline-secondary">多选</button>
               <button id="msgActionForwardBtn" class="btn btn-outline-success">转发</button>
             </div>
           </div>

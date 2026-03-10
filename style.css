@@ -214,6 +214,10 @@ body {
   margin-bottom: 10px;
 }
 
+.msg-row.selected .msg-bubble {
+  outline: 2px solid rgba(34, 158, 217, 0.45);
+}
+
 .msg-row.system {
   justify-content: center;
 }
@@ -237,6 +241,16 @@ body {
   margin-bottom: 2px;
   touch-action: manipulation;
   -webkit-touch-callout: none;
+}
+
+.msg-select-check {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+}
+
+.msg-bubble.selecting {
+  padding-left: 34px;
 }
 
 .msg-row.system .msg-bubble {
@@ -407,6 +421,20 @@ body {
 .group-member-options {
   max-height: 220px;
   overflow-y: auto;
+}
+
+#groupManageModal .tab-content {
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+#groupManageModal .nav-tabs .nav-link {
+  font-size: 13px;
+}
+
+#groupMuteListBox .list-group-item {
+  border-radius: 10px;
+  margin-bottom: 8px;
 }
 
 .history-photo-grid {
