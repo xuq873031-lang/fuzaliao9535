@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>聊天后台管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    :root {
+      --panel-bg: #f4f7fb;
+      --card-bg: #ffffff;
+      --line: #dce5f2;
+      --blue: #2f83e4;
+      --text: #1f2d3d;
+    }
+    body {
+      margin: 0;
+      background: var(--panel-bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .admin-shell {
+      min-height: 100vh;
+      display: flex;
+    }
+    .admin-sidebar {
+      width: 220px;
+      background: #f0f5fc;
+      border-right: 1px solid var(--line);
+      padding: 16px 12px;
+    }
+    .admin-logo {
+      font-weight: 700;
+      color: var(--blue);
+      margin-bottom: 18px;
+    }
+    .admin-nav .btn {
+      width: 100%;
+      text-align: left;
+      margin-bottom: 8px;
+      border-radius: 10px;
+    }
+    .admin-main {
+      flex: 1;
+      padding: 16px;
+      overflow: auto;
+    }
+    .admin-topbar {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .admin-card {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    @media (max-width: 991.98px) {
+      .admin-sidebar {
+        display: none;
+      }
+      .admin-main {
+        padding: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="loginView" class="login-wrap">
+    <div class="login-card">
+      <h5 class="mb-3">后台管理登录</h5>
+      <div class="text-secondary small mb-3">仅管理员可访问</div>
+      <form id="adminLoginForm" class="d-grid gap-3">
+        <div>
+          <label class="form-label">账号</label>
+          <input id="adminAccount" class="form-control" placeholder="请输入管理员账号" required />
+        </div>
+        <div>
+          <label class="form-label">密码</label>
+          <input id="adminPassword" type="password" class="form-control" required />
+        </div>
+        <button id="adminLoginBtn" class="btn btn-primary" type="submit">登录后台</button>
+      </form>
+      <div id="loginError" class="text-danger small mt-3 d-none"></div>
+      <a href="./index.html" class="btn btn-link btn-sm mt-2">返回聊天首页</a>
+    </div>
+  </div>
+
+  <div id="adminView" class="admin-shell d-none">
+    <aside class="admin-sidebar">
+      <div class="admin-logo">数据分析平台</div>
+      <div class="admin-nav">
+        <button class="btn btn-primary" type="button">系统用户</button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <div class="admin-topbar">
+        <div>
+          <div class="fw-semibold">系统用户管理</div>
+          <div class="small text-secondary">查看客户注册与登录状态，支持安全重置密码</div>
+        </div>
+        <div class="d-flex gap-2">
+          <button id="refreshUsersBtn" class="btn btn-outline-secondary btn-sm" type="button">刷新</button>
+          <button id="logoutBtn" class="btn btn-outline-danger btn-sm" type="button">退出</button>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <div class="row g-2 mb-3">
+          <div class="col-12 col-md-6">
+            <input id="userKeyword" class="form-control" placeholder="搜索账号 / 昵称" />
+          </div>
+          <div class="col-12 col-md-6 d-flex justify-content-md-end">
+            <span id="adminHint" class="small text-secondary align-self-center">准备就绪</span>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th>账号</th>
+                <th>昵称</th>
+                <th>角色</th>
+                <th>注册时间</th>
+                <th>最后在线</th>
+                <th>在线</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="userTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal fade" id="resetPwdModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">重置用户密码</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input id="resetUserId" type="hidden" />
+          <div class="mb-2">
+            <label class="form-label">新密码</label>
+            <input id="resetPwd1" type="password" class="form-control" />
+          </div>
+          <div>
+            <label class="form-label">确认新密码</label>
+            <input id="resetPwd2" type="password" class="form-control" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button id="confirmResetBtn" class="btn btn-danger" type="button">确认重置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const STORAGE_KEYS = {
+      token: 'chatwave_token',
+      apiBase: 'chat_api_base'
+    };
+    const DEFAULT_API_BASE = 'https://web-production-be9f.up.railway.app';
+
+    const state = {
+      users: [],
+      currentUser: null
+    };
+
+    function getApiBase() {
+      const saved = (localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim();
+      if (!saved || saved !== DEFAULT_API_BASE) {
+        localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
+      }
+      return DEFAULT_API_BASE;
+    }
+
+    function getToken() { return localStorage.getItem(STORAGE_KEYS.token) || ''; }
+    function setToken(token) { localStorage.setItem(STORAGE_KEYS.token, token); }
+    function clearToken() { localStorage.removeItem(STORAGE_KEYS.token); }
+
+    function setHint(text) {
+      const el = document.getElementById('adminHint');
+      if (el) el.textContent = text;
+    }
+
+    function showLoginError(msg) {
+      const el = document.getElementById('loginError');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove('d-none');
+    }
+
+    function hideLoginError() {
+      const el = document.getElementById('loginError');
+      if (!el) return;
+      el.classList.add('d-none');
+      el.textContent = '';
+    }
+
+    function switchToAdmin() {
+      document.getElementById('loginView').classList.add('d-none');
+      document.getElementById('adminView').classList.remove('d-none');
+    }
+
+    function switchToLogin() {
+      document.getElementById('adminView').classList.add('d-none');
+      document.getElementById('loginView').classList.remove('d-none');
+    }
+
+    function formatTime(v) {
+      if (!v) return '暂无';
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) return '暂无';
+      return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      }).format(d);
+    }
+
+    async function apiFetch(path, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      const body = options.body;
+      if (body && typeof body === 'string' && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
+      const token = getToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${getApiBase()}${path}`, { ...options, headers });
+
+      if (!res.ok) {
+        let detail = `请求失败(${res.status})`;
+        try {
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const data = await res.json();
+            detail = data.detail || detail;
+          } else {
+            const txt = await res.text();
+            detail = txt || detail;
+          }
+        } catch (_) {}
+
+        const err = new Error(detail);
+        err.status = res.status;
+        if (res.status === 401) {
+          clearToken();
+          switchToLogin();
+        }
+        throw err;
+      }
+
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) return res.json();
+      return null;
+    }
+
+    async function login(account, password) {
+      return apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: account, password })
+      });
+    }
+
+    async function getMe() {
+      return apiFetch('/api/users/me');
+    }
+
+    async function loadUsers() {
+      setHint('正在加载用户...');
+      const rows = await apiFetch('/api/admin/users');
+      state.users = Array.isArray(rows) ? rows : [];
+      renderUsers();
+      setHint(`已加载 ${state.users.length} 个用户`);
+    }
+
+    async function resetPassword(userId, p1, p2) {
+      return apiFetch(`/api/admin/users/${userId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ new_password: p1, confirm_password: p2 })
+      });
+    }
+
+    function renderUsers() {
+      const tbody = document.getElementById('userTableBody');
+      const keyword = (document.getElementById('userKeyword').value || '').trim().toLowerCase();
+      const rows = keyword
+        ? state.users.filter(u => String(u.username || '').toLowerCase().includes(keyword) || String(u.nickname || '').toLowerCase().includes(keyword))
+        : state.users;
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-secondary">暂无匹配用户</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      rows.forEach((u) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${u.username || ''}</td>
+          <td>${u.nickname || ''}</td>
+          <td>${u.role || ''}</td>
+          <td>${formatTime(u.created_at)}</td>
+          <td>${formatTime(u.last_seen_at)}</td>
+          <td>${u.is_online ? '<span class="badge text-bg-success">在线</span>' : '<span class="badge text-bg-secondary">离线</span>'}</td>
+          <td><button class="btn btn-sm btn-outline-danger" data-reset="${u.id}">重置密码</button></td>
+        `;
+        const btn = tr.querySelector('[data-reset]');
+        btn.addEventListener('click', () => {
+          document.getElementById('resetUserId').value = String(u.id);
+          document.getElementById('resetPwd1').value = '';
+          document.getElementById('resetPwd2').value = '';
+          new bootstrap.Modal(document.getElementById('resetPwdModal')).show();
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function ensureAdminSession() {
+      const token = getToken();
+      if (!token) {
+        switchToLogin();
+        return;
+      }
+      try {
+        const me = await getMe();
+        if ((me.role || '').toLowerCase() !== 'admin') {
+          clearToken();
+          switchToLogin();
+          showLoginError('当前账号不是管理员，不能访问后台');
+          return;
+        }
+        state.currentUser = me;
+        switchToAdmin();
+        await loadUsers();
+      } catch (err) {
+        switchToLogin();
+      }
+    }
+
+    document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideLoginError();
+      const btn = document.getElementById('adminLoginBtn');
+      const account = document.getElementById('adminAccount').value.trim();
+      const password = document.getElementById('adminPassword').value.trim();
+      if (!account || !password) {
+        showLoginError('请输入账号和密码');
+        return;
+      }
+
+      try {
+        btn.disabled = true;
+        btn.textContent = '登录中...';
+        const data = await login(account, password);
+        setToken(data.token);
+        const me = await getMe();
+        if ((me.role || '').toLowerCase() !== 'admin') {
+          clearToken();
+          showLoginError('当前账号不是管理员，不能访问后台');
+          return;
+        }
+        state.currentUser = me;
+        switchToAdmin();
+        await loadUsers();
+      } catch (err) {
+        showLoginError(`登录失败(${err.status || 'ERR'}): ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '登录后台';
+      }
+    });
+
+    document.getElementById('refreshUsersBtn').addEventListener('click', async () => {
+      try {
+        await loadUsers();
+      } catch (err) {
+        alert(`刷新失败：${err.message}`);
+      }
+    });
+
+    document.getElementById('userKeyword').addEventListener('input', renderUsers);
+
+    document.getElementById('confirmResetBtn').addEventListener('click', async () => {
+      const uid = Number(document.getElementById('resetUserId').value || 0);
+      const p1 = document.getElementById('resetPwd1').value.trim();
+      const p2 = document.getElementById('resetPwd2').value.trim();
+      if (!uid) return;
+      if (!p1 || p1.length < 6) {
+        alert('新密码长度至少 6 位');
+        return;
+      }
+      if (p1 !== p2) {
+        alert('两次密码不一致');
+        return;
+      }
+      if (!confirm('确认重置该用户密码？')) return;
+
+      const btn = document.getElementById('confirmResetBtn');
+      try {
+        btn.disabled = true;
+        btn.textContent = '重置中...';
+        await resetPassword(uid, p1, p2);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('resetPwdModal'));
+        if (modal) modal.hide();
+        alert('密码重置成功');
+      } catch (err) {
+        alert(`重置失败(${err.status || 'ERR'}): ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '确认重置';
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      clearToken();
+      switchToLogin();
+      hideLoginError();
+      setHint('已退出');
+    });
+
+    ensureAdminSession();
+  </script>
+</body>
+</html>
