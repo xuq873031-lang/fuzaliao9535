@@ -4,9 +4,17 @@
 
 const STORAGE_KEYS = {
   token: 'chatwave_token',
-  theme: 'chatwave_theme'
+  theme: 'chatwave_theme',
+  apiBase: 'chat_api_base',
+  wsBase: 'chat_ws_base'
 };
-const DEFAULT_API_BASE = 'https://web-production-be9f.up.railway.app';
+const CHAT_CONFIG = window.__CHAT_CONFIG || {};
+const DEFAULT_API_BASE = String(
+  CHAT_CONFIG.API_BASE || 'https://web-production-be9f.up.railway.app'
+).trim().replace(/\/$/, '');
+const DEFAULT_WS_BASE = String(
+  CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
+).trim().replace(/\/$/, '');
 const APP_BUILD = '20260308_1';
 const SHOW_DEBUG_BADGE = false;
 
@@ -44,7 +52,6 @@ let appState = {
   lastMessageIdByRoom: {},
   lastSentAtByRoom: {},
   unreadPollTimer: null,
-  baseCorrectedLogged: false,
   conversationRenderQueued: false,
   userNearBottom: true,
   lastSoundAt: 0,
@@ -97,20 +104,19 @@ function clearToken() {
 }
 
 function getApiBase() {
-  const stored = String(localStorage.getItem('chat_api_base') || '').trim().replace(/\/$/, '');
-  if (!stored) {
-    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
+  const stored = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
+  if (!stored || !/^https?:\/\//i.test(stored)) {
+    localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
     return DEFAULT_API_BASE;
   }
-  if (stored !== DEFAULT_API_BASE) {
-    localStorage.setItem('chat_api_base', DEFAULT_API_BASE);
-    localStorage.removeItem(STORAGE_KEYS.token);
-    if (!appState.baseCorrectedLogged) {
-      console.info('API base updated');
-      appState.baseCorrectedLogged = true;
-    }
-  }
-  return DEFAULT_API_BASE;
+  return stored;
+}
+
+function getWsBase() {
+  const stored = String(localStorage.getItem(STORAGE_KEYS.wsBase) || '').trim().replace(/\/$/, '');
+  if (stored && /^wss?:\/\//i.test(stored)) return stored;
+  const fromApi = getApiBase().replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+  return fromApi || DEFAULT_WS_BASE;
 }
 
 function renderApiBaseIndicator() {
@@ -1235,8 +1241,7 @@ function connectWebSocket() {
     appState.ws = null;
   }
 
-  const apiBase = getApiBase();
-  const wsBase = apiBase.replace('http://', 'ws://').replace('https://', 'wss://');
+  const wsBase = getWsBase();
   const wsUrl = `${wsBase}/ws?token=${encodeURIComponent(token)}`;
   const ws = new WebSocket(wsUrl);
   appState.ws = ws;
