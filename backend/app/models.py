@@ -38,6 +38,8 @@ class User(Base):
     nickname = Column(String(80), default="", nullable=False)
     signature = Column(String(200), default="", nullable=False)
     avatar_base64 = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_banned = Column(Boolean, default=False, nullable=False)
     is_online = Column(Boolean, default=False, nullable=False)
     last_seen_at = Column(DateTime, nullable=True)
     can_kick_members = Column(Boolean, default=False, nullable=False)

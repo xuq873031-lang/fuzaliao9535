@@ -28,6 +28,8 @@ class UserOut(BaseModel):
     signature: str
     avatar_base64: str | None = None
     role: str
+    is_active: bool = True
+    is_banned: bool = False
     is_online: bool
     last_seen_at: datetime | None = None
     can_kick_members: bool = False
@@ -185,6 +187,8 @@ class AdminUserOut(BaseModel):
     username: str
     nickname: str
     role: str
+    is_active: bool = True
+    is_banned: bool = False
     is_online: bool
     created_at: datetime
     last_seen_at: datetime | None = None
@@ -202,6 +206,11 @@ class AdminUserPermissionsIn(BaseModel):
     can_kick_members: bool = False
     can_mute_members: bool = False
     can_use_edit_feature: bool = False
+
+
+class AdminUserStatusIn(BaseModel):
+    is_active: bool | None = None
+    is_banned: bool | None = None
 
 
 class PresenceOnlineUserOut(BaseModel):

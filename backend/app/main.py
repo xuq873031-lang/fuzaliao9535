@@ -13,6 +13,7 @@ from .db import Base, SessionLocal, engine, get_db
 from .manager import ConnectionManager
 from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, friends, room_members
 from .schemas import (
+    AdminUserStatusIn,
     AdminUserPermissionsIn,
     AdminResetPasswordIn,
     AdminUserOut,
@@ -112,6 +113,10 @@ def get_current_user(
     user = db.get(User, uid)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if not bool(user.is_active):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已注销")
+    if bool(user.is_banned):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已封禁")
     return user
 
 
@@ -417,9 +422,15 @@ def ensure_compatible_schema():
                 conn.execute(text("ALTER TABLE users ADD COLUMN can_mute_members BOOLEAN"))
             if "can_use_edit_feature" not in user_columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN can_use_edit_feature BOOLEAN"))
+            if "is_active" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN"))
+            if "is_banned" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_banned BOOLEAN"))
             conn.execute(text("UPDATE users SET can_kick_members=false WHERE can_kick_members IS NULL"))
             conn.execute(text("UPDATE users SET can_mute_members=false WHERE can_mute_members IS NULL"))
             conn.execute(text("UPDATE users SET can_use_edit_feature=false WHERE can_use_edit_feature IS NULL"))
+            conn.execute(text("UPDATE users SET is_active=true WHERE is_active IS NULL"))
+            conn.execute(text("UPDATE users SET is_banned=false WHERE is_banned IS NULL"))
             # 管理员账号默认具备三项全局能力，便于后台初始化后立即可用
             conn.execute(text("UPDATE users SET can_kick_members=true, can_mute_members=true, can_use_edit_feature=true WHERE role='admin'"))
 
@@ -510,6 +521,8 @@ def on_startup():
                 role="admin",
                 nickname="管理员",
                 signature="系统管理员",
+                is_active=True,
+                is_banned=False,
                 can_kick_members=True,
                 can_mute_members=True,
                 can_use_edit_feature=True,
@@ -517,6 +530,8 @@ def on_startup():
             db.add(admin)
             db.commit()
         else:
+            admin.is_active = True
+            admin.is_banned = False
             admin.can_kick_members = True
             admin.can_mute_members = True
             admin.can_use_edit_feature = True
@@ -585,6 +600,10 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
     user = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    if not bool(user.is_active):
+        raise HTTPException(status_code=403, detail="账号已注销，无法登录")
+    if bool(user.is_banned):
+        raise HTTPException(status_code=403, detail="账号已封禁，无法登录")
 
     token = create_access_token(user.id, user.username)
     return TokenOut(token=token, user=UserOut.model_validate(user))
@@ -621,6 +640,8 @@ def list_admin_users(
             username=u.username,
             nickname=u.nickname,
             role=u.role,
+            is_active=bool(u.is_active),
+            is_banned=bool(u.is_banned),
             is_online=bool(u.is_online),
             created_at=u.created_at,
             last_seen_at=u.last_seen_at,
@@ -667,6 +688,38 @@ def admin_update_user_permissions(
     user.can_use_edit_feature = bool(payload.can_use_edit_feature)
     db.commit()
     return {"ok": True, "user_id": user_id}
+
+
+@app.put("/api/admin/users/{user_id}/status")
+def admin_update_user_status(
+    user_id: int,
+    payload: AdminUserStatusIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_admin_user(current_user)
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="不能修改当前登录管理员账号状态")
+
+    if payload.is_active is not None:
+        user.is_active = bool(payload.is_active)
+    if payload.is_banned is not None:
+        user.is_banned = bool(payload.is_banned)
+
+    # 账号被注销时默认离线，避免后台展示异常
+    if not bool(user.is_active):
+        user.is_online = False
+
+    db.commit()
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "is_active": bool(user.is_active),
+        "is_banned": bool(user.is_banned),
+    }
 
 
 @app.get("/api/users/search", response_model=list[SearchUserOut])

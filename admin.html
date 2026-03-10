@@ -152,6 +152,7 @@
                 <th>角色</th>
                 <th>注册时间</th>
                 <th>最后在线</th>
+                <th>账号状态</th>
                 <th>在线</th>
                 <th>踢人权限</th>
                 <th>禁言权限</th>
@@ -328,6 +329,13 @@
       });
     }
 
+    async function updateUserStatus(userId, payload) {
+      return apiFetch(`/api/admin/users/${userId}/status`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    }
+
     function renderUsers() {
       const tbody = document.getElementById('userTableBody');
       const keyword = (document.getElementById('userKeyword').value || '').trim().toLowerCase();
@@ -336,12 +344,22 @@
         : state.users;
 
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-secondary">暂无匹配用户</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-secondary">暂无匹配用户</td></tr>';
         return;
       }
 
       tbody.innerHTML = '';
       rows.forEach((u) => {
+        const statusLabel = !u.is_active
+          ? '<span class="badge text-bg-secondary">已注销</span>'
+          : (u.is_banned ? '<span class="badge text-bg-danger">已封禁</span>' : '<span class="badge text-bg-success">正常</span>');
+        const statusAction = !u.is_active
+          ? '<button class="btn btn-sm btn-outline-success" data-reactivate="' + u.id + '">恢复账号</button>'
+          : '<button class="btn btn-sm btn-outline-secondary" data-deactivate="' + u.id + '">注销账号</button>';
+        const banAction = u.is_banned
+          ? '<button class="btn btn-sm btn-outline-success" data-unban="' + u.id + '">解除封禁</button>'
+          : '<button class="btn btn-sm btn-outline-danger" data-ban="' + u.id + '">封禁账号</button>';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${u.username || ''}</td>
@@ -349,6 +367,7 @@
           <td>${u.role || ''}</td>
           <td>${formatTime(u.created_at)}</td>
           <td>${formatTime(u.last_seen_at)}</td>
+          <td>${statusLabel}</td>
           <td>${u.is_online ? '<span class="badge text-bg-success">在线</span>' : '<span class="badge text-bg-secondary">离线</span>'}</td>
           <td><input type="checkbox" class="form-check-input perm-kick" ${u.can_kick_members ? 'checked' : ''} /></td>
           <td><input type="checkbox" class="form-check-input perm-mute" ${u.can_mute_members ? 'checked' : ''} /></td>
@@ -356,6 +375,8 @@
           <td class="d-flex gap-2">
             <button class="btn btn-sm btn-outline-primary" data-save-perm="${u.id}">保存权限</button>
             <button class="btn btn-sm btn-outline-danger" data-reset="${u.id}">重置密码</button>
+            ${statusAction}
+            ${banAction}
           </td>
         `;
         const saveBtn = tr.querySelector('[data-save-perm]');
@@ -389,6 +410,78 @@
           document.getElementById('resetPwd2').value = '';
           new bootstrap.Modal(document.getElementById('resetPwdModal')).show();
         });
+
+        const deactivateBtn = tr.querySelector('[data-deactivate]');
+        if (deactivateBtn) {
+          deactivateBtn.addEventListener('click', async () => {
+            if (!confirm(`确定注销账号 ${u.username} 吗？注销后该账号无法登录。`)) return;
+            try {
+              deactivateBtn.disabled = true;
+              await updateUserStatus(u.id, { is_active: false });
+              u.is_active = false;
+              u.is_online = false;
+              renderUsers();
+              setHint(`已注销账号：${u.username}`);
+            } catch (err) {
+              alert(`注销失败(${err.status || 'ERR'}): ${err.message}`);
+            } finally {
+              deactivateBtn.disabled = false;
+            }
+          });
+        }
+
+        const reactivateBtn = tr.querySelector('[data-reactivate]');
+        if (reactivateBtn) {
+          reactivateBtn.addEventListener('click', async () => {
+            try {
+              reactivateBtn.disabled = true;
+              await updateUserStatus(u.id, { is_active: true });
+              u.is_active = true;
+              renderUsers();
+              setHint(`已恢复账号：${u.username}`);
+            } catch (err) {
+              alert(`恢复失败(${err.status || 'ERR'}): ${err.message}`);
+            } finally {
+              reactivateBtn.disabled = false;
+            }
+          });
+        }
+
+        const banBtn = tr.querySelector('[data-ban]');
+        if (banBtn) {
+          banBtn.addEventListener('click', async () => {
+            if (!confirm(`确定封禁账号 ${u.username} 吗？封禁后该账号无法登录。`)) return;
+            try {
+              banBtn.disabled = true;
+              await updateUserStatus(u.id, { is_banned: true });
+              u.is_banned = true;
+              u.is_online = false;
+              renderUsers();
+              setHint(`已封禁账号：${u.username}`);
+            } catch (err) {
+              alert(`封禁失败(${err.status || 'ERR'}): ${err.message}`);
+            } finally {
+              banBtn.disabled = false;
+            }
+          });
+        }
+
+        const unbanBtn = tr.querySelector('[data-unban]');
+        if (unbanBtn) {
+          unbanBtn.addEventListener('click', async () => {
+            try {
+              unbanBtn.disabled = true;
+              await updateUserStatus(u.id, { is_banned: false });
+              u.is_banned = false;
+              renderUsers();
+              setHint(`已解除封禁：${u.username}`);
+            } catch (err) {
+              alert(`解除封禁失败(${err.status || 'ERR'}): ${err.message}`);
+            } finally {
+              unbanBtn.disabled = false;
+            }
+          });
+        }
         tbody.appendChild(tr);
       });
     }
