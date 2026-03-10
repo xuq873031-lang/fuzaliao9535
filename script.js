@@ -478,6 +478,9 @@ function switchView(viewId, options = {}) {
         renderFriendRequestLists();
       })
       .catch((err) => console.warn('刷新好友数据失败', err.message));
+  } else if (viewId === 'adminView') {
+    stopRoomPolling();
+    loadAdminUsers().catch((err) => console.warn('加载后台用户失败', err.message));
   } else {
     stopRoomPolling();
   }
@@ -681,6 +684,10 @@ async function apiSetRoomRateLimit(roomId, seconds) {
   });
 }
 
+async function apiDeleteRoomMemberMessages(roomId, userId) {
+  return apiFetch(`/api/rooms/${roomId}/members/${userId}/messages`, { method: 'DELETE' });
+}
+
 async function apiGetRoomMuteList(roomId) {
   return apiFetch(`/api/rooms/${roomId}/mute-list`);
 }
@@ -689,6 +696,20 @@ async function apiUpdateRoom(roomId, payload) {
   return apiFetch(`/api/rooms/${roomId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload || {})
+  });
+}
+
+async function apiAdminListUsers() {
+  return apiFetch('/api/admin/users');
+}
+
+async function apiAdminResetPassword(userId, newPassword, confirmPassword) {
+  return apiFetch(`/api/admin/users/${userId}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({
+      new_password: newPassword,
+      confirm_password: confirmPassword
+    })
   });
 }
 
@@ -1350,6 +1371,18 @@ function handleWsEvent(evt) {
     return;
   }
 
+  if (evt.type === 'member_messages_deleted') {
+    const roomId = Number(evt.room_id);
+    const targetUserId = Number(evt.user_id);
+    const conv = findConversationById(roomId);
+    if (!conv || !targetUserId) return;
+
+    conv.messages = conv.messages.filter((m) => Number(m.senderId) !== targetUserId);
+    scheduleConversationListRender();
+    if (appState.activeConversationId === conv.id) renderMessages({ autoScroll: false });
+    return;
+  }
+
   if (evt.type === 'call_invite') {
     const payload = evt.payload || {};
     // 已在通话中：显示忙线提示并拒绝
@@ -1961,9 +1994,14 @@ function bindAuthEvents() {
     const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
     const phone = document.getElementById('regPhone').value.trim();
     const password = document.getElementById('regPassword').value.trim();
+    const confirmPassword = document.getElementById('regPasswordConfirm').value.trim();
     const agreed = document.getElementById('registerAgree').checked;
     if (!agreed) {
       alert('请先勾选“我已阅读并同意相关协议”');
+      return;
+    }
+    if (password !== confirmPassword) {
+      alert('两次输入的密码不一致');
       return;
     }
 
@@ -2000,6 +2038,7 @@ function logout() {
   }
   stopRoomPolling();
   stopUnreadPolling();
+  updateAdminNavVisibility();
 
   showAuth();
   switchAuthPage('login');
@@ -2045,6 +2084,42 @@ function bindNavigationEvents() {
 
   document.getElementById('logoutBtn').addEventListener('click', logout);
   document.getElementById('mobileLogoutBtn').addEventListener('click', logout);
+
+  const adminRefreshBtn = document.getElementById('adminRefreshBtn');
+  if (adminRefreshBtn) {
+    adminRefreshBtn.addEventListener('click', () => {
+      loadAdminUsers().catch((err) => console.warn('刷新后台用户失败', err.message));
+    });
+  }
+  const adminResetSubmitBtn = document.getElementById('adminResetPasswordSubmitBtn');
+  if (adminResetSubmitBtn) {
+    adminResetSubmitBtn.addEventListener('click', async () => {
+      const userId = Number(document.getElementById('adminResetUserId')?.value || 0);
+      const p1 = document.getElementById('adminResetPassword')?.value.trim() || '';
+      const p2 = document.getElementById('adminResetPasswordConfirm')?.value.trim() || '';
+      if (!userId) return;
+      if (!p1 || p1.length < 6) {
+        alert('新密码长度至少 6 位');
+        return;
+      }
+      if (p1 !== p2) {
+        alert('两次密码不一致');
+        return;
+      }
+      if (!confirm('确认重置该用户密码？')) return;
+      try {
+        setButtonLoading(adminResetSubmitBtn, true, '重置中...', '确认重置');
+        await apiAdminResetPassword(userId, p1, p2);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('adminResetPasswordModal'));
+        if (modal) modal.hide();
+        alert('密码重置成功');
+      } catch (err) {
+        alert(`重置失败：${err.message}`);
+      } finally {
+        setButtonLoading(adminResetSubmitBtn, false, '重置中...', '确认重置');
+      }
+    });
+  }
 }
 
 function bindProfileEvents() {
@@ -2142,6 +2217,63 @@ function updateUserHeader() {
   document.getElementById('sidebarUsername').textContent = appState.currentUser.nickname || appState.currentUser.username;
 }
 
+function isAdminUser() {
+  return (appState.currentUser?.role || '').toLowerCase() === 'admin';
+}
+
+function updateAdminNavVisibility() {
+  const visible = isAdminUser();
+  const desktopBtn = document.getElementById('adminNavDesktop');
+  const drawerBtn = document.getElementById('adminNavDrawer');
+  if (desktopBtn) desktopBtn.classList.toggle('d-none', !visible);
+  if (drawerBtn) drawerBtn.classList.toggle('d-none', !visible);
+}
+
+async function loadAdminUsers() {
+  const box = document.getElementById('adminUserTableBody');
+  if (!box) return;
+  if (!isAdminUser()) {
+    box.innerHTML = '<tr><td colspan="6" class="text-secondary">仅管理员可访问</td></tr>';
+    return;
+  }
+  box.innerHTML = '<tr><td colspan="6" class="text-secondary">加载中...</td></tr>';
+  try {
+    const rows = await apiAdminListUsers();
+    if (!rows?.length) {
+      box.innerHTML = '<tr><td colspan="6" class="text-secondary">暂无用户</td></tr>';
+      return;
+    }
+    box.innerHTML = '';
+    rows.forEach((u) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(u.username || '')}</td>
+        <td>${escapeHtml(u.nickname || '')}</td>
+        <td>${escapeHtml(u.role || '')}</td>
+        <td>${formatTime(u.created_at)}</td>
+        <td>${u.last_seen_at ? formatTime(u.last_seen_at) : '暂无'}</td>
+        <td><button class="btn btn-sm btn-outline-danger admin-reset-btn" data-user-id="${u.id}">重置密码</button></td>
+      `;
+      const resetBtn = tr.querySelector('.admin-reset-btn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          const userIdEl = document.getElementById('adminResetUserId');
+          const pwdEl = document.getElementById('adminResetPassword');
+          const pwd2El = document.getElementById('adminResetPasswordConfirm');
+          if (userIdEl) userIdEl.value = String(u.id);
+          if (pwdEl) pwdEl.value = '';
+          if (pwd2El) pwd2El.value = '';
+          const modal = new bootstrap.Modal(document.getElementById('adminResetPasswordModal'));
+          modal.show();
+        });
+      }
+      box.appendChild(tr);
+    });
+  } catch (err) {
+    box.innerHTML = `<tr><td colspan="6" class="text-danger">加载失败：${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
 // ============================
 // 好友系统
 // ============================
@@ -2159,7 +2291,7 @@ function bindFriendEvents() {
   const openTools = () => {
     if (!toolsPanel) return;
     toolsPanel.classList.remove('d-none');
-    if (toggleToolsBtn) toggleToolsBtn.textContent = '收起';
+    if (toggleToolsBtn) toggleToolsBtn.textContent = '收起新朋友';
     setTimeout(() => {
       toolsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 20);
@@ -2168,7 +2300,7 @@ function bindFriendEvents() {
   const closeTools = () => {
     if (!toolsPanel) return;
     toolsPanel.classList.add('d-none');
-    if (toggleToolsBtn) toggleToolsBtn.textContent = '添加好友';
+    if (toggleToolsBtn) toggleToolsBtn.textContent = '新朋友';
   };
 
   if (searchBtn) searchBtn.addEventListener('click', handleFriendSearch);
@@ -2184,14 +2316,7 @@ function bindFriendEvents() {
     });
   }
 
-  // 没有好友时，默认展开添加好友区域，避免误解为“功能消失”
-  if (friendList && toolsPanel) {
-    const observer = new MutationObserver(() => {
-      const hasFriends = !!friendList.querySelector('.list-group-item');
-      if (!hasFriends) openTools();
-    });
-    observer.observe(friendList, { childList: true });
-  }
+  if (toggleToolsBtn && toolsPanel) closeTools();
 
   const profileChatBtn = document.getElementById('friendProfileChatBtn');
   if (profileChatBtn) {
@@ -2947,6 +3072,7 @@ function renderGroupManageMembers(members, actor) {
     const dotClass = isOnline ? 'on' : 'off';
     const onlineText = isOnline ? '在线' : '离线';
     const canOperateTarget = actor.isOwner || !targetDelegated;
+    const canDeleteHistory = actor.canKick && canOperateTarget && !isSelf && m.role !== 'owner';
     const muteBtn = actor.canMute && canOperateTarget && !isSelf && m.role !== 'owner'
       ? `<button class="btn btn-sm btn-outline-secondary member-mute-btn">${m.muted ? '取消禁言' : '禁言'}</button>`
       : '';
@@ -2959,21 +3085,51 @@ function renderGroupManageMembers(members, actor) {
     const grantMuteBtn = actor.isOwner && !isSelf && m.role !== 'owner'
       ? `<button class="btn btn-sm btn-outline-primary member-grant-mute-btn">${m.can_mute ? '取消禁言权' : '赋予禁言权'}</button>`
       : '';
+    const deleteMessagesBtn = canDeleteHistory
+      ? '<button class="btn btn-sm btn-outline-warning member-delete-messages-btn">删发言</button>'
+      : '';
 
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex justify-content-between align-items-center';
     row.innerHTML = `
-      <div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-link p-0 member-avatar-action" type="button" title="成员操作">
+          <img src="${getUserAvatarById(m.user_id)}" class="conversation-avatar" style="width:34px;height:34px;" alt="avatar" />
+        </button>
         <div class="fw-semibold"><span class="online-dot ${dotClass}"></span>${escapeHtml(getGroupPublicDisplayNameByUserId(m.user_id))} ${roleBadge} ${delegatedBadge}</div>
         <small class="text-secondary">${onlineText} · ${roleText} ${m.muted ? '· 已禁言' : ''}</small>
       </div>
       <div class="d-flex gap-2">
         ${grantKickBtn}
         ${grantMuteBtn}
+        ${deleteMessagesBtn}
         ${muteBtn}
         ${removeBtn}
       </div>
     `;
+    const deleteMessagesAction = async () => {
+      if (!canDeleteHistory) return;
+      if (!confirm('确定删除该成员在本群的全部历史发言？')) return;
+      if (!confirm('此操作不可恢复，确认继续？')) return;
+      try {
+        const res = await apiDeleteRoomMemberMessages(appState.managingGroupId, m.user_id);
+        const conv = findConversationById(appState.managingGroupId);
+        if (conv) {
+          conv.messages = conv.messages.filter((x) => Number(x.senderId) !== Number(m.user_id));
+          renderMessages({ autoScroll: false });
+        }
+        alert(`已删除 ${res?.deleted_count || 0} 条发言`);
+      } catch (err) {
+        alert(`删除成员发言失败：${err.message}`);
+      }
+    };
+    const avatarAction = row.querySelector('.member-avatar-action');
+    if (avatarAction) {
+      avatarAction.addEventListener('click', () => {
+        if (!canDeleteHistory) return;
+        deleteMessagesAction().catch((err) => console.warn('删除成员发言失败', err.message));
+      });
+    }
     const muteEl = row.querySelector('.member-mute-btn');
     if (muteEl) {
       muteEl.addEventListener('click', async () => {
@@ -3025,6 +3181,12 @@ function renderGroupManageMembers(members, actor) {
         } catch (err) {
           alert(`设置权限失败：${err.message}`);
         }
+      });
+    }
+    const deleteMessagesEl = row.querySelector('.member-delete-messages-btn');
+    if (deleteMessagesEl) {
+      deleteMessagesEl.addEventListener('click', () => {
+        deleteMessagesAction().catch((err) => console.warn('删除成员发言失败', err.message));
       });
     }
     box.appendChild(row);
@@ -4379,6 +4541,7 @@ async function bootstrapAfterLogin(userFromAuth = null) {
   ]);
 
   updateUserHeader();
+  updateAdminNavVisibility();
   renderProfile();
   renderFriendList();
   renderFriendRequestLists();
@@ -4398,6 +4561,7 @@ function enterApp(options = {}) {
   switchView('messagesView', { silentRefresh: skipDataRefresh });
 
   updateUserHeader();
+  updateAdminNavVisibility();
   renderProfile();
   renderFriendList();
   renderFriendRequestLists();
@@ -4496,12 +4660,15 @@ window.__api = {
   apiGetRoomMuteList,
   apiSetRoomMemberPermissions,
   apiSetRoomRateLimit,
+  apiDeleteRoomMemberMessages,
   apiGetRoomMessages,
   apiGetUnreadCounts,
   apiMarkRoomRead,
   apiEditMessage,
   apiSendMessage,
-  apiUploadImage
+  apiUploadImage,
+  apiAdminListUsers,
+  apiAdminResetPassword
 };
 
 window.__env = {

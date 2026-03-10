@@ -17,6 +17,7 @@
 
 body {
   background: var(--tg-bg);
+  min-height: var(--app-dvh);
 }
 
 .app-gradient {
@@ -34,6 +35,10 @@ body {
 .auth-card {
   border: 1px solid rgba(34, 158, 217, 0.12);
   backdrop-filter: blur(6px);
+}
+
+#authContainer {
+  min-height: var(--app-dvh);
 }
 
 #authContainer .card-body h2 {
@@ -55,6 +60,21 @@ body {
 #authContainer .btn-success {
   min-height: 44px;
   font-weight: 600;
+}
+
+@media (max-width: 767.98px) {
+  #authContainer .row {
+    min-height: var(--app-dvh) !important;
+    align-items: flex-start !important;
+    padding-top: 16px;
+    padding-bottom: 24px;
+  }
+
+  #authContainer .card {
+    max-height: calc(var(--app-dvh) - 24px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 .app-shell {

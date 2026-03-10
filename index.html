@@ -63,6 +63,10 @@
                     <label for="regPassword" class="form-label">密码</label>
                     <input id="regPassword" type="password" class="form-control" required />
                   </div>
+                  <div class="mb-3">
+                    <label for="regPasswordConfirm" class="form-label">确认密码</label>
+                    <input id="regPasswordConfirm" type="password" class="form-control" required />
+                  </div>
                   <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" id="registerAgree" />
                     <label class="form-check-label small text-secondary" for="registerAgree">我已阅读并同意相关协议</label>
@@ -99,6 +103,7 @@
               </button>
               <button class="btn nav-btn text-start mb-2" data-view="groupsView">群组</button>
               <button class="btn nav-btn text-start mb-2" data-view="profileView">个人资料</button>
+              <button id="adminNavDesktop" class="btn nav-btn text-start mb-2 d-none" data-view="adminView">后台管理</button>
 
               <div class="mt-auto small text-secondary">
                 <div>用户：<span id="sidebarUsername">-</span></div>
@@ -194,17 +199,16 @@
                   <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                       <h6 class="mb-0">我的好友</h6>
-                      <button id="toggleFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">添加好友</button>
+                      <button id="toggleFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">新朋友</button>
                     </div>
+                    <div class="input-group mb-3">
+                      <input id="friendSearchInput" class="form-control" placeholder="搜索好友账号" />
+                      <button id="friendSearchBtn" class="btn btn-primary">搜索</button>
+                    </div>
+                    <div id="friendSearchResults" class="list-group mb-3"></div>
                     <div id="friendList" class="list-group mb-3"></div>
 
                     <div id="friendToolsPanel" class="d-none border-top pt-3">
-                      <h6 class="mb-2">搜索好友</h6>
-                      <div class="input-group mb-2">
-                        <input id="friendSearchInput" class="form-control" placeholder="输入用户名搜索" />
-                        <button id="friendSearchBtn" class="btn btn-primary">搜索</button>
-                      </div>
-                      <div id="friendSearchResults" class="list-group mb-3"></div>
                       <h6 class="mb-2">新朋友（收到的申请）</h6>
                       <div id="incomingRequestList" class="list-group mb-3"></div>
                       <h6 class="mb-2">我发出的申请</h6>
@@ -260,6 +264,32 @@
                   </div>
                 </div>
               </section>
+
+              <section id="adminView" class="view-section d-none p-3">
+                <div class="card border-0 shadow-sm rounded-4">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h6 class="mb-0">后台管理</h6>
+                      <button id="adminRefreshBtn" class="btn btn-sm btn-outline-secondary" type="button">刷新</button>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table align-middle">
+                        <thead>
+                          <tr>
+                            <th>账号</th>
+                            <th>昵称</th>
+                            <th>角色</th>
+                            <th>注册时间</th>
+                            <th>最后在线</th>
+                            <th>操作</th>
+                          </tr>
+                        </thead>
+                        <tbody id="adminUserTableBody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         </main>
@@ -280,6 +310,7 @@
           </button>
           <button class="btn nav-btn text-start" data-view="groupsView" data-mobile-nav="1">群组</button>
           <button class="btn nav-btn text-start" data-view="profileView" data-mobile-nav="1">个人资料</button>
+          <button id="adminNavDrawer" class="btn nav-btn text-start d-none" data-view="adminView" data-mobile-nav="1">后台管理</button>
         </div>
       </div>
 
@@ -609,6 +640,32 @@
             <div class="modal-body text-center">
               <img id="photoPreviewImg" class="img-fluid rounded" alt="photo" />
               <div id="photoPreviewMeta" class="small text-secondary mt-2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="adminResetPasswordModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4">
+            <div class="modal-header">
+              <h5 class="modal-title">重置密码</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <input id="adminResetUserId" type="hidden" />
+              <div class="mb-2">
+                <label for="adminResetPassword" class="form-label">新密码</label>
+                <input id="adminResetPassword" type="password" class="form-control" />
+              </div>
+              <div class="mb-2">
+                <label for="adminResetPasswordConfirm" class="form-label">确认新密码</label>
+                <input id="adminResetPasswordConfirm" type="password" class="form-control" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button id="adminResetPasswordSubmitBtn" class="btn btn-danger" type="button">确认重置</button>
             </div>
           </div>
         </div>
