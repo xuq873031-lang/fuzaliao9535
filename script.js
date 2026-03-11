@@ -65,6 +65,7 @@ let appState = {
   conversationRenderQueued: false,
   messageAppendQueued: false,
   pendingMessageAppendByRoom: {},
+  pendingAutoScrollByRoom: {},
   wsMessageBatchByRoom: {},
   wsMessageBatchTimer: null,
   conversationContextRoomId: null,
@@ -1448,10 +1449,17 @@ function scrollMessagesToBottom(options = {}) {
   }
   appState.userNearBottom = true;
 
-  requestAnimationFrame(() => {
+  const applyBottom = () => {
     listEl.scrollTop = listEl.scrollHeight;
     debugScroll('apply', { reason, force, stickToBottom });
+  };
+
+  // 双帧 + 兜底定时，降低移动端高频追加时“滚动没落到底”的概率
+  requestAnimationFrame(() => {
+    applyBottom();
+    requestAnimationFrame(applyBottom);
   });
+  setTimeout(applyBottom, 36);
 
   const pendingImages = Array.from(listEl.querySelectorAll('img')).filter((img) => !img.complete);
   pendingImages.forEach((img) => {
@@ -1493,17 +1501,25 @@ function flushPendingMessageAppends() {
   roomIds.forEach((roomIdStr) => {
     const roomId = Number(roomIdStr);
     const queue = appState.pendingMessageAppendByRoom[roomId];
+    const shouldAutoScroll = !!appState.pendingAutoScrollByRoom[roomId];
     if (!Array.isArray(queue) || !queue.length) return;
     delete appState.pendingMessageAppendByRoom[roomId];
+    delete appState.pendingAutoScrollByRoom[roomId];
     if (appState.currentView !== 'messagesView' || appState.activeConversationId !== roomId) return;
     const conv = findConversationById(roomId);
     if (!conv) return;
-    appendMessagesToView(conv, queue, { autoScroll: appState.userNearBottom });
+    appendMessagesToView(conv, queue, {
+      autoScroll: shouldAutoScroll || appState.userNearBottom,
+      stickToBottom: shouldAutoScroll
+    });
   });
 }
 
-function queueMessageAppend(roomId, message) {
+function queueMessageAppend(roomId, message, options = {}) {
   if (!roomId || !message) return;
+  if (options.autoScroll) {
+    appState.pendingAutoScrollByRoom[roomId] = true;
+  }
   if (!appState.pendingMessageAppendByRoom[roomId]) appState.pendingMessageAppendByRoom[roomId] = [];
   appState.pendingMessageAppendByRoom[roomId].push(message);
   if (appState.messageAppendQueued) return;
@@ -1514,6 +1530,7 @@ function queueMessageAppend(roomId, message) {
 function clearRoomRuntimeBuffers(roomId) {
   if (!roomId) return;
   delete appState.pendingMessageAppendByRoom[roomId];
+  delete appState.pendingAutoScrollByRoom[roomId];
   delete appState.wsMessageBatchByRoom[roomId];
 }
 
@@ -1609,7 +1626,7 @@ function flushWsNewMessageBatch() {
     scheduleConversationListRender();
     if (isCurrent) {
       replacedRows.forEach(({ oldId, message }) => replaceMessageRowInView(conv, oldId, message));
-      newlyAdded.forEach((m) => queueMessageAppend(conv.id, m));
+      newlyAdded.forEach((m) => queueMessageAppend(conv.id, m, { autoScroll: nearBottom }));
       if (nearBottom && !appState.messageAppendQueued) scrollMessagesToBottom({ force: false });
       if (otherMsgCount > 0) scheduleMarkCurrentRoomRead();
     } else if (otherMsgCount > 0 && latestOtherMsg) {
@@ -1678,7 +1695,7 @@ async function pollActiveRoomMessages() {
       if (appState.currentView === 'messagesView' && appState.activeConversationId === roomId) {
         replacedRows.forEach(({ oldId, message }) => replaceMessageRowInView(conv, oldId, message));
         if (newlyAdded.length) {
-          newlyAdded.forEach((m) => queueMessageAppend(conv.id, m));
+          newlyAdded.forEach((m) => queueMessageAppend(conv.id, m, { autoScroll: nearBottom }));
         }
         if (nearBottom && !appState.messageAppendQueued) scrollMessagesToBottom({ force: false });
       }
@@ -5270,18 +5287,19 @@ function buildMessageRow(msg, conv) {
 }
 
 function appendMessagesToView(conv, messages, options = {}) {
-  const { autoScroll = true } = options;
+  const { autoScroll = true, stickToBottom = null } = options;
   const listEl = document.getElementById('messageList');
   if (!listEl || !messages.length) return;
   const prevScrollTop = listEl.scrollTop;
   const wasNearBottom = isNearBottom(listEl, 120);
+  const shouldStick = typeof stickToBottom === 'boolean' ? stickToBottom : wasNearBottom;
 
   const frag = document.createDocumentFragment();
   messages.forEach((msg) => frag.appendChild(safeBuildMessageRow(msg, conv)));
   listEl.appendChild(frag);
   trimMessageDomIfNeeded(listEl);
 
-  if (autoScroll) scrollMessagesToBottom({ force: false, stickToBottom: wasNearBottom, reason: 'append' });
+  if (autoScroll) scrollMessagesToBottom({ force: false, stickToBottom: shouldStick, reason: 'append' });
   else if (listEl.scrollTop !== prevScrollTop) listEl.scrollTop = prevScrollTop;
 }
 
@@ -5290,6 +5308,7 @@ function trimMessageDomIfNeeded(listEl) {
   const children = listEl.children;
   const over = children.length - MESSAGE_DOM_HARD_LIMIT;
   if (over <= 0) return;
+  const wasNearBottom = isNearBottom(listEl, 120);
 
   let removedHeight = 0;
   for (let i = 0; i < over; i += 1) {
@@ -5300,7 +5319,11 @@ function trimMessageDomIfNeeded(listEl) {
   }
 
   if (removedHeight > 0) {
-    listEl.scrollTop = Math.max(0, listEl.scrollTop - removedHeight);
+    if (wasNearBottom) {
+      listEl.scrollTop = listEl.scrollHeight;
+    } else {
+      listEl.scrollTop = Math.max(0, listEl.scrollTop - removedHeight);
+    }
   }
 }
 
