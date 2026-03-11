@@ -73,6 +73,7 @@ let appState = {
   conversationSearchKeyword: '',
   managingGroupId: null,
   mentionCandidates: [],
+  localFriendKeyword: '',
   pendingMessageSeq: 0,
   activeFriendProfileId: null,
   managingGroupMembers: [],
@@ -2523,21 +2524,23 @@ async function loadAdminUsers() {
 function bindFriendEvents() {
   const searchBtn = document.getElementById('friendSearchBtn');
   const searchInput = document.getElementById('friendSearchInput');
-  const toggleToolsBtn = document.getElementById('toggleFriendToolsBtn');
+  const localSearchToggleBtn = document.getElementById('contactsLocalSearchToggle');
+  const localSearchWrap = document.getElementById('contactsLocalSearchWrap');
+  const localSearchInput = document.getElementById('contactsLocalSearchInput');
   const toolsPanel = document.getElementById('friendToolsPanel');
+  const addPanel = document.getElementById('addFriendPanel');
   const hideToolsBtn = document.getElementById('hideFriendToolsBtn');
+  const hideAddFriendBtn = document.getElementById('hideAddFriendBtn');
   const entryNewFriend = document.getElementById('contactsEntryNewFriend');
-  const entryGroupNotice = document.getElementById('contactsEntryGroupNotice');
-  const entryDevices = document.getElementById('contactsEntryDevices');
+  const entryGroups = document.getElementById('contactsEntryGroups');
   const menuAddFriend = document.getElementById('menuAddFriend');
   const menuCreateGroup = document.getElementById('menuCreateGroup');
-  const menuCreateTag = document.getElementById('menuCreateTag');
-  const menuMyQr = document.getElementById('menuMyQr');
   const plusBtn = document.getElementById('contactsPlusBtn');
   const plusMenu = plusBtn ? bootstrap.Dropdown.getOrCreateInstance(plusBtn) : null;
 
   const openTools = () => {
     if (!toolsPanel) return;
+    if (addPanel) addPanel.classList.add('d-none');
     toolsPanel.classList.remove('d-none');
     setTimeout(() => {
       toolsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2549,31 +2552,54 @@ function bindFriendEvents() {
     toolsPanel.classList.add('d-none');
   };
 
+  const openAddPanel = () => {
+    if (!addPanel) return;
+    closeTools();
+    addPanel.classList.remove('d-none');
+    setTimeout(() => {
+      addPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 20);
+  };
+
+  const closeAddPanel = () => {
+    if (!addPanel) return;
+    addPanel.classList.add('d-none');
+  };
+
   if (searchBtn) searchBtn.addEventListener('click', handleFriendSearch);
   if (searchInput) {
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') handleFriendSearch();
     });
   }
-  if (toggleToolsBtn && toolsPanel) {
-    toggleToolsBtn.addEventListener('click', () => {
-      if (toolsPanel.classList.contains('d-none')) openTools();
-      else closeTools();
+  if (localSearchToggleBtn && localSearchWrap) {
+    localSearchToggleBtn.addEventListener('click', () => {
+      localSearchWrap.classList.toggle('d-none');
+      if (!localSearchWrap.classList.contains('d-none') && localSearchInput) {
+        localSearchInput.focus();
+      }
+      if (localSearchWrap.classList.contains('d-none')) {
+        appState.localFriendKeyword = '';
+        if (localSearchInput) localSearchInput.value = '';
+        renderFriendList();
+      }
+    });
+  }
+  if (localSearchInput) {
+    localSearchInput.addEventListener('input', () => {
+      appState.localFriendKeyword = localSearchInput.value.trim();
+      renderFriendList();
     });
   }
   if (hideToolsBtn) hideToolsBtn.addEventListener('click', closeTools);
+  if (hideAddFriendBtn) hideAddFriendBtn.addEventListener('click', closeAddPanel);
   if (entryNewFriend) entryNewFriend.addEventListener('click', openTools);
-  if (entryGroupNotice) entryGroupNotice.addEventListener('click', () => {
-    alert('群通知功能建设中，当前先保留入口。');
-  });
-  if (entryDevices) entryDevices.addEventListener('click', () => {
-    alert('设备记录功能建设中，当前先保留入口。');
-  });
+  if (entryGroups) entryGroups.addEventListener('click', () => switchView('groupsView'));
 
   if (menuAddFriend) {
     menuAddFriend.addEventListener('click', () => {
       plusMenu?.hide();
-      openTools();
+      openAddPanel();
       if (searchInput) {
         searchInput.focus();
         searchInput.select();
@@ -2587,21 +2613,8 @@ function bindFriendEvents() {
       if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
     });
   }
-  if (menuCreateTag) {
-    menuCreateTag.addEventListener('click', () => {
-      plusMenu?.hide();
-      alert('创建分组功能建设中，当前先保留入口。');
-    });
-  }
-  if (menuMyQr) {
-    menuMyQr.addEventListener('click', () => {
-      plusMenu?.hide();
-      alert('我的二维码功能建设中，当前先保留入口。');
-    });
-  }
-
-  if (toggleToolsBtn && toolsPanel) closeTools();
-  if (!toggleToolsBtn && toolsPanel) closeTools();
+  closeTools();
+  closeAddPanel();
 
   const profileChatBtn = document.getElementById('friendProfileChatBtn');
   if (profileChatBtn) {
@@ -2749,11 +2762,24 @@ function renderFriendList() {
   if (azBox) azBox.innerHTML = '';
 
   if (!appState.friends.length) {
-    box.innerHTML = '<div class="p-3 text-secondary">还没有好友，点击右上角“+”选择“添加好友”开始添加。</div>';
+    box.innerHTML = '<div class="p-3 text-secondary">还没有好友，点击右上角“+”选择“添加朋友”开始添加。</div>';
     return;
   }
 
-  const { grouped, keys } = buildFriendGroups(appState.friends);
+  let sourceFriends = appState.friends;
+  const keyword = String(appState.localFriendKeyword || '').trim().toLowerCase();
+  if (keyword) {
+    sourceFriends = appState.friends.filter((f) => {
+      const display = String(getDisplayNameByUserId(f.id) || '').toLowerCase();
+      return display.includes(keyword);
+    });
+  }
+  if (!sourceFriends.length) {
+    box.innerHTML = '<div class="p-3 text-secondary">未找到匹配好友</div>';
+    return;
+  }
+
+  const { grouped, keys } = buildFriendGroups(sourceFriends);
   keys.forEach((key) => {
     const anchorKey = key === '#' ? 'HASH' : key;
     const title = document.createElement('div');
@@ -2772,7 +2798,7 @@ function renderFriendList() {
           <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
           <span>
             <span class="contacts-friend-name d-block">${displayName}</span>
-            <span class="contacts-friend-sub">@${f.username}</span>
+            <span class="contacts-friend-sub">ID: ${f.username}</span>
           </span>
         </span>
         <span class="contacts-friend-actions">
