@@ -734,12 +734,29 @@ async function apiSearchUsers(keyword) {
   const q = String(keyword || '').trim();
   const base = getApiBase();
   try {
-    const data = await apiFetch(`/api/users/search?q=${encodeURIComponent(q)}`);
-    console.log(`[search] base=${base} q=${q} status=200`);
-    if (Array.isArray(data)) return data;
-    if (data && Array.isArray(data.items)) return data.items;
-    if (data && Array.isArray(data.results)) return data.results;
-    if (data && Array.isArray(data.data)) return data.data;
+    const parseRows = (data) => {
+      if (Array.isArray(data)) return data;
+      if (data && Array.isArray(data.items)) return data.items;
+      if (data && Array.isArray(data.results)) return data.results;
+      if (data && Array.isArray(data.data)) return data.data;
+      return [];
+    };
+    // 兼容不同后端实现：优先 q，其次 keyword/account
+    const candidates = [
+      `/api/users/search?q=${encodeURIComponent(q)}`,
+      `/api/users/search?keyword=${encodeURIComponent(q)}`,
+      `/api/users/search?account=${encodeURIComponent(q)}`
+    ];
+    for (let i = 0; i < candidates.length; i += 1) {
+      try {
+        const data = await apiFetch(candidates[i]);
+        const rows = parseRows(data);
+        console.log(`[search] base=${base} q=${q} status=200`);
+        if (rows.length || i === candidates.length - 1) return rows;
+      } catch (innerErr) {
+        if (i === candidates.length - 1) throw innerErr;
+      }
+    }
     return [];
   } catch (err) {
     console.warn(`[search] base=${base} q=${q} status=${err.status || 'ERR'}`);
