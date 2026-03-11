@@ -10,12 +10,12 @@ const STORAGE_KEYS = {
 };
 const CHAT_CONFIG = window.__CHAT_CONFIG || {};
 const DEFAULT_API_BASE = String(
-  CHAT_CONFIG.API_BASE || 'https://web-production-be9f.up.railway.app'
+  CHAT_CONFIG.API_BASE || 'https://web-production-afb64.up.railway.app'
 ).trim().replace(/\/$/, '');
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
 ).trim().replace(/\/$/, '');
-const APP_BUILD = '20260308_1';
+const APP_BUILD = '20260311_ui4';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
 const MESSAGE_RENDER_INITIAL_LIMIT = 80;
@@ -32,6 +32,8 @@ let appState = {
   friends: [],
   incomingRequests: [],
   outgoingRequests: [],
+  incomingRequestHistory: [],
+  outgoingRequestHistory: [],
   friendRemarks: {},
   userMap: {},
   onlineUserIds: new Set(),
@@ -116,7 +118,7 @@ function clearToken() {
 
 function getApiBase() {
   const stored = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
-  if (!stored || !/^https?:\/\//i.test(stored)) {
+  if (!stored || !/^https?:\/\//i.test(stored) || stored !== DEFAULT_API_BASE) {
     localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
     return DEFAULT_API_BASE;
   }
@@ -603,12 +605,16 @@ function switchView(viewId, options = {}) {
       .catch((err) => console.warn('刷新会话失败', err.message));
   } else if (viewId === 'friendsView') {
     stopRoomPolling();
+    renderFriendsLoadingState();
     Promise.all([refreshFriends(), refreshFriendRequests(), refreshFriendRemarks()])
       .then(() => {
         renderFriendList();
         renderFriendRequestLists();
       })
-      .catch((err) => console.warn('刷新好友数据失败', err.message));
+      .catch((err) => {
+        console.warn('刷新好友数据失败', err.message);
+        renderFriendsErrorState(err.message);
+      });
   } else if (viewId === 'adminView') {
     stopRoomPolling();
     loadAdminUsers().catch((err) => console.warn('加载后台用户失败', err.message));
@@ -726,10 +732,10 @@ async function apiRemoveFriend(friendId) {
   return apiFetch(`/api/friends/${friendId}`, { method: 'DELETE' });
 }
 
-async function apiSendFriendRequest(toUserId) {
+async function apiSendFriendRequest(toUserId, message = '') {
   return apiFetch('/api/friend-requests', {
     method: 'POST',
-    body: JSON.stringify({ to_user_id: toUserId })
+    body: JSON.stringify({ to_user_id: toUserId, message })
   });
 }
 
@@ -977,12 +983,28 @@ async function refreshFriends() {
 }
 
 async function refreshFriendRequests() {
-  const [incoming, outgoing] = await Promise.all([
+  const [incomingPending, outgoingPending, incomingAccepted, incomingRejected, outgoingAccepted, outgoingRejected] = await Promise.all([
     apiGetIncomingFriendRequests('pending'),
-    apiGetOutgoingFriendRequests('pending')
+    apiGetOutgoingFriendRequests('pending'),
+    apiGetIncomingFriendRequests('accepted'),
+    apiGetIncomingFriendRequests('rejected'),
+    apiGetOutgoingFriendRequests('accepted'),
+    apiGetOutgoingFriendRequests('rejected')
   ]);
-  appState.incomingRequests = incoming || [];
-  appState.outgoingRequests = outgoing || [];
+  const mergedIncoming = [...(incomingPending || []), ...(incomingAccepted || []), ...(incomingRejected || [])];
+  const mergedOutgoing = [...(outgoingPending || []), ...(outgoingAccepted || []), ...(outgoingRejected || [])];
+  const uniqByIdDesc = (rows) => {
+    const map = new Map();
+    rows.forEach((r) => {
+      if (!r || !r.id) return;
+      if (!map.has(r.id)) map.set(r.id, r);
+    });
+    return [...map.values()].sort((a, b) => Number(new Date(b.created_at || 0)) - Number(new Date(a.created_at || 0)));
+  };
+  appState.incomingRequests = incomingPending || [];
+  appState.outgoingRequests = outgoingPending || [];
+  appState.incomingRequestHistory = uniqByIdDesc(mergedIncoming);
+  appState.outgoingRequestHistory = uniqByIdDesc(mergedOutgoing);
   updateFriendRequestBadges();
 }
 
@@ -1113,6 +1135,28 @@ function sortFriendsAtoZ(friends) {
     const bn = getFriendSortName(b);
     return an.localeCompare(bn, ['zh-Hans-CN', 'en'], { sensitivity: 'base', numeric: true });
   });
+}
+
+function getFriendGroupKey(friend) {
+  const raw = getFriendSortName(friend).trim();
+  const first = raw.charAt(0).toUpperCase();
+  if (first >= 'A' && first <= 'Z') return first;
+  return '#';
+}
+
+function buildFriendGroups(friends) {
+  const grouped = {};
+  sortFriendsAtoZ(friends).forEach((friend) => {
+    const key = getFriendGroupKey(friend);
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(friend);
+  });
+  const keys = Object.keys(grouped).sort((a, b) => {
+    if (a === '#') return 1;
+    if (b === '#') return -1;
+    return a.localeCompare(b);
+  });
+  return { grouped, keys };
 }
 
 function applyMuteComposerState(conv) {
@@ -2481,16 +2525,20 @@ function bindFriendEvents() {
   const searchInput = document.getElementById('friendSearchInput');
   const toggleToolsBtn = document.getElementById('toggleFriendToolsBtn');
   const toolsPanel = document.getElementById('friendToolsPanel');
-  const friendList = document.getElementById('friendList');
-
-  if (toolsPanel && !toggleToolsBtn) {
-    toolsPanel.classList.remove('d-none');
-  }
+  const hideToolsBtn = document.getElementById('hideFriendToolsBtn');
+  const entryNewFriend = document.getElementById('contactsEntryNewFriend');
+  const entryGroupNotice = document.getElementById('contactsEntryGroupNotice');
+  const entryDevices = document.getElementById('contactsEntryDevices');
+  const menuAddFriend = document.getElementById('menuAddFriend');
+  const menuCreateGroup = document.getElementById('menuCreateGroup');
+  const menuCreateTag = document.getElementById('menuCreateTag');
+  const menuMyQr = document.getElementById('menuMyQr');
+  const plusBtn = document.getElementById('contactsPlusBtn');
+  const plusMenu = plusBtn ? bootstrap.Dropdown.getOrCreateInstance(plusBtn) : null;
 
   const openTools = () => {
     if (!toolsPanel) return;
     toolsPanel.classList.remove('d-none');
-    if (toggleToolsBtn) toggleToolsBtn.textContent = '收起新朋友';
     setTimeout(() => {
       toolsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 20);
@@ -2499,7 +2547,6 @@ function bindFriendEvents() {
   const closeTools = () => {
     if (!toolsPanel) return;
     toolsPanel.classList.add('d-none');
-    if (toggleToolsBtn) toggleToolsBtn.textContent = '新朋友';
   };
 
   if (searchBtn) searchBtn.addEventListener('click', handleFriendSearch);
@@ -2514,8 +2561,47 @@ function bindFriendEvents() {
       else closeTools();
     });
   }
+  if (hideToolsBtn) hideToolsBtn.addEventListener('click', closeTools);
+  if (entryNewFriend) entryNewFriend.addEventListener('click', openTools);
+  if (entryGroupNotice) entryGroupNotice.addEventListener('click', () => {
+    alert('群通知功能建设中，当前先保留入口。');
+  });
+  if (entryDevices) entryDevices.addEventListener('click', () => {
+    alert('设备记录功能建设中，当前先保留入口。');
+  });
+
+  if (menuAddFriend) {
+    menuAddFriend.addEventListener('click', () => {
+      plusMenu?.hide();
+      openTools();
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+      }
+    });
+  }
+  if (menuCreateGroup) {
+    menuCreateGroup.addEventListener('click', () => {
+      plusMenu?.hide();
+      const modalEl = document.getElementById('createGroupModal');
+      if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    });
+  }
+  if (menuCreateTag) {
+    menuCreateTag.addEventListener('click', () => {
+      plusMenu?.hide();
+      alert('创建分组功能建设中，当前先保留入口。');
+    });
+  }
+  if (menuMyQr) {
+    menuMyQr.addEventListener('click', () => {
+      plusMenu?.hide();
+      alert('我的二维码功能建设中，当前先保留入口。');
+    });
+  }
 
   if (toggleToolsBtn && toolsPanel) closeTools();
+  if (!toggleToolsBtn && toolsPanel) closeTools();
 
   const profileChatBtn = document.getElementById('friendProfileChatBtn');
   if (profileChatBtn) {
@@ -2561,6 +2647,13 @@ async function handleFriendSearch() {
     return;
   }
 
+  const isSelfByUsername = String(appState.currentUser?.username || '').toLowerCase() === keyword.toLowerCase();
+  const isSelfById = String(appState.currentUser?.id || '') === keyword;
+  if (isSelfByUsername || isSelfById) {
+    box.innerHTML = '<div class="text-secondary small">不能添加自己，请输入对方账号</div>';
+    return;
+  }
+
   try {
     box.innerHTML = '<div class="text-secondary small">搜索中...</div>';
     const rawResults = await apiSearchUsers(keyword);
@@ -2575,7 +2668,7 @@ async function handleFriendSearch() {
       .filter((item) => item.id > 0 && item.username && Number(item.id) !== Number(appState.currentUser?.id || 0));
 
     if (!results.length) {
-      box.innerHTML = '<div class="text-secondary small">无匹配结果</div>';
+      box.innerHTML = '<div class="text-secondary small">无匹配结果（请确认前后端连接的是同一环境数据）</div>';
       return;
     }
 
@@ -2606,7 +2699,7 @@ async function handleFriendSearch() {
         <button class="btn btn-sm btn-outline-primary" ${(isAdded || isPending) ? 'disabled' : ''}>${isAdded ? '已添加' : (isPending ? '已申请' : '添加好友')}</button>
       `;
       if (!isAdded && !isPending) {
-        row.querySelector('button').addEventListener('click', () => addFriendById(item.id));
+        row.querySelector('button').addEventListener('click', () => addFriendById(item.id, displayName));
       }
       box.appendChild(row);
     });
@@ -2615,11 +2708,14 @@ async function handleFriendSearch() {
   }
 }
 
-async function addFriendById(friendId) {
+async function addFriendById(friendId, displayName = '') {
   try {
-    await apiSendFriendRequest(friendId);
+    const message = prompt(`给 ${displayName || '对方'} 留言（可选）`, '你好，想加你为好友') ?? '';
+    await apiSendFriendRequest(friendId, String(message).trim());
     await refreshFriendRequests();
+    await refreshFriends();
     renderFriendRequestLists();
+    await handleFriendSearch();
     alert('已发送好友申请，等待对方通过');
   } catch (err) {
     alert(`添加失败：${err.message}`);
@@ -2647,36 +2743,74 @@ function openFriendProfileModal(friendId) {
 
 function renderFriendList() {
   const box = document.getElementById('friendList');
+  const azBox = document.getElementById('friendAzIndex');
+  if (!box) return;
   box.innerHTML = '';
+  if (azBox) azBox.innerHTML = '';
 
   if (!appState.friends.length) {
-    box.innerHTML = '<div class="text-secondary">还没有好友，点击上方“添加好友”开始添加。</div>';
+    box.innerHTML = '<div class="p-3 text-secondary">还没有好友，点击右上角“+”选择“添加好友”开始添加。</div>';
     return;
   }
 
-  const sortedFriends = sortFriendsAtoZ(appState.friends);
-  sortedFriends.forEach((f) => {
-    const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
-    const displayName = getDisplayNameByUserId(f.id);
-    const item = document.createElement('button');
-    item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-    item.innerHTML = `
-      <div class="d-flex align-items-center gap-2">
-        <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
-        <div>
-          <div class="fw-semibold">${displayName}</div>
-          <small class="text-secondary">@${f.username}</small>
-        </div>
-      </div>
-      <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
-    `;
+  const { grouped, keys } = buildFriendGroups(appState.friends);
+  keys.forEach((key) => {
+    const anchorKey = key === '#' ? 'HASH' : key;
+    const title = document.createElement('div');
+    title.className = 'contacts-group-title';
+    title.id = `friendGroup-${anchorKey}`;
+    title.textContent = key;
+    box.appendChild(title);
 
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      openFriendProfileModal(f.id);
+    grouped[key].forEach((f) => {
+      const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
+      const displayName = getDisplayNameByUserId(f.id);
+      const item = document.createElement('button');
+      item.className = 'contacts-friend-item';
+      item.innerHTML = `
+        <span class="contacts-friend-left">
+          <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
+          <span>
+            <span class="contacts-friend-name d-block">${displayName}</span>
+            <span class="contacts-friend-sub">@${f.username}</span>
+          </span>
+        </span>
+        <span class="contacts-friend-actions">
+          <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
+          <button class="btn btn-sm btn-outline-primary friend-chat-btn" type="button">聊天</button>
+        </span>
+      `;
+
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        openFriendProfileModal(f.id);
+      });
+      const chatBtn = item.querySelector('.friend-chat-btn');
+      if (chatBtn) {
+        chatBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await openPrivateChatWith(f.id);
+        });
+      }
+      box.appendChild(item);
     });
-    box.appendChild(item);
   });
+
+  if (azBox) {
+    keys.forEach((key) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'contacts-az-index-btn';
+      btn.textContent = key;
+      btn.addEventListener('click', () => {
+        const anchor = key === '#' ? 'HASH' : key;
+        const target = document.getElementById(`friendGroup-${anchor}`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      azBox.appendChild(btn);
+    });
+  }
 }
 
 async function editFriendRemark(friendId) {
@@ -2721,51 +2855,106 @@ async function handleRejectRequest(requestId) {
 function renderFriendRequestLists() {
   const incomingBox = document.getElementById('incomingRequestList');
   const outgoingBox = document.getElementById('outgoingRequestList');
+  const pendingBadge = document.getElementById('newFriendPendingCount');
   if (!incomingBox || !outgoingBox) return;
 
   incomingBox.innerHTML = '';
   outgoingBox.innerHTML = '';
 
-  if (!appState.incomingRequests.length) {
+  const incomingRows = appState.incomingRequestHistory || [];
+  const outgoingRows = appState.outgoingRequestHistory || [];
+  const pendingCount = incomingRows.filter((r) => r.status === 'pending').length;
+  if (pendingBadge) {
+    pendingBadge.textContent = String(pendingCount);
+    pendingBadge.classList.toggle('d-none', pendingCount <= 0);
+  }
+  const statusText = (status) => {
+    if (status === 'accepted') return '已同意';
+    if (status === 'rejected') return '已拒绝';
+    return '待处理';
+  };
+  const statusBadgeClass = (status) => {
+    if (status === 'accepted') return 'text-bg-success';
+    if (status === 'rejected') return 'text-bg-secondary';
+    return 'text-bg-warning';
+  };
+
+  if (!incomingRows.length) {
     incomingBox.innerHTML = '<div class="text-secondary small">暂无待处理申请</div>';
   } else {
-    appState.incomingRequests.forEach((req) => {
-      const fromName = getDisplayNameByUserId(req.from_user_id);
+    incomingRows.forEach((req) => {
+      const fromName = req.from_nickname || req.from_username || getDisplayNameByUserId(req.from_user_id);
+      const avatar = req.from_avatar_base64 || appState.userMap[req.from_user_id]?.avatar || DEFAULT_AVATAR;
+      const note = (req.message || '').trim();
+      const canHandle = req.status === 'pending';
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
       row.innerHTML = `
-        <div>
-          <div class="fw-semibold">${fromName}</div>
-          <small class="text-secondary">用户ID: ${req.from_user_id}</small>
+        <div class="d-flex align-items-center gap-2">
+          <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
+          <div>
+            <div class="fw-semibold">${fromName}</div>
+            <small class="text-secondary d-block">${note ? `附言：${note}` : '附言：无'}</small>
+            <small class="text-secondary">${formatTime(req.created_at)}</small>
+          </div>
         </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-success req-accept-btn">通过</button>
-          <button class="btn btn-sm btn-outline-secondary req-reject-btn">拒绝</button>
+        <div class="d-flex gap-2 align-items-center">
+          <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
+          ${canHandle ? '<button class="btn btn-sm btn-success req-accept-btn">通过</button><button class="btn btn-sm btn-outline-secondary req-reject-btn">拒绝</button>' : ''}
         </div>
       `;
-      row.querySelector('.req-accept-btn').addEventListener('click', () => handleAcceptRequest(req.id));
-      row.querySelector('.req-reject-btn').addEventListener('click', () => handleRejectRequest(req.id));
+      const acceptBtn = row.querySelector('.req-accept-btn');
+      const rejectBtn = row.querySelector('.req-reject-btn');
+      if (acceptBtn) acceptBtn.addEventListener('click', () => handleAcceptRequest(req.id));
+      if (rejectBtn) rejectBtn.addEventListener('click', () => handleRejectRequest(req.id));
       incomingBox.appendChild(row);
     });
   }
 
-  if (!appState.outgoingRequests.length) {
+  if (!outgoingRows.length) {
     outgoingBox.innerHTML = '<div class="text-secondary small">暂无发出的申请</div>';
   } else {
-    appState.outgoingRequests.forEach((req) => {
-      const toName = getDisplayNameByUserId(req.to_user_id);
+    outgoingRows.forEach((req) => {
+      const toName = req.to_nickname || req.to_username || getDisplayNameByUserId(req.to_user_id);
+      const avatar = req.to_avatar_base64 || appState.userMap[req.to_user_id]?.avatar || DEFAULT_AVATAR;
+      const note = (req.message || '').trim();
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
       row.innerHTML = `
-        <div>
-          <div class="fw-semibold">${toName}</div>
-          <small class="text-secondary">等待对方通过</small>
+        <div class="d-flex align-items-center gap-2">
+          <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
+          <div>
+            <div class="fw-semibold">${toName}</div>
+            <small class="text-secondary d-block">${note ? `附言：${note}` : '附言：无'}</small>
+            <small class="text-secondary">${formatTime(req.created_at)}</small>
+          </div>
         </div>
-        <span class="badge text-bg-warning">待处理</span>
+        <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
       `;
       outgoingBox.appendChild(row);
     });
   }
+}
+
+function renderFriendsLoadingState() {
+  const friendBox = document.getElementById('friendList');
+  const searchBox = document.getElementById('friendSearchResults');
+  const inBox = document.getElementById('incomingRequestList');
+  const outBox = document.getElementById('outgoingRequestList');
+  if (friendBox) friendBox.innerHTML = '<div class="p-3 text-secondary">正在加载好友列表...</div>';
+  if (searchBox) searchBox.innerHTML = '';
+  if (inBox) inBox.innerHTML = '<div class="text-secondary small">正在加载申请...</div>';
+  if (outBox) outBox.innerHTML = '<div class="text-secondary small">正在加载申请...</div>';
+}
+
+function renderFriendsErrorState(message) {
+  const friendBox = document.getElementById('friendList');
+  const inBox = document.getElementById('incomingRequestList');
+  const outBox = document.getElementById('outgoingRequestList');
+  const err = escapeHtml(message || '加载失败');
+  if (friendBox) friendBox.innerHTML = `<div class="p-3 text-danger">好友列表加载失败：${err}</div>`;
+  if (inBox) inBox.innerHTML = `<div class="text-danger small">申请加载失败：${err}</div>`;
+  if (outBox) outBox.innerHTML = `<div class="text-danger small">申请加载失败：${err}</div>`;
 }
 
 async function ensureDirectRoomWithFriend(friendId) {
