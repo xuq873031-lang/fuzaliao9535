@@ -15,7 +15,7 @@ const DEFAULT_API_BASE = String(
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
 ).trim().replace(/\/$/, '');
-const APP_BUILD = '20260311_ui5';
+const APP_BUILD = '20260311_ui6';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
 const SCROLL_DEBUG = !!CHAT_CONFIG.DEBUG_SCROLL;
@@ -1415,7 +1415,7 @@ function applyAtMentionHighlight(text) {
   return escaped.replace(/(^|\s)(@[^\s@]+)/g, '$1<span class="text-primary fw-semibold">$2</span>');
 }
 
-function isNearBottom(el, threshold = 80) {
+function isNearBottom(el, threshold = 220) {
   if (!el) return true;
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
 }
@@ -1432,7 +1432,7 @@ function debugScroll(event, extra = {}) {
     : {};
   console.debug('[scroll]', event, {
     roomId: appState.activeConversationId,
-    nearBottom: isNearBottom(listEl, 120),
+    nearBottom: isNearBottom(listEl, 220),
     ...metrics,
     ...extra
   });
@@ -1442,7 +1442,7 @@ function scrollMessagesToBottom(options = {}) {
   const { force = false, stickToBottom = false, reason = '' } = options;
   const listEl = document.getElementById('messageList');
   if (!listEl) return;
-  const shouldStickBottom = force || stickToBottom || isNearBottom(listEl, 120);
+  const shouldStickBottom = force || stickToBottom || isNearBottom(listEl, 220);
   if (!shouldStickBottom) {
     debugScroll('skip', { reason, force, stickToBottom });
     return;
@@ -1464,7 +1464,7 @@ function scrollMessagesToBottom(options = {}) {
   const pendingImages = Array.from(listEl.querySelectorAll('img')).filter((img) => !img.complete);
   pendingImages.forEach((img) => {
     img.addEventListener('load', () => {
-      if (force || appState.userNearBottom || isNearBottom(listEl, 180)) {
+      if (force || appState.userNearBottom || isNearBottom(listEl, 260)) {
         listEl.scrollTop = listEl.scrollHeight;
       }
     }, { once: true });
@@ -4787,7 +4787,7 @@ function bindChatEvents() {
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
     const listEl = document.getElementById('messageList');
-    appState.userNearBottom = isNearBottom(listEl, 90);
+    appState.userNearBottom = isNearBottom(listEl, 220);
     if (listEl.scrollTop <= 10) {
       loadMoreMessages();
     }
@@ -5291,7 +5291,7 @@ function appendMessagesToView(conv, messages, options = {}) {
   const listEl = document.getElementById('messageList');
   if (!listEl || !messages.length) return;
   const prevScrollTop = listEl.scrollTop;
-  const wasNearBottom = isNearBottom(listEl, 120);
+  const wasNearBottom = isNearBottom(listEl, 220);
   const shouldStick = typeof stickToBottom === 'boolean' ? stickToBottom : wasNearBottom;
 
   const frag = document.createDocumentFragment();
@@ -5308,7 +5308,7 @@ function trimMessageDomIfNeeded(listEl) {
   const children = listEl.children;
   const over = children.length - MESSAGE_DOM_HARD_LIMIT;
   if (over <= 0) return;
-  const wasNearBottom = isNearBottom(listEl, 120);
+  const wasNearBottom = isNearBottom(listEl, 220);
 
   let removedHeight = 0;
   for (let i = 0; i < over; i += 1) {
