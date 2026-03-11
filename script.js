@@ -18,6 +18,7 @@ const DEFAULT_WS_BASE = String(
 const APP_BUILD = '20260311_ui4';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
+const SCROLL_DEBUG = !!CHAT_CONFIG.DEBUG_SCROLL;
 const MESSAGE_RENDER_INITIAL_LIMIT = 80;
 const MESSAGE_RENDER_STEP = 50;
 const MESSAGE_DOM_HARD_LIMIT = 220;
@@ -587,11 +588,13 @@ function setTheme(theme) {
 }
 
 function showAuth() {
+  document.body.classList.remove('main-open');
   document.getElementById('authContainer').classList.remove('d-none');
   document.getElementById('mainContainer').classList.add('d-none');
 }
 
 function showMain() {
+  document.body.classList.add('main-open');
   document.getElementById('authContainer').classList.add('d-none');
   document.getElementById('mainContainer').classList.remove('d-none');
 }
@@ -1416,16 +1419,38 @@ function isNearBottom(el, threshold = 80) {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
 }
 
+function debugScroll(event, extra = {}) {
+  if (!SCROLL_DEBUG) return;
+  const listEl = document.getElementById('messageList');
+  const metrics = listEl
+    ? {
+        scrollTop: Math.round(listEl.scrollTop),
+        scrollHeight: Math.round(listEl.scrollHeight),
+        clientHeight: Math.round(listEl.clientHeight)
+      }
+    : {};
+  console.debug('[scroll]', event, {
+    roomId: appState.activeConversationId,
+    nearBottom: isNearBottom(listEl, 120),
+    ...metrics,
+    ...extra
+  });
+}
+
 function scrollMessagesToBottom(options = {}) {
-  const { force = false } = options;
+  const { force = false, stickToBottom = false, reason = '' } = options;
   const listEl = document.getElementById('messageList');
   if (!listEl) return;
-  const shouldStickBottom = force || isNearBottom(listEl, 120);
-  if (!shouldStickBottom) return;
+  const shouldStickBottom = force || stickToBottom || isNearBottom(listEl, 120);
+  if (!shouldStickBottom) {
+    debugScroll('skip', { reason, force, stickToBottom });
+    return;
+  }
   appState.userNearBottom = true;
 
   requestAnimationFrame(() => {
     listEl.scrollTop = listEl.scrollHeight;
+    debugScroll('apply', { reason, force, stickToBottom });
   });
 
   const pendingImages = Array.from(listEl.querySelectorAll('img')).filter((img) => !img.complete);
@@ -5249,13 +5274,14 @@ function appendMessagesToView(conv, messages, options = {}) {
   const listEl = document.getElementById('messageList');
   if (!listEl || !messages.length) return;
   const prevScrollTop = listEl.scrollTop;
+  const wasNearBottom = isNearBottom(listEl, 120);
 
   const frag = document.createDocumentFragment();
   messages.forEach((msg) => frag.appendChild(safeBuildMessageRow(msg, conv)));
   listEl.appendChild(frag);
   trimMessageDomIfNeeded(listEl);
 
-  if (autoScroll) scrollMessagesToBottom({ force: false });
+  if (autoScroll) scrollMessagesToBottom({ force: false, stickToBottom: wasNearBottom, reason: 'append' });
   else if (listEl.scrollTop !== prevScrollTop) listEl.scrollTop = prevScrollTop;
 }
 
