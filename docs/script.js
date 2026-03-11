@@ -571,6 +571,30 @@ function setConversationFilter(filter) {
   renderConversationList();
 }
 
+function setFriendsSubView(mode = 'main') {
+  const friendsView = document.getElementById('friendsView');
+  if (!friendsView) return;
+  const topbar = friendsView.querySelector('.contacts-topbar');
+  const localSearchWrap = document.getElementById('contactsLocalSearchWrap');
+  const layout = friendsView.querySelector('.contacts-layout');
+  const toolsPanel = document.getElementById('friendToolsPanel');
+  const addPanel = document.getElementById('addFriendPanel');
+
+  const isMain = mode === 'main';
+  const isNewFriend = mode === 'new-friend';
+  const isAddFriend = mode === 'add-friend';
+
+  if (topbar) topbar.classList.toggle('d-none', !isMain);
+  if (localSearchWrap) localSearchWrap.classList.toggle('d-none', !isMain || localSearchWrap.classList.contains('d-none'));
+  if (layout) layout.classList.toggle('d-none', !isMain);
+  if (toolsPanel) toolsPanel.classList.toggle('d-none', !isNewFriend);
+  if (addPanel) addPanel.classList.toggle('d-none', !isAddFriend);
+}
+
+function resetFriendsMainView() {
+  setFriendsSubView('main');
+}
+
 function switchView(viewId, options = {}) {
   if (viewId === 'adminView' && !ENABLE_IN_APP_ADMIN_VIEW) {
     viewId = 'messagesView';
@@ -607,6 +631,7 @@ function switchView(viewId, options = {}) {
       .catch((err) => console.warn('刷新会话失败', err.message));
   } else if (viewId === 'friendsView') {
     stopRoomPolling();
+    resetFriendsMainView();
     renderFriendsLoadingState();
     Promise.all([refreshFriends(), refreshFriendRequests(), refreshFriendRemarks()])
       .then(() => {
@@ -2541,11 +2566,23 @@ function bindFriendEvents() {
   const plusBtn = document.getElementById('contactsPlusBtn');
   const plusMenu = plusBtn ? bootstrap.Dropdown.getOrCreateInstance(plusBtn) : null;
 
+  const clearLocalFriendSearch = () => {
+    appState.localFriendKeyword = '';
+    if (localSearchInput) localSearchInput.value = '';
+    if (localSearchWrap) localSearchWrap.classList.add('d-none');
+  };
+
+  const clearAddFriendSearch = () => {
+    if (searchInput) searchInput.value = '';
+    const resultBox = document.getElementById('friendSearchResults');
+    if (resultBox) resultBox.innerHTML = '';
+  };
+
   const openTools = () => {
     if (!toolsPanel) return;
-    if (addPanel) addPanel.classList.add('d-none');
+    clearLocalFriendSearch();
     switchNewFriendTab(appState.newFriendTab || 'incoming');
-    toolsPanel.classList.remove('d-none');
+    setFriendsSubView('new-friend');
     setTimeout(() => {
       toolsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 20);
@@ -2553,13 +2590,13 @@ function bindFriendEvents() {
 
   const closeTools = () => {
     if (!toolsPanel) return;
-    toolsPanel.classList.add('d-none');
+    setFriendsSubView('main');
   };
 
   const openAddPanel = () => {
     if (!addPanel) return;
-    closeTools();
-    addPanel.classList.remove('d-none');
+    clearLocalFriendSearch();
+    setFriendsSubView('add-friend');
     setTimeout(() => {
       addPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 20);
@@ -2567,7 +2604,8 @@ function bindFriendEvents() {
 
   const closeAddPanel = () => {
     if (!addPanel) return;
-    addPanel.classList.add('d-none');
+    clearAddFriendSearch();
+    setFriendsSubView('main');
   };
 
   if (searchBtn) searchBtn.addEventListener('click', handleFriendSearch);
@@ -2578,6 +2616,8 @@ function bindFriendEvents() {
   }
   if (localSearchToggleBtn && localSearchWrap) {
     localSearchToggleBtn.addEventListener('click', () => {
+      if (addPanel && !addPanel.classList.contains('d-none')) return;
+      if (toolsPanel && !toolsPanel.classList.contains('d-none')) return;
       localSearchWrap.classList.toggle('d-none');
       if (!localSearchWrap.classList.contains('d-none') && localSearchInput) {
         localSearchInput.focus();
@@ -2619,8 +2659,7 @@ function bindFriendEvents() {
       if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
     });
   }
-  closeTools();
-  closeAddPanel();
+  setFriendsSubView('main');
 
   const profileChatBtn = document.getElementById('friendProfileChatBtn');
   if (profileChatBtn) {
@@ -2678,13 +2717,22 @@ async function handleFriendSearch() {
     const rawResults = await apiSearchUsers(keyword);
     const results = rawResults
       .map((item) => ({
-        id: Number(item.id ?? item.user_id ?? item.uid ?? 0),
-        username: String(item.username ?? item.account ?? ''),
-        nickname: String(item.nickname ?? item.display_name ?? ''),
+        id: Number(item.id ?? item.user_id ?? item.uid ?? item.user?.id ?? 0),
+        username: String(
+          item.username ??
+          item.account ??
+          item.phone ??
+          item.user_name ??
+          item.user?.username ??
+          item.user?.account ??
+          item.user?.phone ??
+          ''
+        ),
+        nickname: String(item.nickname ?? item.display_name ?? item.user?.nickname ?? ''),
         is_online: !!(item.is_online ?? item.online),
-        avatar_base64: item.avatar_base64 || item.avatar || ''
+        avatar_base64: item.avatar_base64 || item.avatar || item.user?.avatar_base64 || item.user?.avatar || ''
       }))
-      .filter((item) => item.id > 0 && item.username && Number(item.id) !== Number(appState.currentUser?.id || 0));
+      .filter((item) => item.id > 0 && Number(item.id) !== Number(appState.currentUser?.id || 0));
 
     if (!results.length) {
       box.innerHTML = '<div class="text-secondary small">无匹配结果（请确认前后端连接的是同一环境数据）</div>';
@@ -2707,12 +2755,13 @@ async function handleFriendSearch() {
 
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
+      const idText = item.username || String(item.id);
       row.innerHTML = `
         <div class="d-flex align-items-center gap-2">
           <img src="${item.avatar_base64 || DEFAULT_AVATAR}" width="32" height="32" class="rounded-circle" alt="avatar" />
           <div>
             <div class="fw-semibold">${displayName}</div>
-            <small class="text-secondary">@${item.username}</small>
+            <small class="text-secondary">ID: ${escapeHtml(idText)}</small>
           </div>
         </div>
         <button class="btn btn-sm btn-outline-primary" ${(isAdded || isPending) ? 'disabled' : ''}>${isAdded ? '已添加' : (isPending ? '已申请' : '添加好友')}</button>
@@ -2942,6 +2991,7 @@ function renderFriendRequestLists() {
           <img src="${avatar}" class="friend-request-avatar" alt="avatar" />
           <div class="friend-request-body">
             <div class="friend-request-name">${fromName}</div>
+            <small class="friend-request-meta d-block">ID：${escapeHtml(req.from_username || String(req.from_user_id || '未知'))}</small>
             <small class="friend-request-meta d-block">${note ? `附言：${note}` : '附言：无'}</small>
             <small class="friend-request-meta">申请时间：${formatTime(req.created_at)}</small>
           </div>
@@ -2973,6 +3023,7 @@ function renderFriendRequestLists() {
           <img src="${avatar}" class="friend-request-avatar" alt="avatar" />
           <div class="friend-request-body">
             <div class="friend-request-name">${toName}</div>
+            <small class="friend-request-meta d-block">ID：${escapeHtml(req.to_username || String(req.to_user_id || '未知'))}</small>
             <small class="friend-request-meta d-block">${note ? `附言：${note}` : '附言：无'}</small>
             <small class="friend-request-meta">申请时间：${formatTime(req.created_at)}</small>
           </div>
