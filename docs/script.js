@@ -1415,6 +1415,39 @@ function applyAtMentionHighlight(text) {
   return escaped.replace(/(^|\s)(@[^\s@]+)/g, '$1<span class="text-primary fw-semibold">$2</span>');
 }
 
+function getMessageScrollContainer() {
+  const chatPane = document.getElementById('chatPane');
+  const candidates = [
+    document.getElementById('messageList'),
+    chatPane ? chatPane.querySelector('#messageList') : null,
+    chatPane ? chatPane.querySelector('.message-list') : null,
+    document.querySelector('#messagesView #messageList'),
+    document.querySelector('#messagesView .message-list')
+  ].filter(Boolean);
+
+  let best = candidates[0] || null;
+  let bestScore = -1;
+  candidates.forEach((el) => {
+    const score = (el.scrollHeight - el.clientHeight) + (el.clientHeight > 0 ? 1000 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  });
+  return best;
+}
+
+function getScrollMetrics(el) {
+  if (!el) return null;
+  return {
+    selector: el.id ? `#${el.id}` : (el.className ? `.${String(el.className).split(/\s+/).filter(Boolean).join('.')}` : el.tagName),
+    scrollTop: Math.round(el.scrollTop),
+    scrollHeight: Math.round(el.scrollHeight),
+    clientHeight: Math.round(el.clientHeight),
+    roomId: appState.activeConversationId
+  };
+}
+
 function isNearBottom(el, threshold = 220) {
   if (!el) return true;
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
@@ -1422,14 +1455,8 @@ function isNearBottom(el, threshold = 220) {
 
 function debugScroll(event, extra = {}) {
   if (!SCROLL_DEBUG) return;
-  const listEl = document.getElementById('messageList');
-  const metrics = listEl
-    ? {
-        scrollTop: Math.round(listEl.scrollTop),
-        scrollHeight: Math.round(listEl.scrollHeight),
-        clientHeight: Math.round(listEl.clientHeight)
-      }
-    : {};
+  const listEl = getMessageScrollContainer();
+  const metrics = getScrollMetrics(listEl) || {};
   console.debug('[scroll]', event, {
     roomId: appState.activeConversationId,
     nearBottom: isNearBottom(listEl, 220),
@@ -1438,9 +1465,19 @@ function debugScroll(event, extra = {}) {
   });
 }
 
+window.__chatScrollProbe = function __chatScrollProbe() {
+  const el = getMessageScrollContainer();
+  const metrics = getScrollMetrics(el);
+  return {
+    found: !!el,
+    nearBottom: isNearBottom(el, 220),
+    metrics
+  };
+};
+
 function scrollMessagesToBottom(options = {}) {
   const { force = false, stickToBottom = false, reason = '' } = options;
-  const listEl = document.getElementById('messageList');
+  const listEl = getMessageScrollContainer();
   if (!listEl) return;
   const shouldStickBottom = force || stickToBottom || isNearBottom(listEl, 220);
   if (!shouldStickBottom) {
@@ -1449,17 +1486,28 @@ function scrollMessagesToBottom(options = {}) {
   }
   appState.userNearBottom = true;
 
-  const applyBottom = () => {
+  const applyBottom = (stage = 'apply') => {
     listEl.scrollTop = listEl.scrollHeight;
-    debugScroll('apply', { reason, force, stickToBottom });
+    debugScroll(stage, { reason, force, stickToBottom, after: getScrollMetrics(listEl) });
   };
 
   // 双帧 + 兜底定时，降低移动端高频追加时“滚动没落到底”的概率
   requestAnimationFrame(() => {
-    applyBottom();
-    requestAnimationFrame(applyBottom);
+    applyBottom('raf1');
+    requestAnimationFrame(() => applyBottom('raf2'));
   });
-  setTimeout(applyBottom, 36);
+  setTimeout(() => applyBottom('t+36'), 36);
+
+  // 运行时后效兜底：如果滚完又被后续布局/重渲染顶回去，再补一轮
+  [50, 100, 200].forEach((ms) => {
+    setTimeout(() => {
+      const near = isNearBottom(listEl, 120);
+      debugScroll('post-check', { reason, ms, near, current: getScrollMetrics(listEl) });
+      if (!near && (force || appState.userNearBottom)) {
+        applyBottom(`post-fix-${ms}`);
+      }
+    }, ms);
+  });
 
   const pendingImages = Array.from(listEl.querySelectorAll('img')).filter((img) => !img.complete);
   pendingImages.forEach((img) => {
@@ -1472,7 +1520,7 @@ function scrollMessagesToBottom(options = {}) {
 }
 
 function replaceMessageRowInView(conv, oldMessageId, newMessage) {
-  const listEl = document.getElementById('messageList');
+  const listEl = getMessageScrollContainer();
   if (!listEl || !conv || !newMessage) return;
   const oldRow = listEl.querySelector(`.msg-row[data-message-id="${oldMessageId}"]`);
   if (!oldRow) return;
@@ -1480,7 +1528,7 @@ function replaceMessageRowInView(conv, oldMessageId, newMessage) {
 }
 
 function updateMessageRowInView(conv, message) {
-  const listEl = document.getElementById('messageList');
+  const listEl = getMessageScrollContainer();
   if (!listEl || !conv || !message) return;
   const row = listEl.querySelector(`.msg-row[data-message-id="${message.id}"]`);
   if (!row) return;
@@ -1488,7 +1536,7 @@ function updateMessageRowInView(conv, message) {
 }
 
 function removeMessageRowInView(messageId) {
-  const listEl = document.getElementById('messageList');
+  const listEl = getMessageScrollContainer();
   if (!listEl) return;
   const row = listEl.querySelector(`.msg-row[data-message-id="${messageId}"]`);
   if (row) row.remove();
@@ -1590,7 +1638,7 @@ function flushWsNewMessageBatch() {
     if (!conv) return;
 
     const existing = new Set(conv.messages.map((m) => Number(m.id)));
-    const listEl = document.getElementById('messageList');
+    const listEl = getMessageScrollContainer();
     const nearBottom = isNearBottom(listEl);
     const isCurrent = appState.activeConversationId === conv.id && appState.currentView === 'messagesView';
 
@@ -1672,7 +1720,7 @@ async function pollActiveRoomMessages() {
 
     const normalized = batch.map(normalizeMessage).reverse();
     const existing = new Set(conv.messages.map((m) => m.id));
-    const listEl = document.getElementById('messageList');
+    const listEl = getMessageScrollContainer();
     const nearBottom = isNearBottom(listEl);
     const newlyAdded = [];
     const replacedRows = [];
@@ -4486,7 +4534,7 @@ function bindChatEvents() {
   const msgInput = document.getElementById('messageInput');
   const saveEditBtn = document.getElementById('saveEditMessageBtn');
   const loadMoreBtn = document.getElementById('loadMoreBtn');
-  const msgList = document.getElementById('messageList');
+  const msgList = getMessageScrollContainer();
   const uploadImageBtn = document.getElementById('uploadImageBtn');
   const imageInput = document.getElementById('imageInput');
   const clearReplyBtn = document.getElementById('clearReplyBtn');
@@ -4786,7 +4834,8 @@ function bindChatEvents() {
 
   // 上滑到顶部自动触发历史加载
   if (msgList) msgList.addEventListener('scroll', () => {
-    const listEl = document.getElementById('messageList');
+    const listEl = getMessageScrollContainer();
+    if (!listEl) return;
     appState.userNearBottom = isNearBottom(listEl, 220);
     if (listEl.scrollTop <= 10) {
       loadMoreMessages();
@@ -4893,7 +4942,8 @@ async function loadMoreMessages() {
   const conv = findConversationById(appState.activeConversationId);
   if (!conv || !conv.messages.length) return;
 
-  const listEl = document.getElementById('messageList');
+  const listEl = getMessageScrollContainer();
+  if (!listEl) return;
   const beforeHeight = listEl.scrollHeight;
   const btn = document.getElementById('loadMoreBtn');
 
@@ -5288,7 +5338,7 @@ function buildMessageRow(msg, conv) {
 
 function appendMessagesToView(conv, messages, options = {}) {
   const { autoScroll = true, stickToBottom = null } = options;
-  const listEl = document.getElementById('messageList');
+  const listEl = getMessageScrollContainer();
   if (!listEl || !messages.length) return;
   const prevScrollTop = listEl.scrollTop;
   const wasNearBottom = isNearBottom(listEl, 220);
@@ -5346,7 +5396,7 @@ function scheduleMarkCurrentRoomRead() {
 
 function renderMessages(options = {}) {
   const { autoScroll = true, forceBottom = false } = options;
-  const listEl = document.getElementById('messageList');
+  const listEl = getMessageScrollContainer() || document.getElementById('messageList');
   const titleEl = document.getElementById('chatTitle');
   const subEl = document.getElementById('chatSubTitle');
   const avatarEl = document.getElementById('chatAvatar');
