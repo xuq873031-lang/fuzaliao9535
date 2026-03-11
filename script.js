@@ -20,6 +20,8 @@ const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
 const MESSAGE_RENDER_INITIAL_LIMIT = 80;
 const MESSAGE_RENDER_STEP = 50;
+const MESSAGE_DOM_HARD_LIMIT = 220;
+const WS_MESSAGE_BATCH_CHUNK = 120;
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;base64,' +
@@ -1538,6 +1540,9 @@ function flushWsNewMessageBatch() {
     const queue = appState.wsMessageBatchByRoom[roomId];
     delete appState.wsMessageBatchByRoom[roomId];
     if (!Array.isArray(queue) || !queue.length) return;
+    const processing = queue.slice(0, WS_MESSAGE_BATCH_CHUNK);
+    const remaining = queue.slice(WS_MESSAGE_BATCH_CHUNK);
+    if (remaining.length) appState.wsMessageBatchByRoom[roomId] = remaining;
 
     const conv = findConversationById(roomId);
     if (!conv) return;
@@ -1552,7 +1557,7 @@ function flushWsNewMessageBatch() {
     let otherMsgCount = 0;
     let latestOtherMsg = null;
 
-    queue.forEach((raw) => {
+    processing.forEach((raw) => {
       const msg = normalizeMessage(raw);
       if (!msg?.id) return;
 
@@ -1589,6 +1594,10 @@ function flushWsNewMessageBatch() {
     }
     updateUnreadBadges();
   });
+
+  if (Object.keys(appState.wsMessageBatchByRoom).length) {
+    appState.wsMessageBatchTimer = setTimeout(flushWsNewMessageBatch, 60);
+  }
 }
 
 function updateLastMessageId(roomId, messages) {
@@ -5239,12 +5248,34 @@ function appendMessagesToView(conv, messages, options = {}) {
   const { autoScroll = true } = options;
   const listEl = document.getElementById('messageList');
   if (!listEl || !messages.length) return;
+  const prevScrollTop = listEl.scrollTop;
 
   const frag = document.createDocumentFragment();
   messages.forEach((msg) => frag.appendChild(safeBuildMessageRow(msg, conv)));
   listEl.appendChild(frag);
+  trimMessageDomIfNeeded(listEl);
 
   if (autoScroll) scrollMessagesToBottom({ force: false });
+  else if (listEl.scrollTop !== prevScrollTop) listEl.scrollTop = prevScrollTop;
+}
+
+function trimMessageDomIfNeeded(listEl) {
+  if (!listEl) return;
+  const children = listEl.children;
+  const over = children.length - MESSAGE_DOM_HARD_LIMIT;
+  if (over <= 0) return;
+
+  let removedHeight = 0;
+  for (let i = 0; i < over; i += 1) {
+    const node = children[0];
+    if (!node) break;
+    removedHeight += node.offsetHeight || 0;
+    listEl.removeChild(node);
+  }
+
+  if (removedHeight > 0) {
+    listEl.scrollTop = Math.max(0, listEl.scrollTop - removedHeight);
+  }
 }
 
 async function markCurrentRoomRead() {
