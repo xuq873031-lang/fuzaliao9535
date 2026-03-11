@@ -1378,36 +1378,58 @@ body {
   font-weight: 600;
   border-radius: 999px;
   padding: 5px 9px;
+  border: 1px solid transparent;
+}
+
+.friend-request-item .badge.text-bg-warning {
+  background: #fff7e6 !important;
+  color: #d48806 !important;
+  border-color: #ffd591;
+}
+
+.friend-request-item .badge.text-bg-success {
+  background: #f6ffed !important;
+  color: #389e0d !important;
+  border-color: #b7eb8f;
+}
+
+.friend-request-item .badge.text-bg-secondary {
+  background: #f5f5f5 !important;
+  color: #595959 !important;
+  border-color: #d9d9d9;
 }
 
 .friend-request-item .req-accept-btn,
 .friend-request-item .req-reject-btn {
   border-radius: 999px;
-  min-width: 56px;
-  height: 30px;
+  min-width: 62px;
+  height: 32px;
   font-size: 12px;
   line-height: 1;
-  padding: 0 12px;
+  font-weight: 600;
+  padding: 0 14px;
+  box-shadow: none !important;
 }
 
 .friend-request-item .req-accept-btn {
   border-color: #07c160;
-  background: #07c160;
+  background: linear-gradient(180deg, #20cd77 0%, #07c160 100%);
 }
 
 .friend-request-item .req-accept-btn:hover {
   border-color: #05a955;
-  background: #05a955;
+  background: linear-gradient(180deg, #14bb67 0%, #05a955 100%);
 }
 
 .friend-request-item .req-reject-btn {
-  border-color: #d1d7e0;
-  color: #4b5563;
+  border-color: #d7dce5;
+  color: #556070;
   background: #fff;
 }
 
 .friend-request-item .req-reject-btn:hover {
-  background: #f6f8fb;
+  background: #f5f8fc;
+  border-color: #c8d2df;
 }
 
 [data-bs-theme="dark"] .contacts-request-tabs {
@@ -1445,6 +1467,24 @@ body {
 
 [data-bs-theme="dark"] .friend-request-item .req-reject-btn:hover {
   background: #1a2433;
+}
+
+[data-bs-theme="dark"] .friend-request-item .badge.text-bg-warning {
+  background: rgba(212, 136, 6, 0.2) !important;
+  color: #f2bf5a !important;
+  border-color: rgba(212, 136, 6, 0.45);
+}
+
+[data-bs-theme="dark"] .friend-request-item .badge.text-bg-success {
+  background: rgba(56, 158, 13, 0.2) !important;
+  color: #8ed46b !important;
+  border-color: rgba(56, 158, 13, 0.45);
+}
+
+[data-bs-theme="dark"] .friend-request-item .badge.text-bg-secondary {
+  background: rgba(122, 133, 148, 0.2) !important;
+  color: #c7d2e3 !important;
+  border-color: rgba(122, 133, 148, 0.45);
 }
 
 @media (max-width: 991.98px) {
