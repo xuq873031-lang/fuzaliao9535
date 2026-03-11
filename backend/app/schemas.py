@@ -162,6 +162,7 @@ class SearchUserOut(BaseModel):
 
 class CreateFriendRequestIn(BaseModel):
     to_user_id: int
+    message: str | None = Field(default="", max_length=120)
 
 
 class FriendRequestOut(BaseModel):
@@ -169,6 +170,13 @@ class FriendRequestOut(BaseModel):
     from_user_id: int
     to_user_id: int
     status: str
+    message: str = ""
+    from_nickname: str | None = None
+    from_username: str | None = None
+    from_avatar_base64: str | None = None
+    to_nickname: str | None = None
+    to_username: str | None = None
+    to_avatar_base64: str | None = None
     created_at: datetime
     responded_at: datetime | None = None
 

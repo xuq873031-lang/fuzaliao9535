@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import and_, delete, desc, func, insert, inspect, select, text
+from sqlalchemy import and_, delete, desc, func, insert, inspect, or_, select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -494,6 +494,12 @@ def ensure_compatible_schema():
             if "reply_to_message_id" not in message_columns:
                 conn.execute(text("ALTER TABLE messages ADD COLUMN reply_to_message_id INTEGER"))
 
+        if "friend_requests" in table_names:
+            req_columns = {col["name"] for col in inspector.get_columns("friend_requests")}
+            if "message" not in req_columns:
+                conn.execute(text("ALTER TABLE friend_requests ADD COLUMN message VARCHAR(120)"))
+            conn.execute(text("UPDATE friend_requests SET message='' WHERE message IS NULL"))
+
 
 def ensure_message_indexes():
     """
@@ -728,7 +734,13 @@ def search_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = db.execute(select(User).where(User.username.ilike(f"%{q}%"), User.id != current_user.id).limit(20)).scalars().all()
+    keyword = (q or "").strip()
+    conds = [User.username.ilike(f"%{keyword}%"), User.nickname.ilike(f"%{keyword}%")]
+    if keyword.isdigit():
+        conds.append(User.id == int(keyword))
+    rows = db.execute(
+        select(User).where(and_(User.id != current_user.id, or_(*conds))).limit(20)
+    ).scalars().all()
     return [
         SearchUserOut(
             id=u.id,
@@ -759,11 +771,20 @@ def can_user_send_friend_request(user: User) -> bool:
 
 
 def _serialize_friend_request(req: FriendRequest) -> FriendRequestOut:
+    from_user = req.from_user
+    to_user = req.to_user
     return FriendRequestOut(
         id=req.id,
         from_user_id=req.from_user_id,
         to_user_id=req.to_user_id,
         status=req.status,
+        message=req.message or "",
+        from_nickname=from_user.nickname if from_user else None,
+        from_username=from_user.username if from_user else None,
+        from_avatar_base64=from_user.avatar_base64 if from_user else None,
+        to_nickname=to_user.nickname if to_user else None,
+        to_username=to_user.username if to_user else None,
+        to_avatar_base64=to_user.avatar_base64 if to_user else None,
         created_at=req.created_at,
         responded_at=req.responded_at,
     )
@@ -823,7 +844,7 @@ def _ensure_friendship_and_dm(db: Session, user_id: int, friend_id: int):
     manager.refresh_user_rooms(friend_id, get_room_ids_for_user(db, friend_id))
 
 
-def _create_friend_request(db: Session, from_user_id: int, to_user_id: int) -> FriendRequest:
+def _create_friend_request(db: Session, from_user_id: int, to_user_id: int, message: str = "") -> FriendRequest:
     if from_user_id == to_user_id:
         raise HTTPException(status_code=400, detail="Cannot send request to yourself")
     to_user = db.get(User, to_user_id)
@@ -841,7 +862,12 @@ def _create_friend_request(db: Session, from_user_id: int, to_user_id: int) -> F
     if existing:
         return existing
 
-    req = FriendRequest(from_user_id=from_user_id, to_user_id=to_user_id, status="pending")
+    req = FriendRequest(
+        from_user_id=from_user_id,
+        to_user_id=to_user_id,
+        status="pending",
+        message=(message or "").strip()[:120],
+    )
     db.add(req)
     db.commit()
     db.refresh(req)
@@ -854,7 +880,7 @@ def create_friend_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    req = _create_friend_request(db, current_user.id, payload.to_user_id)
+    req = _create_friend_request(db, current_user.id, payload.to_user_id, payload.message or "")
     return _serialize_friend_request(req)
 
 
@@ -933,7 +959,7 @@ def reject_friend_request(
 
 @app.post("/api/friends/{friend_id}")
 def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    req = _create_friend_request(db, current_user.id, friend_id)
+    req = _create_friend_request(db, current_user.id, friend_id, "")
     return {"ok": True, "status": req.status, "request_id": req.id}
 
 

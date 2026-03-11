@@ -118,8 +118,12 @@ class FriendRequest(Base):
     from_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     to_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(20), nullable=False, default="pending")
+    message = Column(String(120), nullable=False, default="")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     responded_at = Column(DateTime, nullable=True)
+
+    from_user = relationship("User", foreign_keys=[from_user_id])
+    to_user = relationship("User", foreign_keys=[to_user_id])
 
 
 class FriendRemark(Base):

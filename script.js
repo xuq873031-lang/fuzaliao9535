@@ -32,6 +32,8 @@ let appState = {
   friends: [],
   incomingRequests: [],
   outgoingRequests: [],
+  incomingRequestHistory: [],
+  outgoingRequestHistory: [],
   friendRemarks: {},
   userMap: {},
   onlineUserIds: new Set(),
@@ -726,10 +728,10 @@ async function apiRemoveFriend(friendId) {
   return apiFetch(`/api/friends/${friendId}`, { method: 'DELETE' });
 }
 
-async function apiSendFriendRequest(toUserId) {
+async function apiSendFriendRequest(toUserId, message = '') {
   return apiFetch('/api/friend-requests', {
     method: 'POST',
-    body: JSON.stringify({ to_user_id: toUserId })
+    body: JSON.stringify({ to_user_id: toUserId, message })
   });
 }
 
@@ -977,12 +979,28 @@ async function refreshFriends() {
 }
 
 async function refreshFriendRequests() {
-  const [incoming, outgoing] = await Promise.all([
+  const [incomingPending, outgoingPending, incomingAccepted, incomingRejected, outgoingAccepted, outgoingRejected] = await Promise.all([
     apiGetIncomingFriendRequests('pending'),
-    apiGetOutgoingFriendRequests('pending')
+    apiGetOutgoingFriendRequests('pending'),
+    apiGetIncomingFriendRequests('accepted'),
+    apiGetIncomingFriendRequests('rejected'),
+    apiGetOutgoingFriendRequests('accepted'),
+    apiGetOutgoingFriendRequests('rejected')
   ]);
-  appState.incomingRequests = incoming || [];
-  appState.outgoingRequests = outgoing || [];
+  const mergedIncoming = [...(incomingPending || []), ...(incomingAccepted || []), ...(incomingRejected || [])];
+  const mergedOutgoing = [...(outgoingPending || []), ...(outgoingAccepted || []), ...(outgoingRejected || [])];
+  const uniqByIdDesc = (rows) => {
+    const map = new Map();
+    rows.forEach((r) => {
+      if (!r || !r.id) return;
+      if (!map.has(r.id)) map.set(r.id, r);
+    });
+    return [...map.values()].sort((a, b) => Number(new Date(b.created_at || 0)) - Number(new Date(a.created_at || 0)));
+  };
+  appState.incomingRequests = incomingPending || [];
+  appState.outgoingRequests = outgoingPending || [];
+  appState.incomingRequestHistory = uniqByIdDesc(mergedIncoming);
+  appState.outgoingRequestHistory = uniqByIdDesc(mergedOutgoing);
   updateFriendRequestBadges();
 }
 
@@ -2606,7 +2624,7 @@ async function handleFriendSearch() {
         <button class="btn btn-sm btn-outline-primary" ${(isAdded || isPending) ? 'disabled' : ''}>${isAdded ? '已添加' : (isPending ? '已申请' : '添加好友')}</button>
       `;
       if (!isAdded && !isPending) {
-        row.querySelector('button').addEventListener('click', () => addFriendById(item.id));
+        row.querySelector('button').addEventListener('click', () => addFriendById(item.id, displayName));
       }
       box.appendChild(row);
     });
@@ -2615,11 +2633,14 @@ async function handleFriendSearch() {
   }
 }
 
-async function addFriendById(friendId) {
+async function addFriendById(friendId, displayName = '') {
   try {
-    await apiSendFriendRequest(friendId);
+    const message = prompt(`给 ${displayName || '对方'} 留言（可选）`, '你好，想加你为好友') ?? '';
+    await apiSendFriendRequest(friendId, String(message).trim());
     await refreshFriendRequests();
+    await refreshFriends();
     renderFriendRequestLists();
+    await handleFriendSearch();
     alert('已发送好友申请，等待对方通过');
   } catch (err) {
     alert(`添加失败：${err.message}`);
@@ -2668,13 +2689,24 @@ function renderFriendList() {
           <small class="text-secondary">@${f.username}</small>
         </div>
       </div>
-      <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
+        <button class="btn btn-sm btn-outline-primary friend-chat-btn" type="button">聊天</button>
+      </div>
     `;
 
     item.addEventListener('click', (e) => {
       e.preventDefault();
       openFriendProfileModal(f.id);
     });
+    const chatBtn = item.querySelector('.friend-chat-btn');
+    if (chatBtn) {
+      chatBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await openPrivateChatWith(f.id);
+      });
+    }
     box.appendChild(item);
   });
 }
@@ -2726,42 +2758,70 @@ function renderFriendRequestLists() {
   incomingBox.innerHTML = '';
   outgoingBox.innerHTML = '';
 
-  if (!appState.incomingRequests.length) {
+  const incomingRows = appState.incomingRequestHistory || [];
+  const outgoingRows = appState.outgoingRequestHistory || [];
+  const statusText = (status) => {
+    if (status === 'accepted') return '已同意';
+    if (status === 'rejected') return '已拒绝';
+    return '待处理';
+  };
+  const statusBadgeClass = (status) => {
+    if (status === 'accepted') return 'text-bg-success';
+    if (status === 'rejected') return 'text-bg-secondary';
+    return 'text-bg-warning';
+  };
+
+  if (!incomingRows.length) {
     incomingBox.innerHTML = '<div class="text-secondary small">暂无待处理申请</div>';
   } else {
-    appState.incomingRequests.forEach((req) => {
-      const fromName = getDisplayNameByUserId(req.from_user_id);
+    incomingRows.forEach((req) => {
+      const fromName = req.from_nickname || req.from_username || getDisplayNameByUserId(req.from_user_id);
+      const avatar = req.from_avatar_base64 || appState.userMap[req.from_user_id]?.avatar || DEFAULT_AVATAR;
+      const note = (req.message || '').trim();
+      const canHandle = req.status === 'pending';
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
       row.innerHTML = `
-        <div>
-          <div class="fw-semibold">${fromName}</div>
-          <small class="text-secondary">用户ID: ${req.from_user_id}</small>
+        <div class="d-flex align-items-center gap-2">
+          <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
+          <div>
+            <div class="fw-semibold">${fromName}</div>
+            <small class="text-secondary d-block">${note ? `附言：${note}` : '附言：无'}</small>
+            <small class="text-secondary">${formatTime(req.created_at)}</small>
+          </div>
         </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-success req-accept-btn">通过</button>
-          <button class="btn btn-sm btn-outline-secondary req-reject-btn">拒绝</button>
+        <div class="d-flex gap-2 align-items-center">
+          <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
+          ${canHandle ? '<button class="btn btn-sm btn-success req-accept-btn">通过</button><button class="btn btn-sm btn-outline-secondary req-reject-btn">拒绝</button>' : ''}
         </div>
       `;
-      row.querySelector('.req-accept-btn').addEventListener('click', () => handleAcceptRequest(req.id));
-      row.querySelector('.req-reject-btn').addEventListener('click', () => handleRejectRequest(req.id));
+      const acceptBtn = row.querySelector('.req-accept-btn');
+      const rejectBtn = row.querySelector('.req-reject-btn');
+      if (acceptBtn) acceptBtn.addEventListener('click', () => handleAcceptRequest(req.id));
+      if (rejectBtn) rejectBtn.addEventListener('click', () => handleRejectRequest(req.id));
       incomingBox.appendChild(row);
     });
   }
 
-  if (!appState.outgoingRequests.length) {
+  if (!outgoingRows.length) {
     outgoingBox.innerHTML = '<div class="text-secondary small">暂无发出的申请</div>';
   } else {
-    appState.outgoingRequests.forEach((req) => {
-      const toName = getDisplayNameByUserId(req.to_user_id);
+    outgoingRows.forEach((req) => {
+      const toName = req.to_nickname || req.to_username || getDisplayNameByUserId(req.to_user_id);
+      const avatar = req.to_avatar_base64 || appState.userMap[req.to_user_id]?.avatar || DEFAULT_AVATAR;
+      const note = (req.message || '').trim();
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
       row.innerHTML = `
-        <div>
-          <div class="fw-semibold">${toName}</div>
-          <small class="text-secondary">等待对方通过</small>
+        <div class="d-flex align-items-center gap-2">
+          <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
+          <div>
+            <div class="fw-semibold">${toName}</div>
+            <small class="text-secondary d-block">${note ? `附言：${note}` : '附言：无'}</small>
+            <small class="text-secondary">${formatTime(req.created_at)}</small>
+          </div>
         </div>
-        <span class="badge text-bg-warning">待处理</span>
+        <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
       `;
       outgoingBox.appendChild(row);
     });
