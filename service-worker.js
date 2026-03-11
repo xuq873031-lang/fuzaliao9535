@@ -5,7 +5,7 @@
   - 不做离线消息、不做后台同步、不做推送
 */
 
-const CACHE_VERSION = 'chat-pwa-v1';
+const CACHE_VERSION = 'chat-pwa-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 const APP_BASE = self.location.pathname.replace(/\/service-worker\.js$/, '') || '';
