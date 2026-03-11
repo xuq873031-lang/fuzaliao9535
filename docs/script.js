@@ -62,6 +62,9 @@ let appState = {
   conversationRenderQueued: false,
   messageAppendQueued: false,
   pendingMessageAppendByRoom: {},
+  wsMessageBatchByRoom: {},
+  wsMessageBatchTimer: null,
+  conversationContextRoomId: null,
   userNearBottom: true,
   lastSoundAt: 0,
   audioCtx: null,
@@ -264,6 +267,57 @@ function showLoginBy401(reason) {
   clearToken();
   showAuth();
   switchAuthPage('login');
+}
+
+function cleanupStuckUiOverlay() {
+  const hasVisibleModal = !!document.querySelector('.modal.show');
+  if (!hasVisibleModal) {
+    document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    document.body.style.removeProperty('paddingRight');
+  }
+
+  if (appState.call?.status === 'idle') {
+    const incoming = document.getElementById('incomingCallPanel');
+    const active = document.getElementById('activeCallPanel');
+    if (incoming) incoming.classList.add('d-none');
+    if (active) active.classList.add('d-none');
+  }
+}
+
+function bindGlobalOverlayGuards() {
+  document.addEventListener('hidden.bs.modal', () => {
+    setTimeout(cleanupStuckUiOverlay, 0);
+  });
+  document.addEventListener('shown.bs.modal', () => {
+    setTimeout(() => {
+      const backdrops = Array.from(document.querySelectorAll('.modal-backdrop'));
+      if (backdrops.length > 1) {
+        backdrops.slice(0, -1).forEach((el) => el.remove());
+      }
+    }, 0);
+  });
+}
+
+function hideModalAndWait(modalId, timeout = 320) {
+  const el = document.getElementById(modalId);
+  if (!el) return Promise.resolve();
+  const instance = bootstrap.Modal.getInstance(el);
+  if (!instance) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      cleanupStuckUiOverlay();
+      resolve();
+    };
+    el.addEventListener('hidden.bs.modal', finish, { once: true });
+    instance.hide();
+    setTimeout(finish, timeout);
+  });
 }
 
 function normalizePhone(input) {
@@ -1387,7 +1441,7 @@ function replaceMessageRowInView(conv, oldMessageId, newMessage) {
   if (!listEl || !conv || !newMessage) return;
   const oldRow = listEl.querySelector(`.msg-row[data-message-id="${oldMessageId}"]`);
   if (!oldRow) return;
-  oldRow.replaceWith(buildMessageRow(newMessage, conv));
+  oldRow.replaceWith(safeBuildMessageRow(newMessage, conv));
 }
 
 function updateMessageRowInView(conv, message) {
@@ -1395,7 +1449,7 @@ function updateMessageRowInView(conv, message) {
   if (!listEl || !conv || !message) return;
   const row = listEl.querySelector(`.msg-row[data-message-id="${message.id}"]`);
   if (!row) return;
-  row.replaceWith(buildMessageRow(message, conv));
+  row.replaceWith(safeBuildMessageRow(message, conv));
 }
 
 function removeMessageRowInView(messageId) {
@@ -1428,6 +1482,113 @@ function queueMessageAppend(roomId, message) {
   if (appState.messageAppendQueued) return;
   appState.messageAppendQueued = true;
   requestAnimationFrame(flushPendingMessageAppends);
+}
+
+function clearRoomRuntimeBuffers(roomId) {
+  if (!roomId) return;
+  delete appState.pendingMessageAppendByRoom[roomId];
+  delete appState.wsMessageBatchByRoom[roomId];
+}
+
+function handleConversationContextSwitch() {
+  const currentRoomId = Number(appState.activeConversationId || 0) || null;
+  if (appState.conversationContextRoomId === currentRoomId) return;
+
+  const prevRoomId = appState.conversationContextRoomId;
+  appState.conversationContextRoomId = currentRoomId;
+  if (prevRoomId) clearRoomRuntimeBuffers(prevRoomId);
+
+  if (appState.readAckTimer) {
+    clearTimeout(appState.readAckTimer);
+    appState.readAckTimer = null;
+  }
+  if (appState.localTypingTimer) {
+    clearTimeout(appState.localTypingTimer);
+    appState.localTypingTimer = null;
+  }
+  setLocalTypingHint(false);
+  hideMentionSuggestions();
+  toggleEmojiPanel(false);
+  cleanupStuckUiOverlay();
+}
+
+function enqueueWsNewMessage(payload) {
+  const normalized = normalizeMessage(payload || {});
+  if (!normalized?.room_id) return;
+
+  const roomId = Number(normalized.room_id);
+  if (!appState.wsMessageBatchByRoom[roomId]) appState.wsMessageBatchByRoom[roomId] = [];
+  appState.wsMessageBatchByRoom[roomId].push(normalized);
+
+  if (appState.wsMessageBatchTimer) return;
+  appState.wsMessageBatchTimer = setTimeout(flushWsNewMessageBatch, 80);
+}
+
+function flushWsNewMessageBatch() {
+  if (appState.wsMessageBatchTimer) {
+    clearTimeout(appState.wsMessageBatchTimer);
+    appState.wsMessageBatchTimer = null;
+  }
+
+  const roomIds = Object.keys(appState.wsMessageBatchByRoom);
+  if (!roomIds.length) return;
+
+  roomIds.forEach((roomIdStr) => {
+    const roomId = Number(roomIdStr);
+    const queue = appState.wsMessageBatchByRoom[roomId];
+    delete appState.wsMessageBatchByRoom[roomId];
+    if (!Array.isArray(queue) || !queue.length) return;
+
+    const conv = findConversationById(roomId);
+    if (!conv) return;
+
+    const existing = new Set(conv.messages.map((m) => Number(m.id)));
+    const listEl = document.getElementById('messageList');
+    const nearBottom = isNearBottom(listEl);
+    const isCurrent = appState.activeConversationId === conv.id && appState.currentView === 'messagesView';
+
+    const newlyAdded = [];
+    const replacedRows = [];
+    let otherMsgCount = 0;
+    let latestOtherMsg = null;
+
+    queue.forEach((raw) => {
+      const msg = normalizeMessage(raw);
+      if (!msg?.id) return;
+
+      const replacedPending = reconcilePendingMessage(conv, msg);
+      const exists = existing.has(Number(msg.id));
+      if (!exists && !replacedPending) {
+        conv.messages.push(msg);
+        existing.add(Number(msg.id));
+        newlyAdded.push(msg);
+      }
+
+      const isFromOther = msg.senderId !== appState.currentUser.id;
+      if (isFromOther) {
+        otherMsgCount += 1;
+        latestOtherMsg = msg;
+        if (!isCurrent) conv.unreadCount = (conv.unreadCount || 0) + 1;
+      }
+      if (replacedPending) replacedRows.push({ oldId: replacedPending, message: msg });
+    });
+
+    if (!newlyAdded.length && !replacedRows.length) return;
+
+    updateLastMessageId(roomId, conv.messages);
+    scheduleConversationListRender();
+    if (isCurrent) {
+      replacedRows.forEach(({ oldId, message }) => replaceMessageRowInView(conv, oldId, message));
+      newlyAdded.forEach((m) => queueMessageAppend(conv.id, m));
+      if (nearBottom && !appState.messageAppendQueued) scrollMessagesToBottom({ force: false });
+      if (otherMsgCount > 0) scheduleMarkCurrentRoomRead();
+    } else if (otherMsgCount > 0 && latestOtherMsg) {
+      const sender = appState.userMap[latestOtherMsg.senderId];
+      notifyMessage(sender?.nickname || sender?.username || '新消息', latestOtherMsg.text);
+      playIncomingSound();
+    }
+    updateUnreadBadges();
+  });
 }
 
 function updateLastMessageId(roomId, messages) {
@@ -1624,6 +1785,7 @@ function handleWsEvent(evt) {
   if (evt.type === 'room_removed') {
     const roomId = Number(evt.room_id);
     appState.conversations = appState.conversations.filter((c) => c.id !== roomId);
+    clearRoomRuntimeBuffers(roomId);
     if (appState.activeConversationId === roomId) {
       appState.activeConversationId = null;
       stopRoomPolling();
@@ -1642,34 +1804,7 @@ function handleWsEvent(evt) {
   }
 
   if (evt.type === 'new_message') {
-    const msg = normalizeMessage(evt.payload);
-    const conv = findConversationById(msg.room_id);
-    if (!conv) return;
-
-    const replacedPending = reconcilePendingMessage(conv, msg);
-    const exists = conv.messages.some((m) => m.id === msg.id);
-    if (!exists && !replacedPending) conv.messages.push(msg);
-
-    const isCurrent = appState.activeConversationId === conv.id && appState.currentView === 'messagesView';
-    const isFromOther = msg.senderId !== appState.currentUser.id;
-
-    if (!isCurrent && isFromOther) {
-      conv.unreadCount = (conv.unreadCount || 0) + 1;
-      const sender = appState.userMap[msg.senderId];
-      notifyMessage(sender?.nickname || sender?.username || '新消息', msg.text);
-      playIncomingSound();
-    }
-
-    scheduleConversationListRender();
-    if (appState.activeConversationId === conv.id) {
-      if (replacedPending || exists) {
-        if (replacedPending) replaceMessageRowInView(conv, replacedPending, msg);
-      } else {
-        queueMessageAppend(conv.id, msg);
-      }
-      if (isFromOther) scheduleMarkCurrentRoomRead();
-    }
-    updateUnreadBadges();
+    enqueueWsNewMessage(evt.payload);
     return;
   }
 
@@ -2761,7 +2896,9 @@ function bindFriendEvents() {
     profileRemarkBtn.addEventListener('click', async () => {
       const fid = Number(appState.activeFriendProfileId || 0);
       if (!fid) return;
+      await hideModalAndWait('friendProfileModal');
       await editFriendRemark(fid);
+      cleanupStuckUiOverlay();
       openFriendProfileModal(fid);
     });
   }
@@ -2991,6 +3128,8 @@ async function editFriendRemark(friendId) {
     renderMessages();
   } catch (err) {
     alert(`保存备注失败：${err.message}`);
+  } finally {
+    cleanupStuckUiOverlay();
   }
 }
 
@@ -5102,7 +5241,7 @@ function appendMessagesToView(conv, messages, options = {}) {
   if (!listEl || !messages.length) return;
 
   const frag = document.createDocumentFragment();
-  messages.forEach((msg) => frag.appendChild(buildMessageRow(msg, conv)));
+  messages.forEach((msg) => frag.appendChild(safeBuildMessageRow(msg, conv)));
   listEl.appendChild(frag);
 
   if (autoScroll) scrollMessagesToBottom({ force: false });
@@ -5138,6 +5277,7 @@ function renderMessages(options = {}) {
   const chatHeader = document.getElementById('chatHeader');
   const chatDetailsBtn = document.getElementById('chatDetailsBtn');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
+  handleConversationContextSwitch();
 
   listEl.innerHTML = '';
 
@@ -5205,8 +5345,28 @@ function renderMessages(options = {}) {
     scrollMessagesToBottom({ force: true });
   }
   renderComposerState();
-  refreshCurrentUserMuteState(conv.id).then(() => applyMuteComposerState(conv));
+  const renderRoomId = conv.id;
+  refreshCurrentUserMuteState(conv.id)
+    .then(() => {
+      if (appState.activeConversationId !== renderRoomId) return;
+      applyMuteComposerState(conv);
+    })
+    .catch((err) => console.warn('刷新禁言状态失败', err.message));
   updateCallButtonsState();
+  cleanupStuckUiOverlay();
+}
+
+function safeBuildMessageRow(msg, conv) {
+  try {
+    return buildMessageRow(msg, conv);
+  } catch (err) {
+    console.warn('消息渲染异常，已降级显示', err);
+    const row = document.createElement('div');
+    row.className = 'msg-row system';
+    row.dataset.messageId = String(msg?.id || `invalid-${Date.now()}`);
+    row.innerHTML = `<div class="msg-bubble"><div class="msg-text text-warning">消息格式异常，已跳过显示</div></div>`;
+    return row;
+  }
 }
 
 async function sendMessage() {
@@ -5432,6 +5592,7 @@ async function init() {
   getApiBase();
   renderApiBaseIndicator();
   registerServiceWorker();
+  bindGlobalOverlayGuards();
   updateAppViewportHeight();
   window.addEventListener('resize', updateAppViewportHeight, { passive: true });
   window.visualViewport?.addEventListener('resize', updateAppViewportHeight, { passive: true });
