@@ -1270,6 +1270,63 @@ body {
   border-color: var(--tg-line);
 }
 
+.contacts-new-friends-panel {
+  background: var(--tg-surface);
+}
+
+.contacts-request-tabs {
+  display: inline-flex;
+  border: 1px solid var(--tg-line);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 4px;
+  background: var(--tg-surface-soft);
+}
+
+.contacts-request-tab {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--tg-text-soft);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.contacts-request-tab.active {
+  background: var(--tg-surface);
+  color: var(--tg-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.friend-request-item {
+  border-color: var(--tg-line) !important;
+  border-radius: 10px !important;
+  margin-bottom: 8px;
+  background: var(--tg-surface);
+}
+
+.friend-request-item:last-child {
+  margin-bottom: 0;
+}
+
+.friend-request-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.friend-request-name {
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.friend-request-meta {
+  font-size: 12px;
+  color: var(--tg-text-soft);
+}
+
 @media (max-width: 991.98px) {
   .contacts-layout {
     grid-template-columns: 1fr;

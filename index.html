@@ -277,14 +277,21 @@
                       <div id="friendAzIndex" class="contacts-az-index"></div>
                     </div>
 
-                    <div id="friendToolsPanel" class="d-none border-top pt-3 mt-3">
+                    <div id="friendToolsPanel" class="d-none contacts-new-friends-panel border-top pt-3 mt-3">
                       <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">新的朋友（收到的申请）</h6>
-                        <button id="hideFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">收起</button>
+                        <h6 class="mb-0">新的朋友</h6>
+                        <button id="hideFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">返回通讯录</button>
                       </div>
-                      <div id="incomingRequestList" class="list-group mb-3"></div>
-                      <h6 class="mb-2">我发出的申请</h6>
-                      <div id="outgoingRequestList" class="list-group"></div>
+                      <div class="contacts-request-tabs mb-3">
+                        <button id="incomingTabBtn" type="button" class="contacts-request-tab active">收到的申请 <span id="incomingTabCount" class="badge text-bg-secondary ms-1">0</span></button>
+                        <button id="outgoingTabBtn" type="button" class="contacts-request-tab">发出的申请 <span id="outgoingTabCount" class="badge text-bg-secondary ms-1">0</span></button>
+                      </div>
+                      <div id="incomingRequestWrap">
+                        <div id="incomingRequestList" class="list-group mb-2"></div>
+                      </div>
+                      <div id="outgoingRequestWrap" class="d-none">
+                        <div id="outgoingRequestList" class="list-group mb-2"></div>
+                      </div>
                     </div>
 
                     <div id="addFriendPanel" class="d-none border-top pt-3 mt-3">

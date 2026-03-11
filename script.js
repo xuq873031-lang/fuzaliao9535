@@ -74,6 +74,7 @@ let appState = {
   managingGroupId: null,
   mentionCandidates: [],
   localFriendKeyword: '',
+  newFriendTab: 'incoming',
   pendingMessageSeq: 0,
   activeFriendProfileId: null,
   managingGroupMembers: [],
@@ -2530,6 +2531,8 @@ function bindFriendEvents() {
   const toolsPanel = document.getElementById('friendToolsPanel');
   const addPanel = document.getElementById('addFriendPanel');
   const hideToolsBtn = document.getElementById('hideFriendToolsBtn');
+  const incomingTabBtn = document.getElementById('incomingTabBtn');
+  const outgoingTabBtn = document.getElementById('outgoingTabBtn');
   const hideAddFriendBtn = document.getElementById('hideAddFriendBtn');
   const entryNewFriend = document.getElementById('contactsEntryNewFriend');
   const entryGroups = document.getElementById('contactsEntryGroups');
@@ -2541,6 +2544,7 @@ function bindFriendEvents() {
   const openTools = () => {
     if (!toolsPanel) return;
     if (addPanel) addPanel.classList.add('d-none');
+    switchNewFriendTab(appState.newFriendTab || 'incoming');
     toolsPanel.classList.remove('d-none');
     setTimeout(() => {
       toolsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2592,6 +2596,8 @@ function bindFriendEvents() {
     });
   }
   if (hideToolsBtn) hideToolsBtn.addEventListener('click', closeTools);
+  if (incomingTabBtn) incomingTabBtn.addEventListener('click', () => switchNewFriendTab('incoming'));
+  if (outgoingTabBtn) outgoingTabBtn.addEventListener('click', () => switchNewFriendTab('outgoing'));
   if (hideAddFriendBtn) hideAddFriendBtn.addEventListener('click', closeAddPanel);
   if (entryNewFriend) entryNewFriend.addEventListener('click', openTools);
   if (entryGroups) entryGroups.addEventListener('click', () => switchView('groupsView'));
@@ -2878,10 +2884,24 @@ async function handleRejectRequest(requestId) {
   }
 }
 
+function switchNewFriendTab(tab) {
+  appState.newFriendTab = tab === 'outgoing' ? 'outgoing' : 'incoming';
+  const incomingBtn = document.getElementById('incomingTabBtn');
+  const outgoingBtn = document.getElementById('outgoingTabBtn');
+  const incomingWrap = document.getElementById('incomingRequestWrap');
+  const outgoingWrap = document.getElementById('outgoingRequestWrap');
+  if (incomingBtn) incomingBtn.classList.toggle('active', appState.newFriendTab === 'incoming');
+  if (outgoingBtn) outgoingBtn.classList.toggle('active', appState.newFriendTab === 'outgoing');
+  if (incomingWrap) incomingWrap.classList.toggle('d-none', appState.newFriendTab !== 'incoming');
+  if (outgoingWrap) outgoingWrap.classList.toggle('d-none', appState.newFriendTab !== 'outgoing');
+}
+
 function renderFriendRequestLists() {
   const incomingBox = document.getElementById('incomingRequestList');
   const outgoingBox = document.getElementById('outgoingRequestList');
   const pendingBadge = document.getElementById('newFriendPendingCount');
+  const incomingTabCount = document.getElementById('incomingTabCount');
+  const outgoingTabCount = document.getElementById('outgoingTabCount');
   if (!incomingBox || !outgoingBox) return;
 
   incomingBox.innerHTML = '';
@@ -2889,6 +2909,8 @@ function renderFriendRequestLists() {
 
   const incomingRows = appState.incomingRequestHistory || [];
   const outgoingRows = appState.outgoingRequestHistory || [];
+  if (incomingTabCount) incomingTabCount.textContent = String(incomingRows.length);
+  if (outgoingTabCount) outgoingTabCount.textContent = String(outgoingRows.length);
   const pendingCount = incomingRows.filter((r) => r.status === 'pending').length;
   if (pendingBadge) {
     pendingBadge.textContent = String(pendingCount);
@@ -2914,14 +2936,14 @@ function renderFriendRequestLists() {
       const note = (req.message || '').trim();
       const canHandle = req.status === 'pending';
       const row = document.createElement('div');
-      row.className = 'list-group-item d-flex justify-content-between align-items-center';
+      row.className = 'list-group-item d-flex justify-content-between align-items-center friend-request-item';
       row.innerHTML = `
         <div class="d-flex align-items-center gap-2">
-          <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
+          <img src="${avatar}" class="friend-request-avatar" alt="avatar" />
           <div>
-            <div class="fw-semibold">${fromName}</div>
-            <small class="text-secondary d-block">${note ? `附言：${note}` : '附言：无'}</small>
-            <small class="text-secondary">${formatTime(req.created_at)}</small>
+            <div class="friend-request-name">${fromName}</div>
+            <small class="friend-request-meta d-block">${note ? `附言：${note}` : '附言：无'}</small>
+            <small class="friend-request-meta">${formatTime(req.created_at)}</small>
           </div>
         </div>
         <div class="d-flex gap-2 align-items-center">
@@ -2945,14 +2967,14 @@ function renderFriendRequestLists() {
       const avatar = req.to_avatar_base64 || appState.userMap[req.to_user_id]?.avatar || DEFAULT_AVATAR;
       const note = (req.message || '').trim();
       const row = document.createElement('div');
-      row.className = 'list-group-item d-flex justify-content-between align-items-center';
+      row.className = 'list-group-item d-flex justify-content-between align-items-center friend-request-item';
       row.innerHTML = `
         <div class="d-flex align-items-center gap-2">
-          <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
+          <img src="${avatar}" class="friend-request-avatar" alt="avatar" />
           <div>
-            <div class="fw-semibold">${toName}</div>
-            <small class="text-secondary d-block">${note ? `附言：${note}` : '附言：无'}</small>
-            <small class="text-secondary">${formatTime(req.created_at)}</small>
+            <div class="friend-request-name">${toName}</div>
+            <small class="friend-request-meta d-block">${note ? `附言：${note}` : '附言：无'}</small>
+            <small class="friend-request-meta">${formatTime(req.created_at)}</small>
           </div>
         </div>
         <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
@@ -2960,6 +2982,7 @@ function renderFriendRequestLists() {
       outgoingBox.appendChild(row);
     });
   }
+  switchNewFriendTab(appState.newFriendTab || 'incoming');
 }
 
 function renderFriendsLoadingState() {
