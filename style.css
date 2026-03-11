@@ -1312,6 +1312,9 @@ body {
   margin-bottom: 10px;
   background: #fff;
   padding: 10px 12px;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px;
 }
 
 .friend-request-item:last-child {
@@ -1324,17 +1327,50 @@ body {
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid #e8ebf0;
+  flex: 0 0 44px;
+}
+
+.friend-request-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.friend-request-body {
+  min-width: 0;
 }
 
 .friend-request-name {
   font-weight: 700;
   line-height: 1.2;
   font-size: 0.98rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .friend-request-meta {
   font-size: 12px;
   color: #8b96a8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+
+.friend-request-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.friend-request-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .friend-request-item .badge {
@@ -1446,5 +1482,16 @@ body {
 
   .friend-request-item {
     padding: 10px;
+    align-items: flex-start !important;
+  }
+
+  .friend-request-side {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .friend-request-actions {
+    gap: 5px;
   }
 }

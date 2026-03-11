@@ -2938,17 +2938,17 @@ function renderFriendRequestLists() {
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center friend-request-item';
       row.innerHTML = `
-        <div class="d-flex align-items-center gap-2">
+        <div class="friend-request-main">
           <img src="${avatar}" class="friend-request-avatar" alt="avatar" />
-          <div>
+          <div class="friend-request-body">
             <div class="friend-request-name">${fromName}</div>
             <small class="friend-request-meta d-block">${note ? `附言：${note}` : '附言：无'}</small>
-            <small class="friend-request-meta">${formatTime(req.created_at)}</small>
+            <small class="friend-request-meta">申请时间：${formatTime(req.created_at)}</small>
           </div>
         </div>
-        <div class="d-flex gap-2 align-items-center">
+        <div class="friend-request-side">
           <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
-          ${canHandle ? '<button class="btn btn-sm btn-success req-accept-btn">通过</button><button class="btn btn-sm btn-outline-secondary req-reject-btn">拒绝</button>' : ''}
+          ${canHandle ? '<div class="friend-request-actions"><button class="btn btn-sm btn-success req-accept-btn">通过</button><button class="btn btn-sm btn-outline-secondary req-reject-btn">拒绝</button></div>' : ''}
         </div>
       `;
       const acceptBtn = row.querySelector('.req-accept-btn');
@@ -2969,15 +2969,17 @@ function renderFriendRequestLists() {
       const row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center friend-request-item';
       row.innerHTML = `
-        <div class="d-flex align-items-center gap-2">
+        <div class="friend-request-main">
           <img src="${avatar}" class="friend-request-avatar" alt="avatar" />
-          <div>
+          <div class="friend-request-body">
             <div class="friend-request-name">${toName}</div>
             <small class="friend-request-meta d-block">${note ? `附言：${note}` : '附言：无'}</small>
-            <small class="friend-request-meta">${formatTime(req.created_at)}</small>
+            <small class="friend-request-meta">申请时间：${formatTime(req.created_at)}</small>
           </div>
         </div>
-        <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
+        <div class="friend-request-side">
+          <span class="badge ${statusBadgeClass(req.status)}">${statusText(req.status)}</span>
+        </div>
       `;
       outgoingBox.appendChild(row);
     });
