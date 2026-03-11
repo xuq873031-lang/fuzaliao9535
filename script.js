@@ -703,7 +703,11 @@ async function apiSearchUsers(keyword) {
   try {
     const data = await apiFetch(`/api/users/search?q=${encodeURIComponent(q)}`);
     console.log(`[search] base=${base} q=${q} status=200`);
-    return Array.isArray(data) ? data : [];
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.items)) return data.items;
+    if (data && Array.isArray(data.results)) return data.results;
+    if (data && Array.isArray(data.data)) return data.data;
+    return [];
   } catch (err) {
     console.warn(`[search] base=${base} q=${q} status=${err.status || 'ERR'}`);
     throw err;
@@ -1036,13 +1040,19 @@ async function refreshUnreadCounts() {
 
 function getVisibleConversations() {
   const keyword = String(appState.conversationSearchKeyword || '').trim().toLowerCase();
-  const mentionKey = (appState.currentUser?.nickname || appState.currentUser?.username || '').trim();
+  const mentionNick = String(appState.currentUser?.nickname || '').trim();
+  const mentionUser = String(appState.currentUser?.username || '').trim();
+  const mentionTokens = [mentionNick, mentionUser]
+    .filter(Boolean)
+    .map((x) => `@${x}`);
   return appState.conversations.filter((conv) => {
     if (appState.conversationFilter === 'unread' && !(conv.unreadCount > 0)) return false;
     if (appState.conversationFilter === 'mention') {
-      if (!mentionKey) return false;
-      const mentionToken = `@${mentionKey}`;
-      const hasMention = (conv.messages || []).some((m) => String(m.text || '').includes(mentionToken));
+      if (!mentionTokens.length) return false;
+      const hasMention = (conv.messages || []).some((m) => {
+        const text = String(m.text || '');
+        return mentionTokens.some((token) => text.includes(token));
+      });
       if (!hasMention) return false;
     }
     if (!keyword) return true;
@@ -2552,7 +2562,18 @@ async function handleFriendSearch() {
   }
 
   try {
-    const results = await apiSearchUsers(keyword);
+    box.innerHTML = '<div class="text-secondary small">搜索中...</div>';
+    const rawResults = await apiSearchUsers(keyword);
+    const results = rawResults
+      .map((item) => ({
+        id: Number(item.id ?? item.user_id ?? item.uid ?? 0),
+        username: String(item.username ?? item.account ?? ''),
+        nickname: String(item.nickname ?? item.display_name ?? ''),
+        is_online: !!(item.is_online ?? item.online),
+        avatar_base64: item.avatar_base64 || item.avatar || ''
+      }))
+      .filter((item) => item.id > 0 && item.username && Number(item.id) !== Number(appState.currentUser?.id || 0));
+
     if (!results.length) {
       box.innerHTML = '<div class="text-secondary small">无匹配结果</div>';
       return;
@@ -2560,6 +2581,7 @@ async function handleFriendSearch() {
 
     results.forEach((item) => {
       const isAdded = appState.friends.some((f) => f.id === item.id);
+      const isPending = appState.outgoingRequests.some((r) => Number(r.to_user_id) === Number(item.id) && r.status === 'pending');
       const displayName = appState.friendRemarks[item.id] || item.nickname || item.username;
       mergeUserToMap({
         id: item.id,
@@ -2581,9 +2603,9 @@ async function handleFriendSearch() {
             <small class="text-secondary">@${item.username}</small>
           </div>
         </div>
-        <button class="btn btn-sm btn-outline-primary" ${isAdded ? 'disabled' : ''}>${isAdded ? '已添加' : '添加好友'}</button>
+        <button class="btn btn-sm btn-outline-primary" ${(isAdded || isPending) ? 'disabled' : ''}>${isAdded ? '已添加' : (isPending ? '已申请' : '添加好友')}</button>
       `;
-      if (!isAdded) {
+      if (!isAdded && !isPending) {
         row.querySelector('button').addEventListener('click', () => addFriendById(item.id));
       }
       box.appendChild(row);
@@ -4416,7 +4438,12 @@ function renderConversationList() {
   }
 
   list.forEach((conv) => {
-    const lastMsg = conv.messages[conv.messages.length - 1];
+    const lastMsg = (conv.messages || []).reduce((latest, curr) => {
+      if (!latest) return curr;
+      const lt = Number(latest.createdAt || 0);
+      const ct = Number(curr.createdAt || 0);
+      return ct >= lt ? curr : latest;
+    }, null);
     const lastPreview = lastMsg
       ? (/^!\[img\]\(([^)]+)\)$/.test(lastMsg.text) ? '[图片]' : lastMsg.text.slice(0, 18))
       : '';
