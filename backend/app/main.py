@@ -1401,11 +1401,20 @@ async def remove_room_member(
         if owner_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot remove the last owner")
 
+    # 强规则：成员被踢出后，其在该群历史发言对所有群成员不可见
+    # 仅删除“该群 + 该成员”消息，不影响其他群与私聊
+    db.execute(delete(Message).where(Message.room_id == room_id, Message.sender_id == user_id))
     db.execute(delete(room_members).where(room_members.c.room_id == room_id, room_members.c.user_id == user_id))
     db.execute(delete(RoomMute).where(RoomMute.room_id == room_id, RoomMute.user_id == user_id))
     db.commit()
     manager.refresh_user_rooms(user_id, get_room_ids_for_user(db, user_id))
     await manager.send_json_to_user(user_id, {"type": "room_removed", "room_id": room_id})
+
+    # 前端已实现该事件处理：收到后立即从当前群消息列表移除目标成员发言
+    await manager.broadcast_to_room(
+        room_id,
+        {"type": "member_messages_deleted", "room_id": room_id, "user_id": user_id},
+    )
 
     actor = current_user.nickname or current_user.username
     system_msg = Message(room_id=room_id, sender_id=current_user.id, content=f"[system] {actor} 移除了成员 {user_id}")
