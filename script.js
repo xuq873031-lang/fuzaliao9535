@@ -10,7 +10,7 @@ const STORAGE_KEYS = {
 };
 const CHAT_CONFIG = window.__CHAT_CONFIG || {};
 const DEFAULT_API_BASE = String(
-  CHAT_CONFIG.API_BASE || 'https://web-production-be9f.up.railway.app'
+  CHAT_CONFIG.API_BASE || 'https://web-production-afb64.up.railway.app'
 ).trim().replace(/\/$/, '');
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
@@ -1131,6 +1131,28 @@ function sortFriendsAtoZ(friends) {
     const bn = getFriendSortName(b);
     return an.localeCompare(bn, ['zh-Hans-CN', 'en'], { sensitivity: 'base', numeric: true });
   });
+}
+
+function getFriendGroupKey(friend) {
+  const raw = getFriendSortName(friend).trim();
+  const first = raw.charAt(0).toUpperCase();
+  if (first >= 'A' && first <= 'Z') return first;
+  return '#';
+}
+
+function buildFriendGroups(friends) {
+  const grouped = {};
+  sortFriendsAtoZ(friends).forEach((friend) => {
+    const key = getFriendGroupKey(friend);
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(friend);
+  });
+  const keys = Object.keys(grouped).sort((a, b) => {
+    if (a === '#') return 1;
+    if (b === '#') return -1;
+    return a.localeCompare(b);
+  });
+  return { grouped, keys };
 }
 
 function applyMuteComposerState(conv) {
@@ -2499,16 +2521,20 @@ function bindFriendEvents() {
   const searchInput = document.getElementById('friendSearchInput');
   const toggleToolsBtn = document.getElementById('toggleFriendToolsBtn');
   const toolsPanel = document.getElementById('friendToolsPanel');
-  const friendList = document.getElementById('friendList');
-
-  if (toolsPanel && !toggleToolsBtn) {
-    toolsPanel.classList.remove('d-none');
-  }
+  const hideToolsBtn = document.getElementById('hideFriendToolsBtn');
+  const entryNewFriend = document.getElementById('contactsEntryNewFriend');
+  const entryGroupNotice = document.getElementById('contactsEntryGroupNotice');
+  const entryDevices = document.getElementById('contactsEntryDevices');
+  const menuAddFriend = document.getElementById('menuAddFriend');
+  const menuCreateGroup = document.getElementById('menuCreateGroup');
+  const menuCreateTag = document.getElementById('menuCreateTag');
+  const menuMyQr = document.getElementById('menuMyQr');
+  const plusBtn = document.getElementById('contactsPlusBtn');
+  const plusMenu = plusBtn ? bootstrap.Dropdown.getOrCreateInstance(plusBtn) : null;
 
   const openTools = () => {
     if (!toolsPanel) return;
     toolsPanel.classList.remove('d-none');
-    if (toggleToolsBtn) toggleToolsBtn.textContent = '收起新朋友';
     setTimeout(() => {
       toolsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 20);
@@ -2517,7 +2543,6 @@ function bindFriendEvents() {
   const closeTools = () => {
     if (!toolsPanel) return;
     toolsPanel.classList.add('d-none');
-    if (toggleToolsBtn) toggleToolsBtn.textContent = '新朋友';
   };
 
   if (searchBtn) searchBtn.addEventListener('click', handleFriendSearch);
@@ -2532,8 +2557,46 @@ function bindFriendEvents() {
       else closeTools();
     });
   }
+  if (hideToolsBtn) hideToolsBtn.addEventListener('click', closeTools);
+  if (entryNewFriend) entryNewFriend.addEventListener('click', openTools);
+  if (entryGroupNotice) entryGroupNotice.addEventListener('click', () => {
+    alert('群通知功能建设中，当前先保留入口。');
+  });
+  if (entryDevices) entryDevices.addEventListener('click', () => {
+    alert('设备记录功能建设中，当前先保留入口。');
+  });
+
+  if (menuAddFriend) {
+    menuAddFriend.addEventListener('click', () => {
+      plusMenu?.hide();
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+      }
+    });
+  }
+  if (menuCreateGroup) {
+    menuCreateGroup.addEventListener('click', () => {
+      plusMenu?.hide();
+      const modalEl = document.getElementById('createGroupModal');
+      if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    });
+  }
+  if (menuCreateTag) {
+    menuCreateTag.addEventListener('click', () => {
+      plusMenu?.hide();
+      alert('创建分组功能建设中，当前先保留入口。');
+    });
+  }
+  if (menuMyQr) {
+    menuMyQr.addEventListener('click', () => {
+      plusMenu?.hide();
+      alert('我的二维码功能建设中，当前先保留入口。');
+    });
+  }
 
   if (toggleToolsBtn && toolsPanel) closeTools();
+  if (!toggleToolsBtn && toolsPanel) closeTools();
 
   const profileChatBtn = document.getElementById('friendProfileChatBtn');
   if (profileChatBtn) {
@@ -2668,47 +2731,74 @@ function openFriendProfileModal(friendId) {
 
 function renderFriendList() {
   const box = document.getElementById('friendList');
+  const azBox = document.getElementById('friendAzIndex');
+  if (!box) return;
   box.innerHTML = '';
+  if (azBox) azBox.innerHTML = '';
 
   if (!appState.friends.length) {
-    box.innerHTML = '<div class="text-secondary">还没有好友，点击上方“添加好友”开始添加。</div>';
+    box.innerHTML = '<div class="p-3 text-secondary">还没有好友，点击右上角“+”选择“添加好友”开始添加。</div>';
     return;
   }
 
-  const sortedFriends = sortFriendsAtoZ(appState.friends);
-  sortedFriends.forEach((f) => {
-    const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
-    const displayName = getDisplayNameByUserId(f.id);
-    const item = document.createElement('button');
-    item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-    item.innerHTML = `
-      <div class="d-flex align-items-center gap-2">
-        <img src="${avatar}" width="32" height="32" class="rounded-circle" alt="avatar" />
-        <div>
-          <div class="fw-semibold">${displayName}</div>
-          <small class="text-secondary">@${f.username}</small>
-        </div>
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
-        <button class="btn btn-sm btn-outline-primary friend-chat-btn" type="button">聊天</button>
-      </div>
-    `;
+  const { grouped, keys } = buildFriendGroups(appState.friends);
+  keys.forEach((key) => {
+    const anchorKey = key === '#' ? 'HASH' : key;
+    const title = document.createElement('div');
+    title.className = 'contacts-group-title';
+    title.id = `friendGroup-${anchorKey}`;
+    title.textContent = key;
+    box.appendChild(title);
 
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      openFriendProfileModal(f.id);
-    });
-    const chatBtn = item.querySelector('.friend-chat-btn');
-    if (chatBtn) {
-      chatBtn.addEventListener('click', async (e) => {
+    grouped[key].forEach((f) => {
+      const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
+      const displayName = getDisplayNameByUserId(f.id);
+      const item = document.createElement('button');
+      item.className = 'contacts-friend-item';
+      item.innerHTML = `
+        <span class="contacts-friend-left">
+          <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
+          <span>
+            <span class="contacts-friend-name d-block">${displayName}</span>
+            <span class="contacts-friend-sub">@${f.username}</span>
+          </span>
+        </span>
+        <span class="contacts-friend-actions">
+          <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
+          <button class="btn btn-sm btn-outline-primary friend-chat-btn" type="button">聊天</button>
+        </span>
+      `;
+
+      item.addEventListener('click', (e) => {
         e.preventDefault();
-        e.stopPropagation();
-        await openPrivateChatWith(f.id);
+        openFriendProfileModal(f.id);
       });
-    }
-    box.appendChild(item);
+      const chatBtn = item.querySelector('.friend-chat-btn');
+      if (chatBtn) {
+        chatBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await openPrivateChatWith(f.id);
+        });
+      }
+      box.appendChild(item);
+    });
   });
+
+  if (azBox) {
+    keys.forEach((key) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'contacts-az-index-btn';
+      btn.textContent = key;
+      btn.addEventListener('click', () => {
+        const anchor = key === '#' ? 'HASH' : key;
+        const target = document.getElementById(`friendGroup-${anchor}`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      azBox.appendChild(btn);
+    });
+  }
 }
 
 async function editFriendRemark(friendId) {
@@ -2753,6 +2843,7 @@ async function handleRejectRequest(requestId) {
 function renderFriendRequestLists() {
   const incomingBox = document.getElementById('incomingRequestList');
   const outgoingBox = document.getElementById('outgoingRequestList');
+  const pendingBadge = document.getElementById('newFriendPendingCount');
   if (!incomingBox || !outgoingBox) return;
 
   incomingBox.innerHTML = '';
@@ -2760,6 +2851,11 @@ function renderFriendRequestLists() {
 
   const incomingRows = appState.incomingRequestHistory || [];
   const outgoingRows = appState.outgoingRequestHistory || [];
+  const pendingCount = incomingRows.filter((r) => r.status === 'pending').length;
+  if (pendingBadge) {
+    pendingBadge.textContent = String(pendingCount);
+    pendingBadge.classList.toggle('d-none', pendingCount <= 0);
+  }
   const statusText = (status) => {
     if (status === 'accepted') return '已同意';
     if (status === 'rejected') return '已拒绝';

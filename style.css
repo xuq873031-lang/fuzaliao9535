@@ -1050,3 +1050,224 @@ body {
     z-index: 4;
   }
 }
+
+/* ============================
+   微信式通讯录页
+============================ */
+.contacts-shell {
+  background: var(--tg-surface);
+}
+
+.contacts-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contacts-search-group .input-group-text {
+  background: var(--tg-surface-soft);
+  border-color: var(--tg-line);
+  color: var(--tg-text-soft);
+}
+
+.contacts-search-group .form-control {
+  border-color: var(--tg-line);
+}
+
+.contacts-search-group .btn {
+  min-width: 78px;
+}
+
+.contacts-plus-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid var(--tg-line);
+  background: var(--tg-surface);
+  color: var(--tg-text);
+}
+
+.contacts-plus-btn:hover {
+  background: var(--tg-surface-soft);
+}
+
+.contacts-plus-menu {
+  min-width: 160px;
+}
+
+.contacts-layout {
+  display: grid;
+  grid-template-columns: 1fr 22px;
+  gap: 8px;
+}
+
+.contacts-main-list {
+  min-height: 300px;
+}
+
+.contacts-fixed-zone {
+  border: 1px solid var(--tg-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--tg-surface);
+}
+
+.contacts-fixed-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--tg-line);
+  background: transparent;
+  color: var(--tg-text);
+  text-align: left;
+}
+
+.contacts-fixed-item:last-child {
+  border-bottom: 0;
+}
+
+.contacts-fixed-item:hover {
+  background: var(--tg-surface-soft);
+}
+
+.contacts-fixed-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.contacts-fixed-label {
+  flex: 1;
+  font-weight: 600;
+}
+
+.contacts-friend-groups {
+  border: 1px solid var(--tg-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--tg-surface);
+}
+
+.contacts-group-title {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tg-text-soft);
+  background: var(--tg-surface-soft);
+  border-top: 1px solid var(--tg-line);
+}
+
+.contacts-group-title:first-child {
+  border-top: 0;
+}
+
+.contacts-friend-item {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--tg-line);
+  background: transparent;
+  padding: 10px 12px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contacts-friend-item:first-of-type {
+  border-top: 0;
+}
+
+.contacts-friend-item:hover {
+  background: var(--tg-surface-soft);
+}
+
+.contacts-friend-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.contacts-friend-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 36px;
+}
+
+.contacts-friend-name {
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.contacts-friend-sub {
+  color: var(--tg-text-soft);
+  font-size: 12px;
+}
+
+.contacts-friend-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.contacts-az-index {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-top: 4px;
+}
+
+.contacts-az-index-btn {
+  border: 0;
+  background: transparent;
+  color: var(--tg-text-soft);
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 4px;
+}
+
+.contacts-az-index-btn:hover {
+  background: var(--tg-surface-soft);
+  color: var(--tg-text);
+}
+
+.contacts-search-results .list-group-item {
+  border-color: var(--tg-line);
+}
+
+@media (max-width: 991.98px) {
+  .contacts-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .contacts-az-index {
+    position: sticky;
+    bottom: 8px;
+    right: 0;
+    z-index: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--tg-line);
+  }
+
+  [data-bs-theme="dark"] .contacts-az-index {
+    background: rgba(17, 26, 36, 0.92);
+  }
+}

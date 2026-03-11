@@ -233,21 +233,58 @@
 
               <!-- 好友页 -->
               <section id="friendsView" class="view-section d-none p-3">
-                <div class="card border-0 shadow-sm rounded-4">
-                  <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                      <h6 class="mb-0">我的好友</h6>
-                      <button id="toggleFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">新朋友</button>
+                <div class="card border-0 shadow-sm rounded-4 contacts-shell">
+                  <div class="card-body p-3 p-lg-4">
+                    <div class="contacts-topbar mb-3">
+                      <div class="input-group contacts-search-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input id="friendSearchInput" class="form-control" placeholder="搜索好友账号 / UID" />
+                        <button id="friendSearchBtn" class="btn btn-primary">搜索</button>
+                      </div>
+                      <div class="dropdown">
+                        <button id="contactsPlusBtn" class="btn contacts-plus-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          <i class="bi bi-plus-lg"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end contacts-plus-menu">
+                          <li><button id="menuAddFriend" class="dropdown-item" type="button">添加好友</button></li>
+                          <li><button id="menuCreateGroup" class="dropdown-item" type="button">创建群聊</button></li>
+                          <li><button id="menuCreateTag" class="dropdown-item" type="button">创建分组</button></li>
+                          <li><button id="menuMyQr" class="dropdown-item" type="button">我的二维码</button></li>
+                        </ul>
+                      </div>
                     </div>
-                    <div class="input-group mb-3">
-                      <input id="friendSearchInput" class="form-control" placeholder="搜索好友账号" />
-                      <button id="friendSearchBtn" class="btn btn-primary">搜索</button>
-                    </div>
-                    <div id="friendSearchResults" class="list-group mb-3"></div>
-                    <div id="friendList" class="list-group mb-3"></div>
 
-                    <div id="friendToolsPanel" class="d-none border-top pt-3">
-                      <h6 class="mb-2">新朋友（收到的申请）</h6>
+                    <div id="friendSearchResults" class="list-group mb-3 contacts-search-results"></div>
+
+                    <div class="contacts-layout">
+                      <div class="contacts-main-list">
+                        <div class="contacts-fixed-zone mb-3">
+                          <button id="contactsEntryNewFriend" class="contacts-fixed-item" type="button">
+                            <span class="contacts-fixed-icon text-bg-primary"><i class="bi bi-person-plus"></i></span>
+                            <span class="contacts-fixed-label">新的好友</span>
+                            <span id="newFriendPendingCount" class="badge text-bg-danger d-none">0</span>
+                          </button>
+                          <button id="contactsEntryGroupNotice" class="contacts-fixed-item" type="button">
+                            <span class="contacts-fixed-icon text-bg-warning"><i class="bi bi-megaphone"></i></span>
+                            <span class="contacts-fixed-label">群通知</span>
+                          </button>
+                          <button id="contactsEntryDevices" class="contacts-fixed-item" type="button">
+                            <span class="contacts-fixed-icon text-bg-secondary"><i class="bi bi-phone"></i></span>
+                            <span class="contacts-fixed-label">设备记录</span>
+                          </button>
+                        </div>
+
+                        <div id="friendList" class="contacts-friend-groups"></div>
+                      </div>
+
+                      <div id="friendAzIndex" class="contacts-az-index"></div>
+                    </div>
+
+                    <div id="friendToolsPanel" class="d-none border-top pt-3 mt-3">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">新的朋友（收到的申请）</h6>
+                        <button id="hideFriendToolsBtn" class="btn btn-outline-secondary btn-sm" type="button">收起</button>
+                      </div>
                       <div id="incomingRequestList" class="list-group mb-3"></div>
                       <h6 class="mb-2">我发出的申请</h6>
                       <div id="outgoingRequestList" class="list-group"></div>
