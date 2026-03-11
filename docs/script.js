@@ -60,6 +60,8 @@ let appState = {
   lastSentAtByRoom: {},
   unreadPollTimer: null,
   conversationRenderQueued: false,
+  messageAppendQueued: false,
+  pendingMessageAppendByRoom: {},
   userNearBottom: true,
   lastSoundAt: 0,
   audioCtx: null,
@@ -502,8 +504,9 @@ function reconcilePendingMessage(conv, serverMsg) {
   if (!conv || !serverMsg) return false;
   const idx = conv.messages.findIndex((m) => m.localPending && !m.localFailed && m.senderId === serverMsg.senderId && m.text === serverMsg.text);
   if (idx >= 0) {
+    const oldId = conv.messages[idx].id;
     conv.messages[idx] = { ...serverMsg, localPending: false, localFailed: false, localTempId: null };
-    return true;
+    return oldId;
   }
   return false;
 }
@@ -1361,7 +1364,9 @@ function scrollMessagesToBottom(options = {}) {
   const { force = false } = options;
   const listEl = document.getElementById('messageList');
   if (!listEl) return;
-  if (!force && !isNearBottom(listEl, 120)) return;
+  const shouldStickBottom = force || isNearBottom(listEl, 120);
+  if (!shouldStickBottom) return;
+  appState.userNearBottom = true;
 
   requestAnimationFrame(() => {
     listEl.scrollTop = listEl.scrollHeight;
@@ -1370,11 +1375,59 @@ function scrollMessagesToBottom(options = {}) {
   const pendingImages = Array.from(listEl.querySelectorAll('img')).filter((img) => !img.complete);
   pendingImages.forEach((img) => {
     img.addEventListener('load', () => {
-      if (force || isNearBottom(listEl, 160)) {
+      if (force || appState.userNearBottom || isNearBottom(listEl, 180)) {
         listEl.scrollTop = listEl.scrollHeight;
       }
     }, { once: true });
   });
+}
+
+function replaceMessageRowInView(conv, oldMessageId, newMessage) {
+  const listEl = document.getElementById('messageList');
+  if (!listEl || !conv || !newMessage) return;
+  const oldRow = listEl.querySelector(`.msg-row[data-message-id="${oldMessageId}"]`);
+  if (!oldRow) return;
+  oldRow.replaceWith(buildMessageRow(newMessage, conv));
+}
+
+function updateMessageRowInView(conv, message) {
+  const listEl = document.getElementById('messageList');
+  if (!listEl || !conv || !message) return;
+  const row = listEl.querySelector(`.msg-row[data-message-id="${message.id}"]`);
+  if (!row) return;
+  row.replaceWith(buildMessageRow(message, conv));
+}
+
+function removeMessageRowInView(messageId) {
+  const listEl = document.getElementById('messageList');
+  if (!listEl) return;
+  const row = listEl.querySelector(`.msg-row[data-message-id="${messageId}"]`);
+  if (row) row.remove();
+}
+
+function flushPendingMessageAppends() {
+  appState.messageAppendQueued = false;
+  const roomIds = Object.keys(appState.pendingMessageAppendByRoom);
+  if (!roomIds.length) return;
+  roomIds.forEach((roomIdStr) => {
+    const roomId = Number(roomIdStr);
+    const queue = appState.pendingMessageAppendByRoom[roomId];
+    if (!Array.isArray(queue) || !queue.length) return;
+    delete appState.pendingMessageAppendByRoom[roomId];
+    if (appState.currentView !== 'messagesView' || appState.activeConversationId !== roomId) return;
+    const conv = findConversationById(roomId);
+    if (!conv) return;
+    appendMessagesToView(conv, queue, { autoScroll: appState.userNearBottom });
+  });
+}
+
+function queueMessageAppend(roomId, message) {
+  if (!roomId || !message) return;
+  if (!appState.pendingMessageAppendByRoom[roomId]) appState.pendingMessageAppendByRoom[roomId] = [];
+  appState.pendingMessageAppendByRoom[roomId].push(message);
+  if (appState.messageAppendQueued) return;
+  appState.messageAppendQueued = true;
+  requestAnimationFrame(flushPendingMessageAppends);
 }
 
 function updateLastMessageId(roomId, messages) {
@@ -1410,13 +1463,13 @@ async function pollActiveRoomMessages() {
     const listEl = document.getElementById('messageList');
     const nearBottom = isNearBottom(listEl);
     const newlyAdded = [];
-    let replacedPendingAny = false;
+    const replacedRows = [];
 
     normalized.forEach((msg) => {
       if (existing.has(msg.id)) return;
       const replaced = reconcilePendingMessage(conv, msg);
       if (replaced) {
-        replacedPendingAny = true;
+        replacedRows.push({ oldId: replaced, message: msg });
       }
       if (!replaced) {
         conv.messages.push(msg);
@@ -1424,12 +1477,15 @@ async function pollActiveRoomMessages() {
       }
     });
 
-    if (newlyAdded.length || replacedPendingAny) {
+    if (newlyAdded.length || replacedRows.length) {
       updateLastMessageId(roomId, conv.messages);
       scheduleConversationListRender();
       if (appState.currentView === 'messagesView' && appState.activeConversationId === roomId) {
-        if (newlyAdded.length) appendMessagesToView(conv, newlyAdded, { autoScroll: nearBottom });
-        else renderMessages({ autoScroll: nearBottom });
+        replacedRows.forEach(({ oldId, message }) => replaceMessageRowInView(conv, oldId, message));
+        if (newlyAdded.length) {
+          newlyAdded.forEach((m) => queueMessageAppend(conv.id, m));
+        }
+        if (nearBottom && !appState.messageAppendQueued) scrollMessagesToBottom({ force: false });
       }
       updateUnreadBadges();
       if (newlyAdded.length) await markCurrentRoomRead();
@@ -1537,7 +1593,19 @@ function handleWsEvent(evt) {
       if (appState.userMap[uid]) appState.userMap[uid].online = !!evt.online;
       appState.friends = appState.friends.map((f) => (f.id === uid ? { ...f, online: !!evt.online } : f));
       renderFriendList();
-      renderMessages();
+      const conv = findConversationById(appState.activeConversationId);
+      if (conv) {
+        const subEl = document.getElementById('chatSubTitle');
+        if (subEl) {
+          if (conv.type === 'group') {
+            const onlineCount = (conv.members || []).filter((id) => appState.onlineUserIds.has(Number(id))).length;
+            subEl.textContent = `${conv.members.length} 人 · 在线 ${onlineCount}`;
+          } else {
+            const other = getOtherUserInPrivateConversation(conv);
+            if (other?.id === uid) subEl.textContent = evt.online ? '在线' : '离线';
+          }
+        }
+      }
     }
     return;
   }
@@ -1592,12 +1660,12 @@ function handleWsEvent(evt) {
       playIncomingSound();
     }
 
-    renderConversationList();
+    scheduleConversationListRender();
     if (appState.activeConversationId === conv.id) {
       if (replacedPending || exists) {
-        renderMessages({ autoScroll: appState.userNearBottom });
+        if (replacedPending) replaceMessageRowInView(conv, replacedPending, msg);
       } else {
-        appendMessagesToView(conv, [msg], { autoScroll: appState.userNearBottom });
+        queueMessageAppend(conv.id, msg);
       }
       if (isFromOther) scheduleMarkCurrentRoomRead();
     }
@@ -1619,7 +1687,7 @@ function handleWsEvent(evt) {
     }
 
     scheduleConversationListRender();
-    if (appState.activeConversationId === conv.id) renderMessages({ autoScroll: false });
+    if (appState.activeConversationId === conv.id && target) updateMessageRowInView(conv, target);
     return;
   }
 
@@ -1631,7 +1699,7 @@ function handleWsEvent(evt) {
     if (!conv || !messageId) return;
     conv.messages = conv.messages.filter((m) => Number(m.id) !== messageId);
     scheduleConversationListRender();
-    if (appState.activeConversationId === conv.id) renderMessages({ autoScroll: false });
+    if (appState.activeConversationId === conv.id) removeMessageRowInView(messageId);
     return;
   }
 
@@ -5195,11 +5263,15 @@ async function sendMessage() {
       if (sent.via === 'http' && sent.message) {
         const msg = normalizeMessage(sent.message);
         const replaced = reconcilePendingMessage(conv, msg);
-        if (!replaced) {
+        if (replaced) {
+          replaceMessageRowInView(conv, replaced, msg);
+        } else {
           const exists = conv.messages.some((m) => m.id === msg.id);
-          if (!exists) conv.messages.push(msg);
+          if (!exists) {
+            conv.messages.push(msg);
+            appendMessagesToView(conv, [msg], { autoScroll: true });
+          }
         }
-        renderMessages({ autoScroll: true });
         scheduleConversationListRender();
         updateUnreadBadges();
         await markCurrentRoomRead();
