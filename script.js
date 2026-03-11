@@ -1454,15 +1454,20 @@ function isNearBottom(el, threshold = 220) {
 }
 
 function debugScroll(event, extra = {}) {
-  if (!SCROLL_DEBUG) return;
   const listEl = getMessageScrollContainer();
   const metrics = getScrollMetrics(listEl) || {};
-  console.debug('[scroll]', event, {
+  const payload = {
+    ts: Date.now(),
+    event,
     roomId: appState.activeConversationId,
     nearBottom: isNearBottom(listEl, 220),
     ...metrics,
     ...extra
-  });
+  };
+  if (!appState.scrollTrace) appState.scrollTrace = [];
+  appState.scrollTrace.push(payload);
+  if (appState.scrollTrace.length > 120) appState.scrollTrace.shift();
+  if (SCROLL_DEBUG) console.debug('[scroll]', payload);
 }
 
 window.__chatScrollProbe = function __chatScrollProbe() {
@@ -1473,6 +1478,10 @@ window.__chatScrollProbe = function __chatScrollProbe() {
     nearBottom: isNearBottom(el, 220),
     metrics
   };
+};
+
+window.__chatScrollTrace = function __chatScrollTrace() {
+  return (appState.scrollTrace || []).slice(-40);
 };
 
 function scrollMessagesToBottom(options = {}) {
