@@ -15,7 +15,7 @@ const DEFAULT_API_BASE = String(
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
 ).trim().replace(/\/$/, '');
-const APP_BUILD = '20260308_1';
+const APP_BUILD = '20260310_ui2';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
 const MESSAGE_RENDER_INITIAL_LIMIT = 80;
@@ -118,7 +118,7 @@ function clearToken() {
 
 function getApiBase() {
   const stored = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
-  if (!stored || !/^https?:\/\//i.test(stored)) {
+  if (!stored || !/^https?:\/\//i.test(stored) || stored !== DEFAULT_API_BASE) {
     localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
     return DEFAULT_API_BASE;
   }
