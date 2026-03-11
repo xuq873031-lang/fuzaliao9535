@@ -605,12 +605,16 @@ function switchView(viewId, options = {}) {
       .catch((err) => console.warn('刷新会话失败', err.message));
   } else if (viewId === 'friendsView') {
     stopRoomPolling();
+    renderFriendsLoadingState();
     Promise.all([refreshFriends(), refreshFriendRequests(), refreshFriendRemarks()])
       .then(() => {
         renderFriendList();
         renderFriendRequestLists();
       })
-      .catch((err) => console.warn('刷新好友数据失败', err.message));
+      .catch((err) => {
+        console.warn('刷新好友数据失败', err.message);
+        renderFriendsErrorState(err.message);
+      });
   } else if (viewId === 'adminView') {
     stopRoomPolling();
     loadAdminUsers().catch((err) => console.warn('加载后台用户失败', err.message));
@@ -2569,6 +2573,7 @@ function bindFriendEvents() {
   if (menuAddFriend) {
     menuAddFriend.addEventListener('click', () => {
       plusMenu?.hide();
+      openTools();
       if (searchInput) {
         searchInput.focus();
         searchInput.select();
@@ -2642,6 +2647,13 @@ async function handleFriendSearch() {
     return;
   }
 
+  const isSelfByUsername = String(appState.currentUser?.username || '').toLowerCase() === keyword.toLowerCase();
+  const isSelfById = String(appState.currentUser?.id || '') === keyword;
+  if (isSelfByUsername || isSelfById) {
+    box.innerHTML = '<div class="text-secondary small">不能添加自己，请输入对方账号</div>';
+    return;
+  }
+
   try {
     box.innerHTML = '<div class="text-secondary small">搜索中...</div>';
     const rawResults = await apiSearchUsers(keyword);
@@ -2656,7 +2668,7 @@ async function handleFriendSearch() {
       .filter((item) => item.id > 0 && item.username && Number(item.id) !== Number(appState.currentUser?.id || 0));
 
     if (!results.length) {
-      box.innerHTML = '<div class="text-secondary small">无匹配结果</div>';
+      box.innerHTML = '<div class="text-secondary small">无匹配结果（请确认前后端连接的是同一环境数据）</div>';
       return;
     }
 
@@ -2922,6 +2934,27 @@ function renderFriendRequestLists() {
       outgoingBox.appendChild(row);
     });
   }
+}
+
+function renderFriendsLoadingState() {
+  const friendBox = document.getElementById('friendList');
+  const searchBox = document.getElementById('friendSearchResults');
+  const inBox = document.getElementById('incomingRequestList');
+  const outBox = document.getElementById('outgoingRequestList');
+  if (friendBox) friendBox.innerHTML = '<div class="p-3 text-secondary">正在加载好友列表...</div>';
+  if (searchBox) searchBox.innerHTML = '';
+  if (inBox) inBox.innerHTML = '<div class="text-secondary small">正在加载申请...</div>';
+  if (outBox) outBox.innerHTML = '<div class="text-secondary small">正在加载申请...</div>';
+}
+
+function renderFriendsErrorState(message) {
+  const friendBox = document.getElementById('friendList');
+  const inBox = document.getElementById('incomingRequestList');
+  const outBox = document.getElementById('outgoingRequestList');
+  const err = escapeHtml(message || '加载失败');
+  if (friendBox) friendBox.innerHTML = `<div class="p-3 text-danger">好友列表加载失败：${err}</div>`;
+  if (inBox) inBox.innerHTML = `<div class="text-danger small">申请加载失败：${err}</div>`;
+  if (outBox) outBox.innerHTML = `<div class="text-danger small">申请加载失败：${err}</div>`;
 }
 
 async function ensureDirectRoomWithFriend(friendId) {
