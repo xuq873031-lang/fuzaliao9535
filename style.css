@@ -1058,6 +1058,19 @@ body {
   background: var(--tg-surface);
 }
 
+.contacts-headline h5 {
+  color: var(--tg-text);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.contacts-version-badge {
+  color: #ff4d4f;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .contacts-topbar {
   display: flex;
   align-items: center;
