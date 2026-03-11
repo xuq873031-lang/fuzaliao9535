@@ -1416,25 +1416,14 @@ function applyAtMentionHighlight(text) {
 }
 
 function getMessageScrollContainer() {
-  const chatPane = document.getElementById('chatPane');
-  const candidates = [
-    document.getElementById('messageList'),
-    chatPane ? chatPane.querySelector('#messageList') : null,
-    chatPane ? chatPane.querySelector('.message-list') : null,
-    document.querySelector('#messagesView #messageList'),
-    document.querySelector('#messagesView .message-list')
-  ].filter(Boolean);
-
-  let best = candidates[0] || null;
-  let bestScore = -1;
-  candidates.forEach((el) => {
-    const score = (el.scrollHeight - el.clientHeight) + (el.clientHeight > 0 ? 1000 : 0);
-    if (score > bestScore) {
-      bestScore = score;
-      best = el;
-    }
-  });
-  return best;
+  const list = document.getElementById('messageList');
+  if (!list) return null;
+  const chatPane = list.closest('.chat-pane');
+  if (!chatPane) return list;
+  const hiddenByClass = chatPane.classList.contains('d-none');
+  const hiddenByStyle = chatPane.style.display === 'none';
+  if (hiddenByClass || hiddenByStyle) return null;
+  return list;
 }
 
 function getScrollMetrics(el) {
