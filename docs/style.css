@@ -635,6 +635,23 @@ body.main-open #messageList {
   border-radius: 12px;
 }
 
+.chat-more-btn {
+  min-width: 72px;
+  font-weight: 600;
+}
+
+.chat-more-menu {
+  min-width: 160px;
+  border-radius: 12px;
+  padding: 6px;
+}
+
+.chat-more-menu .dropdown-item {
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
 #messageInput {
   border-radius: 14px;
   border: 1px solid var(--tg-line);

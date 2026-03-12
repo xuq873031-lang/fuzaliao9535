@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="./icons/icon-192.png?v=20260308_1" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260312_ui8" />
+  <link rel="stylesheet" href="./style.css?v=20260312_ui10" />
   <script>
     // 前后端分离部署配置：前端固定静态域名，后端固定 API/WS 域名
     window.__CHAT_CONFIG = {
@@ -175,9 +175,19 @@
                         </div>
                       </div>
                       <div class="d-flex align-items-center gap-2">
-                        <button id="chatDetailsBtn" class="btn btn-outline-secondary btn-sm" type="button">详情</button>
-                        <button id="multiSelectToggleBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">多选</button>
                         <button id="mobileBackToListBtn" class="btn btn-outline-secondary btn-sm d-lg-none d-none">返回</button>
+                        <div class="dropdown">
+                          <button id="chatMoreBtn" class="btn btn-outline-secondary btn-sm chat-more-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            更多
+                          </button>
+                          <ul class="dropdown-menu dropdown-menu-end chat-more-menu">
+                            <li><button id="chatMoreDetailsItem" class="dropdown-item" type="button">会话详情</button></li>
+                            <li><button id="chatMoreMultiSelectItem" class="dropdown-item" type="button">多选消息</button></li>
+                            <li><button id="chatMoreLoadMoreItem" class="dropdown-item" type="button">加载更多</button></li>
+                          </ul>
+                        </div>
+                        <button id="chatDetailsBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">详情</button>
+                        <button id="multiSelectToggleBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">多选</button>
                         <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm d-none">加载更多</button>
                       </div>
                     </div>
@@ -856,7 +866,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="./script.js?v=20260311_ui6" defer></script>
+  <script src="./script.js?v=20260312_ui10" defer></script>
 </body>
 </html>
 <-Xms2g pages-trigger-1773150810 -->

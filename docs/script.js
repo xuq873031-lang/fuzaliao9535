@@ -96,6 +96,7 @@ let appState = {
   newFriendTab: 'incoming',
   pendingMessageSeq: 0,
   activeFriendProfileId: null,
+  activeContactActionId: null,
   managingGroupMembers: [],
   groupMemberSearchKeyword: '',
   multiSelectMode: false,
@@ -3119,6 +3120,46 @@ function bindFriendEvents() {
       openDeleteFriendConfirmModal(fid);
     });
   }
+  const contactActionChatBtn = document.getElementById('contactActionChatBtn');
+  if (contactActionChatBtn) {
+    contactActionChatBtn.addEventListener('click', async () => {
+      const fid = Number(appState.activeContactActionId || 0);
+      if (!fid) return;
+      const modal = bootstrap.Modal.getInstance(document.getElementById('contactActionModal'));
+      if (modal) modal.hide();
+      await openPrivateChatWith(fid);
+    });
+  }
+  const contactActionProfileBtn = document.getElementById('contactActionProfileBtn');
+  if (contactActionProfileBtn) {
+    contactActionProfileBtn.addEventListener('click', () => {
+      const fid = Number(appState.activeContactActionId || 0);
+      if (!fid) return;
+      const modal = bootstrap.Modal.getInstance(document.getElementById('contactActionModal'));
+      if (modal) modal.hide();
+      openFriendProfileModal(fid);
+    });
+  }
+  const contactActionRemarkBtn = document.getElementById('contactActionRemarkBtn');
+  if (contactActionRemarkBtn) {
+    contactActionRemarkBtn.addEventListener('click', async () => {
+      const fid = Number(appState.activeContactActionId || 0);
+      if (!fid) return;
+      const modal = bootstrap.Modal.getInstance(document.getElementById('contactActionModal'));
+      if (modal) modal.hide();
+      await editFriendRemark(fid);
+    });
+  }
+  const contactActionDeleteBtn = document.getElementById('contactActionDeleteBtn');
+  if (contactActionDeleteBtn) {
+    contactActionDeleteBtn.addEventListener('click', () => {
+      const fid = Number(appState.activeContactActionId || 0);
+      if (!fid) return;
+      const modal = bootstrap.Modal.getInstance(document.getElementById('contactActionModal'));
+      if (modal) modal.hide();
+      openDeleteFriendConfirmModal(fid);
+    });
+  }
   const confirmDeleteFriendBtn = document.getElementById('confirmDeleteFriendBtn');
   if (confirmDeleteFriendBtn) {
     confirmDeleteFriendBtn.addEventListener('click', async () => {
@@ -3133,6 +3174,17 @@ function bindFriendEvents() {
       appState.activeFriendProfileId = null;
     });
   }
+}
+
+function openContactActionModal(friendId) {
+  const f = appState.friends.find((x) => Number(x.id) === Number(friendId));
+  if (!f) return;
+  appState.activeContactActionId = f.id;
+  const nameEl = document.getElementById('contactActionName');
+  if (nameEl) nameEl.textContent = getDisplayNameByUserId(f.id);
+  const modalEl = document.getElementById('contactActionModal');
+  if (!modalEl) return;
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
 }
 
 async function handleFriendSearch() {
@@ -3298,24 +3350,16 @@ function renderFriendList() {
             <span class="contacts-friend-sub">ID: ${f.username}</span>
           </span>
         </span>
-        <span class="contacts-friend-actions">
+        <span class="contacts-friend-right">
           <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
-          <button class="btn btn-sm btn-outline-primary friend-chat-btn" type="button">聊天</button>
+          <i class="bi bi-chevron-right contacts-friend-chevron" aria-hidden="true"></i>
         </span>
       `;
 
       item.addEventListener('click', (e) => {
         e.preventDefault();
-        openFriendProfileModal(f.id);
+        openContactActionModal(f.id);
       });
-      const chatBtn = item.querySelector('.friend-chat-btn');
-      if (chatBtn) {
-        chatBtn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          await openPrivateChatWith(f.id);
-        });
-      }
       box.appendChild(item);
     });
   });
@@ -4701,6 +4745,9 @@ function bindChatEvents() {
   const historySearchInput = document.getElementById('historySearchInput');
   const chatDetailsBtn = document.getElementById('chatDetailsBtn');
   const multiSelectToggleBtn = document.getElementById('multiSelectToggleBtn');
+  const chatMoreDetailsItem = document.getElementById('chatMoreDetailsItem');
+  const chatMoreMultiSelectItem = document.getElementById('chatMoreMultiSelectItem');
+  const chatMoreLoadMoreItem = document.getElementById('chatMoreLoadMoreItem');
   const multiSelectCancelBtn = document.getElementById('multiSelectCancelBtn');
   const multiForwardBtn = document.getElementById('multiForwardBtn');
   const multiSelectSelectAllBtn = document.getElementById('multiSelectSelectAllBtn');
@@ -4955,6 +5002,21 @@ function bindChatEvents() {
     modal.show();
   };
   if (chatDetailsBtn) chatDetailsBtn.addEventListener('click', openChatDetailsPanel);
+  if (chatMoreDetailsItem) {
+    chatMoreDetailsItem.addEventListener('click', () => {
+      if (chatDetailsBtn) chatDetailsBtn.click();
+    });
+  }
+  if (chatMoreMultiSelectItem) {
+    chatMoreMultiSelectItem.addEventListener('click', () => {
+      if (multiSelectToggleBtn) multiSelectToggleBtn.click();
+    });
+  }
+  if (chatMoreLoadMoreItem) {
+    chatMoreLoadMoreItem.addEventListener('click', () => {
+      if (loadMoreBtn) loadMoreBtn.click();
+    });
+  }
   if (chatHeaderMain) {
     chatHeaderMain.addEventListener('click', () => {
       const conv = findConversationById(appState.activeConversationId);
