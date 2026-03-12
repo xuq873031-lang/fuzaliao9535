@@ -857,8 +857,10 @@ async function apiAddFriend(friendId) {
   return apiFetch(`/api/friends/${friendId}`, { method: 'POST' });
 }
 
-async function apiRemoveFriend(friendId) {
-  return apiFetch(`/api/friends/${friendId}`, { method: 'DELETE' });
+async function apiRemoveFriend(friendId, options = {}) {
+  const deletePeerMessages = !!options.deletePeerMessages;
+  const query = deletePeerMessages ? '?delete_peer_messages=true' : '';
+  return apiFetch(`/api/friends/${friendId}${query}`, { method: 'DELETE' });
 }
 
 async function apiSendFriendRequest(toUserId, message = '') {
@@ -2637,13 +2639,12 @@ function logout() {
   switchAuthPage('login');
 }
 
-async function removeFriend(friendId) {
-  if (!confirm('确定删除该好友吗？')) return;
+async function removeFriend(friendId, options = {}) {
   try {
     const current = findConversationById(appState.activeConversationId);
     const shouldResetCurrent = !!(current && isDmConversation(current) && current.members.includes(friendId));
 
-    await apiRemoveFriend(friendId);
+    await apiRemoveFriend(friendId, options);
     await refreshFriends();
     await refreshFriendRemarks();
     await refreshFriendRequests();
@@ -2661,6 +2662,21 @@ async function removeFriend(friendId) {
   } catch (err) {
     alert(`删除好友失败：${err.message}`);
   }
+}
+
+function openDeleteFriendConfirmModal(friendId) {
+  const fid = Number(friendId || 0);
+  if (!fid) return;
+  const modalEl = document.getElementById('deleteFriendModal');
+  if (!modalEl) return;
+  const idInput = document.getElementById('deleteFriendId');
+  const wrap = document.getElementById('deleteFriendPeerOptionWrap');
+  const peerCheckbox = document.getElementById('deleteFriendPeerMessages');
+  if (idInput) idInput.value = String(fid);
+  const canAdvanced = !!appState.currentUser?.canUseEditFeature;
+  if (wrap) wrap.classList.toggle('d-none', !canAdvanced);
+  if (peerCheckbox) peerCheckbox.checked = false;
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
 }
 
 // ============================
@@ -3028,12 +3044,23 @@ function bindFriendEvents() {
   }
   const profileDeleteBtn = document.getElementById('friendProfileDeleteAction');
   if (profileDeleteBtn) {
-    profileDeleteBtn.addEventListener('click', async () => {
+    profileDeleteBtn.addEventListener('click', () => {
       const fid = Number(appState.activeFriendProfileId || 0);
       if (!fid) return;
-      await removeFriend(fid);
-      const modal = bootstrap.Modal.getInstance(document.getElementById('friendProfileModal'));
-      if (modal) modal.hide();
+      openDeleteFriendConfirmModal(fid);
+    });
+  }
+  const confirmDeleteFriendBtn = document.getElementById('confirmDeleteFriendBtn');
+  if (confirmDeleteFriendBtn) {
+    confirmDeleteFriendBtn.addEventListener('click', async () => {
+      const fid = Number(document.getElementById('deleteFriendId')?.value || 0);
+      if (!fid) return;
+      const deletePeerMessages = !!document.getElementById('deleteFriendPeerMessages')?.checked;
+      await removeFriend(fid, { deletePeerMessages });
+      const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteFriendModal'));
+      if (deleteModal) deleteModal.hide();
+      const profileModal = bootstrap.Modal.getInstance(document.getElementById('friendProfileModal'));
+      if (profileModal) profileModal.hide();
       appState.activeFriendProfileId = null;
     });
   }
