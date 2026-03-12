@@ -1233,7 +1233,7 @@ body.main-open #messageList {
   min-height: 44px;
   border: 0;
   border-bottom: 1px solid var(--tg-line);
-  background: transparent;
+  background: #f8fbff;
   color: var(--tg-text);
   text-align: left;
 }
@@ -1243,7 +1243,7 @@ body.main-open #messageList {
 }
 
 .contacts-fixed-item:hover {
-  background: var(--tg-surface-soft);
+  background: #eef5ff;
 }
 
 .contacts-fixed-icon {
