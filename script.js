@@ -15,6 +15,16 @@ const DEFAULT_API_BASE = String(
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
 ).trim().replace(/\/$/, '');
+const API_BASE_CANDIDATES = Array.from(new Set(
+  [
+    DEFAULT_API_BASE,
+    'https://web-production-afb64.up.railway.app',
+    'https://web-production-be9f.up.railway.app',
+    'https://web-production-f9619e.up.railway.app'
+  ]
+    .map((x) => String(x || '').trim().replace(/\/$/, ''))
+    .filter((x) => /^https?:\/\//i.test(x))
+));
 const APP_BUILD = '20260311_ui6';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
@@ -129,7 +139,11 @@ function clearToken() {
 
 function getApiBase() {
   const stored = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
-  if (!stored || !/^https?:\/\//i.test(stored) || stored !== DEFAULT_API_BASE) {
+  if (!stored || !/^https?:\/\//i.test(stored)) {
+    localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
+    return DEFAULT_API_BASE;
+  }
+  if (!API_BASE_CANDIDATES.includes(stored)) {
     localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
     return DEFAULT_API_BASE;
   }
@@ -141,6 +155,42 @@ function getWsBase() {
   if (stored && /^wss?:\/\//i.test(stored)) return stored;
   const fromApi = getApiBase().replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
   return fromApi || DEFAULT_WS_BASE;
+}
+
+function setApiBase(base) {
+  const normalized = String(base || '').trim().replace(/\/$/, '');
+  if (!/^https?:\/\//i.test(normalized)) return;
+  localStorage.setItem(STORAGE_KEYS.apiBase, normalized);
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function ensureReachableApiBase() {
+  const tried = [];
+  const candidates = [getApiBase(), ...API_BASE_CANDIDATES.filter((x) => x !== getApiBase())];
+  for (const base of candidates) {
+    tried.push(base);
+    try {
+      const res = await fetchWithTimeout(`${base}/health`, { method: 'GET', cache: 'no-store' }, 7000);
+      if (res && res.ok) {
+        if (base !== getApiBase()) {
+          setApiBase(base);
+        }
+        return { ok: true, base };
+      }
+    } catch (_) {
+      // try next candidate
+    }
+  }
+  return { ok: false, tried };
 }
 
 function getPinnedStorageKey() {
@@ -747,8 +797,27 @@ async function apiFetch(path, options = {}) {
     ...options,
     headers
   };
-  const base = getApiBase();
-  const res = await fetch(`${base}${path}`, request);
+  const bases = [getApiBase(), ...API_BASE_CANDIDATES.filter((x) => x !== getApiBase())];
+  let res = null;
+  let base = getApiBase();
+  let lastNetworkErr = null;
+  for (let i = 0; i < bases.length; i += 1) {
+    base = bases[i];
+    try {
+      res = await fetchWithTimeout(`${base}${path}`, request, 15000);
+      if (base !== getApiBase()) setApiBase(base);
+      break;
+    } catch (err) {
+      lastNetworkErr = err;
+    }
+  }
+
+  if (!res) {
+    const err = new Error(`网络连接失败：无法连接后端 (${getApiBase()})`);
+    err.status = 0;
+    err.detail = lastNetworkErr?.message || 'NetworkError';
+    throw err;
+  }
 
   if (!res.ok) {
     let detail = `请求失败(${res.status})`;
@@ -5772,6 +5841,8 @@ function enterApp(options = {}) {
 
 async function init() {
   getApiBase();
+  renderApiBaseIndicator();
+  await ensureReachableApiBase();
   renderApiBaseIndicator();
   registerServiceWorker();
   bindGlobalOverlayGuards();
