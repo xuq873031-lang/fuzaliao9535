@@ -3620,14 +3620,32 @@ function bindGroupEvents() {
       const select = document.getElementById('groupAddMemberSelect');
       const userId = Number(select?.value || 0);
       if (!userId) return;
+      const previousDisabled = addBtn.disabled;
+      addBtn.disabled = true;
       try {
         await apiAddRoomMember(groupId, userId);
+        // 关键写操作：以后端真实结果二次确认为准，避免前端“假成功”
+        const verifiedMembers = await apiGetRoomMembers(groupId);
+        const confirmed = (verifiedMembers || []).some((m) => Number(m.user_id) === Number(userId));
+        if (!confirmed) {
+          throw new Error('后端未确认拉群成功，请稍后重试');
+        }
         await refreshRoomsAndMessages();
         await refreshGroupManageModal(groupId);
         renderGroupList();
         renderConversationList();
       } catch (err) {
+        // 失败时强制回滚刷新，避免页面状态和后端状态不一致
+        try {
+          await refreshGroupManageModal(groupId);
+          renderGroupList();
+          renderConversationList();
+        } catch (_) {
+          // ignore rollback refresh errors
+        }
         alert(`拉人失败：${err.message}`);
+      } finally {
+        addBtn.disabled = previousDisabled;
       }
     });
   }

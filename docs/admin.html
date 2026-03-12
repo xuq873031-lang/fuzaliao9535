@@ -197,6 +197,7 @@
   <script>
     const STORAGE_KEYS = {
       token: 'chatwave_token',
+      tokenLegacy: 'admin_access_token',
       apiBase: 'chat_api_base'
     };
     const DEFAULT_API_BASE = String(
@@ -216,9 +217,28 @@
       return DEFAULT_API_BASE;
     }
 
-    function getToken() { return localStorage.getItem(STORAGE_KEYS.token) || ''; }
-    function setToken(token) { localStorage.setItem(STORAGE_KEYS.token, token); }
-    function clearToken() { localStorage.removeItem(STORAGE_KEYS.token); }
+    function getToken() {
+      return (
+        localStorage.getItem(STORAGE_KEYS.token) ||
+        sessionStorage.getItem(STORAGE_KEYS.token) ||
+        localStorage.getItem(STORAGE_KEYS.tokenLegacy) ||
+        sessionStorage.getItem(STORAGE_KEYS.tokenLegacy) ||
+        ''
+      );
+    }
+    function setToken(token) {
+      if (!token) return;
+      localStorage.setItem(STORAGE_KEYS.token, token);
+      sessionStorage.setItem(STORAGE_KEYS.token, token);
+      localStorage.setItem(STORAGE_KEYS.tokenLegacy, token);
+      sessionStorage.setItem(STORAGE_KEYS.tokenLegacy, token);
+    }
+    function clearToken() {
+      localStorage.removeItem(STORAGE_KEYS.token);
+      sessionStorage.removeItem(STORAGE_KEYS.token);
+      localStorage.removeItem(STORAGE_KEYS.tokenLegacy);
+      sessionStorage.removeItem(STORAGE_KEYS.tokenLegacy);
+    }
 
     function setHint(text) {
       const el = document.getElementById('adminHint');
@@ -267,6 +287,14 @@
       }
       const token = getToken();
       if (token) headers.Authorization = `Bearer ${token}`;
+      const isProtected = path.startsWith('/api/admin/') || path === '/api/users/me';
+      if (isProtected && !headers.Authorization) {
+        const err = new Error('管理员登录态丢失，请重新登录');
+        err.status = 401;
+        clearToken();
+        switchToLogin();
+        throw err;
+      }
       const res = await fetch(`${getApiBase()}${path}`, { ...options, headers });
 
       if (!res.ok) {
@@ -523,7 +551,7 @@
         btn.disabled = true;
         btn.textContent = '登录中...';
         const data = await login(account, password);
-        setToken(data.token);
+        setToken(data.token || data.access_token || data.jwt || '');
         const me = await getMe();
         if ((me.role || '').toLowerCase() !== 'admin') {
           clearToken();
@@ -593,6 +621,3 @@
   </script>
 </body>
 </html>
-<-Xms2g pages-rebuild 1773148115 -->
-<-Xms2g force-pages-1773149076 -->
-<-Xms2g admin-rebuild-1773150047 -->
