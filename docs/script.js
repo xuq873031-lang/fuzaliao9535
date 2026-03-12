@@ -1520,6 +1520,25 @@ function getMessageScrollContainer() {
   return list;
 }
 
+function normalizeChatScrollContainer() {
+  const list = document.getElementById('messageList');
+  const chatPane = document.querySelector('#messagesView .chat-pane');
+  if (!list || !chatPane) return null;
+  // 运行时兜底，避免在某些布局状态下滚动容器失效导致整页锁死
+  chatPane.style.minHeight = '0';
+  chatPane.style.height = '100%';
+  chatPane.style.overflow = 'hidden';
+  chatPane.style.display = 'flex';
+  chatPane.style.flexDirection = 'column';
+
+  list.style.minHeight = '0';
+  list.style.flex = '1 1 auto';
+  list.style.overflowY = 'auto';
+  list.style.overscrollBehavior = 'contain';
+  list.style.webkitOverflowScrolling = 'touch';
+  return list;
+}
+
 function getScrollMetrics(el) {
   if (!el) return null;
   return {
@@ -1569,7 +1588,7 @@ window.__chatScrollTrace = function __chatScrollTrace() {
 
 function scrollMessagesToBottom(options = {}) {
   const { force = false, stickToBottom = false, reason = '' } = options;
-  const listEl = getMessageScrollContainer();
+  const listEl = getMessageScrollContainer() || normalizeChatScrollContainer();
   if (!listEl) return;
   const shouldStickBottom = force || stickToBottom || isNearBottom(listEl, 220);
   if (!shouldStickBottom) {
@@ -5539,7 +5558,7 @@ function buildMessageRow(msg, conv) {
 
 function appendMessagesToView(conv, messages, options = {}) {
   const { autoScroll = true, stickToBottom = null } = options;
-  const listEl = getMessageScrollContainer();
+  const listEl = getMessageScrollContainer() || normalizeChatScrollContainer();
   if (!listEl || !messages.length) return;
   const prevScrollTop = listEl.scrollTop;
   const wasNearBottom = isNearBottom(listEl, 220);
@@ -5597,7 +5616,7 @@ function scheduleMarkCurrentRoomRead() {
 
 function renderMessages(options = {}) {
   const { autoScroll = true, forceBottom = false } = options;
-  const listEl = getMessageScrollContainer() || document.getElementById('messageList');
+  const listEl = getMessageScrollContainer() || normalizeChatScrollContainer() || document.getElementById('messageList');
   const titleEl = document.getElementById('chatTitle');
   const subEl = document.getElementById('chatSubTitle');
   const avatarEl = document.getElementById('chatAvatar');
@@ -5608,6 +5627,7 @@ function renderMessages(options = {}) {
   const chatHeader = document.getElementById('chatHeader');
   const chatDetailsBtn = document.getElementById('chatDetailsBtn');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
+  normalizeChatScrollContainer();
   handleConversationContextSwitch();
 
   listEl.innerHTML = '';

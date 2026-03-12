@@ -93,6 +93,38 @@ body {
   height: 100%;
 }
 
+/* 聊天页滚动架构兜底：确保只有消息区滚动，避免整页被消息撑爆 */
+#mainContainer,
+#mainContainer > .row,
+.app-shell,
+.main-card,
+.main-card > .card-body,
+#messagesView,
+#messagesView > .row {
+  min-height: 0;
+}
+
+#messagesView .chat-pane {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#messagesView #chatHeader,
+#messagesView #chatComposer {
+  flex: 0 0 auto;
+}
+
+#messagesView #messageList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 body.main-open {
   overflow: hidden;
 }
@@ -605,6 +637,7 @@ body.main-open #messageList {
   touch-action: pan-y;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
   background:
     radial-gradient(circle at 0% 0%, rgba(42, 171, 238, 0.05), transparent 45%),
     radial-gradient(circle at 100% 100%, rgba(111, 196, 244, 0.05), transparent 35%),
