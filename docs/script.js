@@ -273,6 +273,26 @@ function showLoginBy401(reason) {
   switchAuthPage('login');
 }
 
+function forceLogoutByAdmin(reason) {
+  const msg = reason || '账号已被管理员禁用，无法继续使用';
+  console.warn('账号被强制下线:', msg);
+  if (appState.ws) {
+    appState.ws.onclose = null;
+    try { appState.ws.close(); } catch (_) {}
+    appState.ws = null;
+  }
+  if (appState.wsReconnectTimer) {
+    clearTimeout(appState.wsReconnectTimer);
+    appState.wsReconnectTimer = null;
+  }
+  stopRoomPolling();
+  stopUnreadPolling();
+  clearToken();
+  showAuth();
+  switchAuthPage('login');
+  alert(msg);
+}
+
 function cleanupStuckUiOverlay() {
   const hasVisibleModal = !!document.querySelector('.modal.show');
   if (!hasVisibleModal) {
@@ -748,6 +768,8 @@ async function apiFetch(path, options = {}) {
     detail = translateErrorDetail(detail);
     if (res.status === 401) {
       showLoginBy401(detail);
+    } else if (res.status === 403 && /(账号已注销|账号已封禁|账号已被管理员禁用)/.test(String(detail))) {
+      forceLogoutByAdmin(detail);
     }
     const err = new Error(detail);
     err.status = res.status;
@@ -1843,6 +1865,11 @@ function connectWebSocket() {
 function handleWsEvent(evt) {
   if (evt.type === 'connected') return;
 
+  if (evt.type === 'force_logout' || evt.type === 'account_disabled') {
+    forceLogoutByAdmin(evt.reason || evt.payload?.reason || '账号已被管理员禁用，无法继续使用');
+    return;
+  }
+
   if (evt.type === 'presence') {
     const uid = Number(evt.user_id);
     if (!Number.isNaN(uid)) {
@@ -1879,15 +1906,15 @@ function handleWsEvent(evt) {
     return;
   }
 
-  if (evt.type === 'room_removed') {
-    const roomId = Number(evt.room_id);
+  if (evt.type === 'room_removed' || evt.type === 'room_dissolved') {
+    const roomId = Number(evt.room_id || evt.payload?.room_id);
     appState.conversations = appState.conversations.filter((c) => c.id !== roomId);
     clearRoomRuntimeBuffers(roomId);
     if (appState.activeConversationId === roomId) {
       appState.activeConversationId = null;
       stopRoomPolling();
       renderMessages({ autoScroll: false });
-      alert('你已被移出该群');
+      alert(evt.type === 'room_dissolved' ? '该群已解散' : '你已被移出该群');
     }
     renderGroupList();
     renderConversationList();

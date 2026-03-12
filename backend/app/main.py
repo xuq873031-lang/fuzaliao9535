@@ -121,7 +121,16 @@ def get_current_user(
 
 
 def get_room_ids_for_user(db: Session, user_id: int) -> list[int]:
-    rows = db.execute(select(room_members.c.room_id).where(room_members.c.user_id == user_id)).all()
+    rows = db.execute(
+        select(room_members.c.room_id)
+        .join(ChatRoom, ChatRoom.id == room_members.c.room_id)
+        .where(
+            and_(
+                room_members.c.user_id == user_id,
+                ChatRoom.is_dissolved.is_(False),
+            )
+        )
+    ).all()
     return [r[0] for r in rows]
 
 
@@ -382,6 +391,11 @@ def ensure_user_in_room(db: Session, user_id: int, room_id: int):
     ).first()
     if not exists:
         raise HTTPException(status_code=403, detail="You are not a member of this room")
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if bool(room.is_dissolved):
+        raise HTTPException(status_code=410, detail="该群已解散")
 
 
 def ensure_admin_user(current_user: User):
@@ -697,7 +711,7 @@ def admin_update_user_permissions(
 
 
 @app.put("/api/admin/users/{user_id}/status")
-def admin_update_user_status(
+async def admin_update_user_status(
     user_id: int,
     payload: AdminUserStatusIn,
     db: Session = Depends(get_db),
@@ -720,6 +734,25 @@ def admin_update_user_status(
         user.is_online = False
 
     db.commit()
+
+    # 后台禁用/封禁后，实时踢下线（所有设备）
+    if (payload.is_active is not None and not bool(user.is_active)) or (payload.is_banned is not None and bool(user.is_banned)):
+        await manager.force_disconnect_user(
+            user.id,
+            payload={
+                "type": "force_logout",
+                "reason": "账号已被管理员禁用，无法继续使用",
+            },
+            code=4003,
+        )
+        await manager.broadcast_global(
+            {
+                "type": "presence",
+                "user_id": user.id,
+                "online": False,
+            }
+        )
+
     return {
         "ok": True,
         "user_id": user_id,
@@ -1157,7 +1190,14 @@ def list_my_rooms(db: Session = Depends(get_db), current_user: User = Depends(ge
     if not room_ids:
         return []
 
-    rooms = db.execute(select(ChatRoom).where(ChatRoom.id.in_(room_ids))).scalars().all()
+    rooms = db.execute(
+        select(ChatRoom).where(
+            and_(
+                ChatRoom.id.in_(room_ids),
+                ChatRoom.is_dissolved.is_(False),
+            )
+        )
+    ).scalars().all()
     res: list[RoomOut] = []
     for room in rooms:
         mids = db.execute(select(room_members.c.user_id).where(room_members.c.room_id == room.id)).all()
@@ -1694,6 +1734,8 @@ async def post_room_message(
 ):
     ensure_user_in_room(db, current_user.id, room_id)
     room = db.get(ChatRoom, room_id)
+    if room and bool(room.is_dissolved):
+        raise HTTPException(status_code=410, detail="该群已解散")
     if room and room_effective_type(room) == "group" and bool(room.global_mute) and not can_bypass_group_global_mute(db, room_id, current_user.id):
         raise HTTPException(status_code=403, detail="该群已开启全员禁言")
     if room and room_effective_type(room) == "group" and is_user_muted_in_room(db, room_id, current_user.id):
@@ -1898,6 +1940,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     continue
 
                 room = db.get(ChatRoom, data.room_id)
+                if room and bool(room.is_dissolved):
+                    await websocket.send_json({"type": "error", "payload": {"message": "该群已解散"}})
+                    continue
                 if room and room_effective_type(room) == "group" and bool(room.global_mute) and not can_bypass_group_global_mute(db, data.room_id, user_id):
                     await websocket.send_json({"type": "error", "payload": {"message": "该群已开启全员禁言"}})
                     continue
@@ -2208,20 +2253,45 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
 
 @app.delete("/api/rooms/{room_id}")
-def delete_room(room_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def delete_room(room_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     room = db.get(ChatRoom, room_id)
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+
+    member_rows = db.execute(select(room_members.c.user_id).where(room_members.c.room_id == room_id)).all()
+    member_ids = [m[0] for m in member_rows]
+
+    # 群聊：仅群主可解散，采用软解散
+    if room_effective_type(room) == "group":
+        if get_room_member_role(db, room_id, current_user.id) != "owner":
+            raise HTTPException(status_code=403, detail="Only owner can dissolve group")
+        if not bool(room.is_dissolved):
+            room.is_dissolved = True
+            room.dissolved_at = datetime.utcnow()
+            db.commit()
+
+        await manager.broadcast_to_room(
+            room_id,
+            {
+                "type": "room_dissolved",
+                "room_id": room_id,
+                "by_user_id": current_user.id,
+            },
+        )
+        for uid in member_ids:
+            manager.refresh_user_rooms(uid, get_room_ids_for_user(db, uid))
+            await manager.send_json_to_user(uid, {"type": "room_removed", "room_id": room_id})
+        return {"ok": True, "room_id": room_id, "dissolved": True}
+
+    # 非群聊：保持旧行为（兼容）
     if room.created_by != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="No permission")
-
-    members = db.execute(select(room_members.c.user_id).where(room_members.c.room_id == room_id)).all()
     db.execute(delete(room_members).where(room_members.c.room_id == room_id))
     db.delete(room)
     db.commit()
 
-    for m in members:
-        uid = m[0]
+    for uid in member_ids:
         manager.refresh_user_rooms(uid, get_room_ids_for_user(db, uid))
+        await manager.send_json_to_user(uid, {"type": "room_removed", "room_id": room_id})
 
     return {"ok": True}
