@@ -4763,6 +4763,7 @@ function bindChatEvents() {
   const deleteForPeerCheck = document.getElementById('deleteForPeerCheck');
   const confirmDeleteMessageBtn = document.getElementById('confirmDeleteMessageBtn');
   const mobileBackBtn = document.getElementById('mobileBackToListBtn');
+  const chatMoreBtn = document.getElementById('chatMoreBtn');
   const voiceCallBtn = document.getElementById('voiceCallBtn');
   const videoCallBtn = document.getElementById('videoCallBtn');
   const incomingAcceptBtn = document.getElementById('incomingAcceptBtn');
@@ -4971,15 +4972,7 @@ function bindChatEvents() {
       renderForwardTargetList();
     });
   }
-  if (mobileBackBtn) mobileBackBtn.addEventListener('click', () => {
-    appState.activeConversationId = null;
-    appState.multiSelectMode = false;
-    appState.multiSelectedMessageIds = new Set();
-    clearReplyAndEditState({ resetInput: true });
-    stopRoomPolling();
-    renderConversationList();
-    renderMessages({ autoScroll: false });
-  });
+  if (mobileBackBtn) mobileBackBtn.addEventListener('click', goBackOneLevelFromChat);
   if (voiceCallBtn) voiceCallBtn.addEventListener('click', () => startCall('audio'));
   if (videoCallBtn) videoCallBtn.addEventListener('click', () => startCall('video'));
   if (incomingAcceptBtn) incomingAcceptBtn.addEventListener('click', acceptIncomingCall);
@@ -5057,6 +5050,14 @@ function bindChatEvents() {
       openChatDetailsPanel();
     });
   }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!window.matchMedia('(min-width: 992px)').matches) return;
+    const closed = hideChatMoreMenu();
+    if (closed) return;
+    goBackOneLevelFromChat();
+  });
 
   if (emojiToggleBtn) {
     emojiToggleBtn.addEventListener('click', (e) => {
@@ -6078,3 +6079,29 @@ window.__env = {
     }
   }
 };
+  const goBackOneLevelFromChat = () => {
+    if (!appState.activeConversationId) return;
+    appState.activeConversationId = null;
+    appState.multiSelectMode = false;
+    appState.multiSelectedMessageIds = new Set();
+    clearReplyAndEditState({ resetInput: true });
+    stopRoomPolling();
+    renderConversationList();
+    renderMessages({ autoScroll: false });
+  };
+
+  const hideChatMoreMenu = () => {
+    if (!chatMoreBtn) return false;
+    const dropdown = chatMoreBtn.closest('.dropdown');
+    const menu = dropdown?.querySelector('.dropdown-menu');
+    const expanded = chatMoreBtn.getAttribute('aria-expanded') === 'true';
+    const shown = !!menu?.classList.contains('show');
+    if (!expanded && !shown) return false;
+    try {
+      const inst = bootstrap.Dropdown.getOrCreateInstance(chatMoreBtn);
+      inst.hide();
+    } catch (_) {
+      return false;
+    }
+    return true;
+  };
