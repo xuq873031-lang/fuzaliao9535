@@ -3014,6 +3014,7 @@ function bindFriendEvents() {
   const menuCreateGroup = document.getElementById('menuCreateGroup');
   const plusBtn = document.getElementById('contactsPlusBtn');
   const plusMenu = plusBtn ? bootstrap.Dropdown.getOrCreateInstance(plusBtn) : null;
+  const plusMenuEl = plusBtn ? plusBtn.parentElement?.querySelector('.contacts-plus-menu') : null;
 
   const clearLocalFriendSearch = () => {
     appState.localFriendKeyword = '';
@@ -3029,6 +3030,7 @@ function bindFriendEvents() {
 
   const openTools = () => {
     if (!toolsPanel) return;
+    plusMenu?.hide();
     clearLocalFriendSearch();
     switchNewFriendTab(appState.newFriendTab || 'incoming');
     setFriendsSubView('new-friend');
@@ -3044,6 +3046,7 @@ function bindFriendEvents() {
 
   const openAddPanel = () => {
     if (!addPanel) return;
+    plusMenu?.hide();
     clearLocalFriendSearch();
     setFriendsSubView('add-friend');
     setTimeout(() => {
@@ -3106,6 +3109,17 @@ function bindFriendEvents() {
       plusMenu?.hide();
       const modalEl = document.getElementById('createGroupModal');
       if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    });
+  }
+  if (plusBtn && plusMenuEl) {
+    document.addEventListener('click', (e) => {
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+      if (plusBtn.contains(target) || plusMenuEl.contains(target)) return;
+      plusMenu?.hide();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') plusMenu?.hide();
     });
   }
   setFriendsSubView('main');
