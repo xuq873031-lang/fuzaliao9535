@@ -4370,9 +4370,12 @@ function openMessageActionMenu(msg) {
   appState.actionTargetMessage = msg;
   const editBtn = document.getElementById('msgActionEditBtn');
   const recallBtn = document.getElementById('msgActionRecallBtn');
+  const multiBtn = document.getElementById('msgActionMultiBtn');
   const deleteBtn = document.getElementById('msgActionDeleteBtn');
-  if (editBtn) editBtn.classList.toggle('d-none', !canEditOwnMessage(msg));
+  // 第七阶段：消息菜单先只保留 引用/转发/撤回/删除
+  if (editBtn) editBtn.classList.add('d-none');
   if (recallBtn) recallBtn.classList.toggle('d-none', !canRecallMessage(msg));
+  if (multiBtn) multiBtn.classList.add('d-none');
   if (deleteBtn) deleteBtn.textContent = canUseSuperDelete() ? '删除/超级删除' : '删除';
   const modal = new bootstrap.Modal(document.getElementById('messageActionModal'));
   modal.show();
