@@ -793,6 +793,23 @@ def _is_friend(db: Session, user_id: int, friend_id: int) -> bool:
     return row is not None
 
 
+def ensure_dm_friendship_or_raise(db: Session, room_id: int, sender_id: int):
+    """Direct message requires active mutual friendship."""
+    room = db.get(ChatRoom, room_id)
+    if not room or room_effective_type(room) != "dm":
+        return
+
+    member_ids = get_room_member_ids(db, room_id)
+    if sender_id not in member_ids:
+        raise HTTPException(status_code=403, detail="No room access")
+    if len(member_ids) != 2:
+        raise HTTPException(status_code=400, detail="Invalid direct chat members")
+
+    peer_id = member_ids[0] if member_ids[1] == sender_id else member_ids[1]
+    if not (_is_friend(db, sender_id, peer_id) and _is_friend(db, peer_id, sender_id)):
+        raise HTTPException(status_code=403, detail="不是好友")
+
+
 def can_user_send_friend_request(user: User) -> bool:
     username = (user.username or "").strip().lower()
     role = (user.role or "").strip().lower()
@@ -1733,6 +1750,7 @@ async def post_room_message(
     current_user: User = Depends(get_current_user),
 ):
     ensure_user_in_room(db, current_user.id, room_id)
+    ensure_dm_friendship_or_raise(db, room_id, current_user.id)
     room = db.get(ChatRoom, room_id)
     if room and bool(room.is_dissolved):
         raise HTTPException(status_code=410, detail="该群已解散")
@@ -1937,6 +1955,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                 ).first()
                 if not member:
                     await websocket.send_json({"type": "error", "payload": {"message": "No room access"}})
+                    continue
+                try:
+                    ensure_dm_friendship_or_raise(db, data.room_id, user_id)
+                except HTTPException as e:
+                    await websocket.send_json({"type": "error", "payload": {"message": str(e.detail)}})
                     continue
 
                 room = db.get(ChatRoom, data.room_id)
