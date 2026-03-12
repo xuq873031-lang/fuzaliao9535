@@ -1218,17 +1218,19 @@ body.main-open #messageList {
 
 .contacts-fixed-zone {
   border: 1px solid var(--tg-line);
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--tg-surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .contacts-fixed-item {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
+  gap: 8px;
+  padding: 8px 10px;
+  min-height: 44px;
   border: 0;
   border-bottom: 1px solid var(--tg-line);
   background: transparent;
@@ -1245,18 +1247,21 @@ body.main-open #messageList {
 }
 
 .contacts-fixed-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #fff;
+  font-size: 12px;
 }
 
 .contacts-fixed-label {
   flex: 1;
   font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
 }
 
 .contacts-friend-groups {
@@ -1329,6 +1334,18 @@ body.main-open #messageList {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.contacts-friend-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tg-text-soft);
+}
+
+.contacts-friend-chevron {
+  font-size: 12px;
+  opacity: 0.75;
 }
 
 .contacts-az-index {
