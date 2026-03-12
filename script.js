@@ -719,7 +719,7 @@ function setFriendsSubView(mode = 'main') {
   const isAddFriend = mode === 'add-friend';
 
   if (topbar) topbar.classList.toggle('d-none', !isMain);
-  if (localSearchWrap) localSearchWrap.classList.toggle('d-none', !isMain || localSearchWrap.classList.contains('d-none'));
+  if (localSearchWrap && !isMain) localSearchWrap.classList.add('d-none');
   if (layout) layout.classList.toggle('d-none', !isMain);
   if (toolsPanel) toolsPanel.classList.toggle('d-none', !isNewFriend);
   if (addPanel) addPanel.classList.toggle('d-none', !isAddFriend);
@@ -3366,7 +3366,7 @@ function renderFriendList() {
           <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
           <span>
             <span class="contacts-friend-name d-block">${displayName}</span>
-            <span class="contacts-friend-sub">ID: ${f.username}</span>
+            <span class="contacts-friend-sub">${f.online ? '在线' : '离线'}</span>
           </span>
         </span>
         <span class="contacts-friend-right">
