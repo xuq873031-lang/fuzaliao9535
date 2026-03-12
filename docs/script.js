@@ -79,6 +79,7 @@ let appState = {
   wsMessageBatchByRoom: {},
   wsMessageBatchTimer: null,
   conversationContextRoomId: null,
+  conversationMenuRoomId: null,
   userNearBottom: true,
   lastSoundAt: 0,
   audioCtx: null,
@@ -87,6 +88,7 @@ let appState = {
   roomMyMemberMetaByRoom: {},
   messageRenderLimitByRoom: {},
   pinnedRoomOrder: [],
+  mutedRoomIds: new Set(),
   emojiPanelOpen: false,
   conversationFilter: 'all',
   conversationSearchKeyword: '',
@@ -199,6 +201,11 @@ function getPinnedStorageKey() {
   return `chat_pinned_rooms_${uid}`;
 }
 
+function getMuteStorageKey() {
+  const uid = appState.currentUser?.id || 'guest';
+  return `chat_muted_rooms_${uid}`;
+}
+
 function loadPinnedRoomOrder() {
   try {
     const raw = localStorage.getItem(getPinnedStorageKey());
@@ -219,12 +226,38 @@ function savePinnedRoomOrder() {
   }
 }
 
+function loadConversationMuteState() {
+  try {
+    const raw = localStorage.getItem(getMuteStorageKey());
+    const arr = JSON.parse(raw || '[]');
+    appState.mutedRoomIds = new Set(
+      Array.isArray(arr)
+        ? arr.map((x) => Number(x)).filter((x) => Number.isFinite(x))
+        : []
+    );
+  } catch (_) {
+    appState.mutedRoomIds = new Set();
+  }
+}
+
+function saveConversationMuteState() {
+  try {
+    localStorage.setItem(getMuteStorageKey(), JSON.stringify([...appState.mutedRoomIds]));
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+
 function isConversationPinned(conv) {
   return !!conv && appState.pinnedRoomOrder.includes(Number(conv.id));
 }
 
 function getPinnedIndex(roomId) {
   return appState.pinnedRoomOrder.indexOf(Number(roomId));
+}
+
+function isConversationMuted(roomId) {
+  return appState.mutedRoomIds.has(Number(roomId));
 }
 
 function setMessageRenderLimit(roomId, limit) {
@@ -265,11 +298,107 @@ function toggleConversationPin(roomId) {
   renderConversationList();
 }
 
+function toggleConversationMute(roomId) {
+  const id = Number(roomId);
+  if (!id) return;
+  if (appState.mutedRoomIds.has(id)) {
+    appState.mutedRoomIds.delete(id);
+  } else {
+    appState.mutedRoomIds.add(id);
+  }
+  saveConversationMuteState();
+  renderConversationList();
+}
+
+function goBackOneLevelFromChat() {
+  if (!appState.activeConversationId) return;
+  appState.activeConversationId = null;
+  appState.multiSelectMode = false;
+  appState.multiSelectedMessageIds = new Set();
+  clearReplyAndEditState({ resetInput: true });
+  stopRoomPolling();
+  renderConversationList();
+  renderMessages({ autoScroll: false });
+}
+
+function activateConversation(roomId, options = {}) {
+  const autoScroll = options.autoScroll !== false;
+  const conv = findConversationById(roomId);
+  if (!conv) return Promise.resolve();
+  appState.activeConversationId = conv.id;
+  appState.multiSelectMode = false;
+  appState.multiSelectedMessageIds = new Set();
+  conv.unreadCount = 0;
+  clearReplyAndEditState();
+  return refreshCurrentUserMuteState(conv.id)
+    .then(() => {
+      renderConversationList();
+      renderMessages({ autoScroll, forceBottom: autoScroll });
+      startRoomPolling(conv.id);
+      updateUnreadBadges();
+      markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
+    })
+    .catch((err) => {
+      console.warn('刷新禁言状态失败', err.message);
+      renderConversationList();
+      renderMessages({ autoScroll, forceBottom: autoScroll });
+      startRoomPolling(conv.id);
+    });
+}
+
+function ensureConversationContextMenu() {
+  let menu = document.getElementById('conversationContextMenu');
+  if (menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'conversationContextMenu';
+  menu.className = 'dropdown-menu';
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '2100';
+  menu.style.display = 'none';
+  menu.style.minWidth = '180px';
+  document.body.appendChild(menu);
+  return menu;
+}
+
+function hideConversationContextMenu() {
+  const menu = document.getElementById('conversationContextMenu');
+  if (!menu || menu.style.display === 'none') return false;
+  menu.style.display = 'none';
+  menu.classList.remove('show');
+  appState.conversationMenuRoomId = null;
+  return true;
+}
+
+function openConversationContextMenu(x, y, roomId) {
+  const conv = findConversationById(roomId);
+  if (!conv) return;
+  const menu = ensureConversationContextMenu();
+  const pinnedText = isConversationPinned(conv) ? '取消置顶' : '置顶';
+  const muteText = isConversationMuted(conv.id) ? '关闭免打扰' : '开启免打扰';
+  menu.innerHTML = `
+    <button class="dropdown-item" type="button" data-action="pin">${pinnedText}</button>
+    <button class="dropdown-item" type="button" data-action="mute">${muteText}</button>
+    <button class="dropdown-item" type="button" data-action="multi">多选消息</button>
+  `;
+  appState.conversationMenuRoomId = Number(conv.id);
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  menu.style.display = 'block';
+  menu.classList.add('show');
+  const menuRect = menu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(x, window.innerWidth - menuRect.width - 8));
+  const top = Math.max(8, Math.min(y, window.innerHeight - menuRect.height - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
 function applyConversationLocalState() {
   const currentIds = new Set(appState.conversations.map((c) => Number(c.id)));
   appState.pinnedRoomOrder = appState.pinnedRoomOrder.filter((id) => currentIds.has(Number(id)));
+  appState.mutedRoomIds = new Set([...appState.mutedRoomIds].filter((id) => currentIds.has(Number(id))));
   appState.conversations.forEach((conv) => {
     conv.isPinned = isConversationPinned(conv);
+    conv.isMuted = isConversationMuted(conv.id);
     if (!appState.messageRenderLimitByRoom[conv.id]) {
       appState.messageRenderLimitByRoom[conv.id] = MESSAGE_RENDER_INITIAL_LIMIT;
     }
@@ -4765,8 +4894,6 @@ function bindChatEvents() {
   const actionDeleteBtn = document.getElementById('msgActionDeleteBtn');
   const deleteForPeerCheck = document.getElementById('deleteForPeerCheck');
   const confirmDeleteMessageBtn = document.getElementById('confirmDeleteMessageBtn');
-  const mobileBackBtn = document.getElementById('mobileBackToListBtn');
-  const chatMoreBtn = document.getElementById('chatMoreBtn');
   const voiceCallBtn = document.getElementById('voiceCallBtn');
   const videoCallBtn = document.getElementById('videoCallBtn');
   const incomingAcceptBtn = document.getElementById('incomingAcceptBtn');
@@ -4782,9 +4909,6 @@ function bindChatEvents() {
   const historySearchInput = document.getElementById('historySearchInput');
   const chatDetailsBtn = document.getElementById('chatDetailsBtn');
   const multiSelectToggleBtn = document.getElementById('multiSelectToggleBtn');
-  const chatMoreDetailsItem = document.getElementById('chatMoreDetailsItem');
-  const chatMoreMultiSelectItem = document.getElementById('chatMoreMultiSelectItem');
-  const chatMoreLoadMoreItem = document.getElementById('chatMoreLoadMoreItem');
   const multiSelectCancelBtn = document.getElementById('multiSelectCancelBtn');
   const multiForwardBtn = document.getElementById('multiForwardBtn');
   const multiSelectSelectAllBtn = document.getElementById('multiSelectSelectAllBtn');
@@ -4975,7 +5099,6 @@ function bindChatEvents() {
       renderForwardTargetList();
     });
   }
-  if (mobileBackBtn) mobileBackBtn.addEventListener('click', goBackOneLevelFromChat);
   if (voiceCallBtn) voiceCallBtn.addEventListener('click', () => startCall('audio'));
   if (videoCallBtn) videoCallBtn.addEventListener('click', () => startCall('video'));
   if (incomingAcceptBtn) incomingAcceptBtn.addEventListener('click', acceptIncomingCall);
@@ -5031,21 +5154,40 @@ function bindChatEvents() {
     modal.show();
   };
   if (chatDetailsBtn) chatDetailsBtn.addEventListener('click', openChatDetailsPanel);
-  if (chatMoreDetailsItem) {
-    chatMoreDetailsItem.addEventListener('click', () => {
-      if (chatDetailsBtn) chatDetailsBtn.click();
-    });
-  }
-  if (chatMoreMultiSelectItem) {
-    chatMoreMultiSelectItem.addEventListener('click', () => {
-      if (multiSelectToggleBtn) multiSelectToggleBtn.click();
-    });
-  }
-  if (chatMoreLoadMoreItem) {
-    chatMoreLoadMoreItem.addEventListener('click', () => {
-      if (loadMoreBtn) loadMoreBtn.click();
-    });
-  }
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('conversationContextMenu');
+    if (!menu || menu.style.display === 'none') return;
+    if (menu.contains(e.target)) return;
+    hideConversationContextMenu();
+  });
+  document.addEventListener('scroll', hideConversationContextMenu, true);
+  const contextMenu = ensureConversationContextMenu();
+  contextMenu.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-action]');
+    if (!item) return;
+    const roomId = Number(appState.conversationMenuRoomId || 0);
+    if (!roomId) {
+      hideConversationContextMenu();
+      return;
+    }
+    const action = item.getAttribute('data-action');
+    if (action === 'pin') {
+      toggleConversationPin(roomId);
+      hideConversationContextMenu();
+      return;
+    }
+    if (action === 'mute') {
+      toggleConversationMute(roomId);
+      hideConversationContextMenu();
+      return;
+    }
+    if (action === 'multi') {
+      activateConversation(roomId, { autoScroll: false }).finally(() => {
+        enterMultiSelectMode();
+        hideConversationContextMenu();
+      });
+    }
+  });
   if (chatHeaderMain) {
     chatHeaderMain.addEventListener('click', () => {
       const conv = findConversationById(appState.activeConversationId);
@@ -5057,7 +5199,7 @@ function bindChatEvents() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!window.matchMedia('(min-width: 992px)').matches) return;
-    const closed = hideChatMoreMenu();
+    const closed = hideConversationContextMenu();
     if (closed) return;
     goBackOneLevelFromChat();
   });
@@ -5308,6 +5450,7 @@ function renderConversationList() {
     btn.className = `list-group-item list-group-item-action conversation-item-btn ${appState.activeConversationId === conv.id ? 'active' : ''} ${isPinned ? 'tg-pinned' : ''}`;
 
     const badge = conv.unreadCount > 0 ? `<span class="unread-dot">${conv.unreadCount > 99 ? '99+' : conv.unreadCount}</span>` : '';
+    const muteBadge = isConversationMuted(conv.id) ? '<span class="badge text-bg-secondary">免打扰</span>' : '';
     const onlineText = conv.type === 'group'
       ? `${conv.memberCount || conv.members.length}人群聊`
       : (() => {
@@ -5329,6 +5472,7 @@ function renderConversationList() {
             </div>
             <div class="d-flex align-items-center gap-2">
               ${isPinned ? '<span class="pin-badge" title="已置顶">置顶</span>' : ''}
+              ${muteBadge}
               ${badge}
             </div>
           </div>
@@ -5338,11 +5482,13 @@ function renderConversationList() {
 
     btn.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      toggleConversationPin(conv.id);
+      openConversationContextMenu(e.clientX, e.clientY, conv.id);
     });
     let pinLongPressTimer = null;
-    btn.addEventListener('touchstart', () => {
-      pinLongPressTimer = setTimeout(() => toggleConversationPin(conv.id), 600);
+    btn.addEventListener('touchstart', (e) => {
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      pinLongPressTimer = setTimeout(() => openConversationContextMenu(t.clientX, t.clientY, conv.id), 600);
     }, { passive: true });
     ['touchend', 'touchcancel', 'touchmove'].forEach((ev) => {
       btn.addEventListener(ev, () => {
@@ -5352,25 +5498,8 @@ function renderConversationList() {
     });
 
     btn.addEventListener('click', () => {
-      appState.activeConversationId = conv.id;
-      appState.multiSelectMode = false;
-      appState.multiSelectedMessageIds = new Set();
-      conv.unreadCount = 0;
-      clearReplyAndEditState();
-      refreshCurrentUserMuteState(conv.id)
-        .then(() => {
-          renderConversationList();
-          renderMessages({ autoScroll: true, forceBottom: true });
-          startRoomPolling(conv.id);
-          updateUnreadBadges();
-          markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
-        })
-        .catch((err) => {
-          console.warn('刷新禁言状态失败', err.message);
-          renderConversationList();
-          renderMessages({ autoScroll: true, forceBottom: true });
-          startRoomPolling(conv.id);
-        });
+      hideConversationContextMenu();
+      activateConversation(conv.id, { autoScroll: true });
     });
 
     box.appendChild(btn);
@@ -5908,6 +6037,7 @@ async function bootstrapAfterLogin(userFromAuth = null) {
 
   mergeUserToMap(me);
   loadPinnedRoomOrder();
+  loadConversationMuteState();
   enterApp({ skipDataRefresh: true });
   connectWebSocket();
   setAuthLoading(true, '正在同步数据...');
@@ -6082,29 +6212,3 @@ window.__env = {
     }
   }
 };
-  const goBackOneLevelFromChat = () => {
-    if (!appState.activeConversationId) return;
-    appState.activeConversationId = null;
-    appState.multiSelectMode = false;
-    appState.multiSelectedMessageIds = new Set();
-    clearReplyAndEditState({ resetInput: true });
-    stopRoomPolling();
-    renderConversationList();
-    renderMessages({ autoScroll: false });
-  };
-
-  const hideChatMoreMenu = () => {
-    if (!chatMoreBtn) return false;
-    const dropdown = chatMoreBtn.closest('.dropdown');
-    const menu = dropdown?.querySelector('.dropdown-menu');
-    const expanded = chatMoreBtn.getAttribute('aria-expanded') === 'true';
-    const shown = !!menu?.classList.contains('show');
-    if (!expanded && !shown) return false;
-    try {
-      const inst = bootstrap.Dropdown.getOrCreateInstance(chatMoreBtn);
-      inst.hide();
-    } catch (_) {
-      return false;
-    }
-    return true;
-  };
