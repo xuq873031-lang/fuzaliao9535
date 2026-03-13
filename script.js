@@ -133,17 +133,24 @@ function getToken() {
   return localStorage.getItem(STORAGE_KEYS.token);
 }
 
+function getStrictUserToken() {
+  return String(localStorage.getItem(STORAGE_KEYS.token) || '').trim();
+}
+
 function setToken(token) {
   const safe = String(token || '').trim();
   if (!safe || safe === 'undefined' || safe === 'null') {
     localStorage.removeItem(STORAGE_KEYS.token);
+    localStorage.removeItem('token');
     return;
   }
   localStorage.setItem(STORAGE_KEYS.token, safe);
+  localStorage.removeItem('token');
 }
 
 function clearToken() {
   localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem('token');
 }
 
 function getApiBase() {
@@ -1044,15 +1051,17 @@ function switchView(viewId, options = {}) {
 // API 请求层
 // ============================
 async function apiFetch(path, options = {}) {
-  const token = getToken();
-  const headers = { ...(options.headers || {}) };
-  const hasJsonBody = !!options.body && typeof options.body === 'string';
-  const skipAuth = /^\/api\/auth\//.test(String(path || ''));
+  const requestOptions = { ...options };
+  const headers = { ...(requestOptions.headers || {}) };
+  const hasJsonBody = !!requestOptions.body && typeof requestOptions.body === 'string';
+  const authMode = requestOptions.authMode || (/^\/api\/auth\//.test(String(path || '')) ? 'none' : 'default');
+  const token = authMode === 'strict-user' ? getStrictUserToken() : getToken();
+  delete requestOptions.authMode;
   if (hasJsonBody && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
 
-  if (!skipAuth && token) headers.Authorization = `Bearer ${token}`;
+  if (authMode !== 'none' && token) headers.Authorization = `Bearer ${token}`;
   const request = {
-    ...options,
+    ...requestOptions,
     headers
   };
   const primaryBase = getApiBase();
@@ -1099,7 +1108,7 @@ async function apiFetch(path, options = {}) {
     }
 
     detail = translateErrorDetail(detail);
-    if (res.status === 401 && !skipAuth) {
+    if (res.status === 401 && authMode !== 'none') {
       showLoginBy401(detail);
     } else if (res.status === 403 && /(账号已注销|账号已封禁|账号已被管理员禁用)/.test(String(detail))) {
       forceLogoutByAdmin(detail);
@@ -1359,7 +1368,10 @@ async function apiEditMessage(messageId, content) {
 }
 
 async function apiRecallMessage(messageId) {
-  return apiFetch(`/api/messages/${messageId}/recall`, { method: 'POST' });
+  return apiFetch(`/api/messages/${messageId}/recall`, {
+    method: 'POST',
+    authMode: 'strict-user'
+  });
 }
 
 async function apiSuperDeleteMessage(messageId) {
@@ -6771,11 +6783,7 @@ async function init() {
   window.addEventListener('resize', updateAppViewportHeight, { passive: true });
   window.visualViewport?.addEventListener('resize', updateAppViewportHeight, { passive: true });
 
-  // 向后兼容：旧版本 token key 为 "token"
-  const legacyToken = localStorage.getItem('token');
-  if (legacyToken && !localStorage.getItem(STORAGE_KEYS.token)) {
-    localStorage.setItem(STORAGE_KEYS.token, legacyToken);
-  }
+  localStorage.removeItem('token');
 
   const theme = localStorage.getItem(STORAGE_KEYS.theme) || 'light';
   setTheme(theme);
@@ -6809,8 +6817,6 @@ async function init() {
     showAuth();
     switchAuthPage('login');
   }
-
-  localStorage.removeItem('token');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
