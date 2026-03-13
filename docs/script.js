@@ -5467,19 +5467,8 @@ function bindChatEvents() {
   const openChatDetailsPanel = () => {
     const conv = findConversationById(appState.activeConversationId);
     if (!conv) return;
-    if (conv.type === 'group') {
-      openGroupManageModal(conv.id).catch((err) => alert(`打开群资料失败：${err.message}`));
-      return;
-    }
-    const avatarEl = document.getElementById('directDetailsAvatar');
-    const nameEl = document.getElementById('directDetailsName');
-    const statusEl = document.getElementById('directDetailsStatus');
-    const other = getOtherUserInPrivateConversation(conv);
-    if (avatarEl) avatarEl.src = getConversationAvatar(conv);
-    if (nameEl) nameEl.textContent = getConversationTitle(conv);
-    if (statusEl) statusEl.textContent = other?.online ? '在线' : '离线';
-    const modal = new bootstrap.Modal(document.getElementById('directDetailsModal'));
-    modal.show();
+    if (conv.type !== 'group') return;
+    openGroupManageModal(conv.id).catch((err) => alert(`打开群资料失败：${err.message}`));
   };
   if (chatDetailsBtn) chatDetailsBtn.addEventListener('click', openChatDetailsPanel);
   document.addEventListener('click', (e) => {
@@ -5519,7 +5508,7 @@ function bindChatEvents() {
   if (chatHeaderMain) {
     chatHeaderMain.addEventListener('click', () => {
       const conv = findConversationById(appState.activeConversationId);
-      if (!conv) return;
+      if (!conv || conv.type !== 'group') return;
       openChatDetailsPanel();
     });
   }
@@ -6140,6 +6129,7 @@ function renderMessages(options = {}) {
   const groupMembersBtn = document.getElementById('groupMembersBtn');
   const composer = document.getElementById('chatComposer');
   const chatHeader = document.getElementById('chatHeader');
+  const chatHeaderMain = document.getElementById('chatHeaderMain');
   const chatDetailsBtn = document.getElementById('chatDetailsBtn');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
   normalizeChatScrollContainer();
@@ -6180,8 +6170,6 @@ function renderMessages(options = {}) {
   if (emptyStateEl) emptyStateEl.classList.add('d-none');
   listEl.classList.remove('d-none');
   updateMultiSelectBar();
-  if (chatDetailsBtn) chatDetailsBtn.disabled = false;
-  if (chatDetailsBtn) chatDetailsBtn.classList.remove('d-none');
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
   applyMuteComposerState(conv);
@@ -6199,10 +6187,22 @@ function renderMessages(options = {}) {
   if (conv.type === 'group') {
     const onlineCount = (conv.members || []).filter((id) => appState.onlineUserIds.has(Number(id))).length;
     subEl.textContent = `${conv.members.length} 人 · 在线 ${onlineCount}`;
+    if (chatDetailsBtn) {
+      chatDetailsBtn.disabled = false;
+      chatDetailsBtn.classList.remove('d-none');
+      chatDetailsBtn.textContent = '群信息';
+    }
+    if (chatHeaderMain) chatHeaderMain.style.cursor = 'pointer';
     if (groupMembersBtn) groupMembersBtn.classList.remove('d-none');
   } else {
     const other = getOtherUserInPrivateConversation(conv);
     subEl.textContent = other?.online ? '在线' : '离线';
+    if (chatDetailsBtn) {
+      chatDetailsBtn.disabled = true;
+      chatDetailsBtn.classList.add('d-none');
+    }
+    if (chatHeaderMain) chatHeaderMain.style.cursor = 'default';
+    closeGroupInfoDrawer();
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     hideMentionSuggestions();
   }
