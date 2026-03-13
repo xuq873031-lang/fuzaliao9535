@@ -5276,10 +5276,6 @@ function bindChatEvents() {
   const historySearchInput = document.getElementById('historySearchInput');
   const chatGroupMenuWrap = document.getElementById('chatGroupMenuWrap');
   const chatGroupMenuBtn = document.getElementById('chatGroupMenuBtn');
-  const chatGroupInfoMenuItem = document.getElementById('chatGroupInfoMenuItem');
-  const chatGroupNoticeMenuItem = document.getElementById('chatGroupNoticeMenuItem');
-  const chatGroupDescriptionMenuItem = document.getElementById('chatGroupDescriptionMenuItem');
-  const chatGroupMembersMenuItem = document.getElementById('chatGroupMembersMenuItem');
   const multiSelectToggleBtn = document.getElementById('multiSelectToggleBtn');
   const multiSelectCancelBtn = document.getElementById('multiSelectCancelBtn');
   const multiForwardBtn = document.getElementById('multiForwardBtn');
@@ -5513,25 +5509,7 @@ function bindChatEvents() {
     if (!conv || conv.type !== 'group') return;
     openGroupManageModal(conv.id).catch((err) => alert(`打开群资料失败：${err.message}`));
   };
-  if (chatGroupInfoMenuItem) chatGroupInfoMenuItem.addEventListener('click', openChatDetailsPanel);
-  if (chatGroupNoticeMenuItem) {
-    chatGroupNoticeMenuItem.addEventListener('click', () => {
-      openChatDetailsPanel();
-      setTimeout(() => document.getElementById('groupManageNotice')?.scrollIntoView({ block: 'center' }), 80);
-    });
-  }
-  if (chatGroupDescriptionMenuItem) {
-    chatGroupDescriptionMenuItem.addEventListener('click', () => {
-      openChatDetailsPanel();
-      setTimeout(() => document.getElementById('groupManageDescription')?.scrollIntoView({ block: 'center' }), 80);
-    });
-  }
-  if (chatGroupMembersMenuItem) {
-    chatGroupMembersMenuItem.addEventListener('click', () => {
-      openChatDetailsPanel();
-      setTimeout(() => openGroupManageSection('members'), 100);
-    });
-  }
+  if (chatGroupMenuBtn) chatGroupMenuBtn.addEventListener('click', openChatDetailsPanel);
   document.addEventListener('click', (e) => {
     const menu = document.getElementById('conversationContextMenu');
     if (!menu || menu.style.display === 'none') return;
