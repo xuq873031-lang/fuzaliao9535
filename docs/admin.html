@@ -199,11 +199,17 @@
 
       <div class="admin-card">
         <div class="row g-2 mb-3">
-          <div class="col-12 col-md-6">
+          <div class="col-12 col-md-5">
             <input id="userKeyword" class="form-control" placeholder="搜索账号 / 昵称" />
           </div>
-          <div class="col-12 col-md-6 d-flex justify-content-md-end">
-            <span id="adminHint" class="small text-secondary align-self-center">准备就绪</span>
+          <div class="col-12 col-md-4">
+            <div class="btn-group w-100" role="group">
+              <button id="filterActiveBtn" class="btn btn-primary btn-sm" type="button">正常账号</button>
+              <button id="filterProcessedBtn" class="btn btn-outline-secondary btn-sm" type="button">已处理账号</button>
+            </div>
+          </div>
+          <div class="col-12 col-md-3 d-flex justify-content-md-end">
+            <span id="adminHint" class="small text-secondary align-self-center text-md-end">准备就绪</span>
           </div>
         </div>
         <div class="table-responsive">
@@ -279,7 +285,8 @@
 
     const state = {
       users: [],
-      currentUser: null
+      currentUser: null,
+      userListMode: 'active'
     };
 
     function getApiBase() {
@@ -500,9 +507,14 @@
     function renderUsers() {
       const tbody = document.getElementById('userTableBody');
       const keyword = (document.getElementById('userKeyword').value || '').trim().toLowerCase();
+      const isProcessed = (u) => !u.is_active || !!u.is_banned;
+      const modeFiltered = state.users.filter((u) => {
+        if (state.userListMode === 'processed') return isProcessed(u);
+        return !isProcessed(u);
+      });
       const rows = keyword
-        ? state.users.filter(u => String(u.username || '').toLowerCase().includes(keyword) || String(u.nickname || '').toLowerCase().includes(keyword))
-        : state.users;
+        ? modeFiltered.filter(u => String(u.username || '').toLowerCase().includes(keyword) || String(u.nickname || '').toLowerCase().includes(keyword))
+        : modeFiltered;
 
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="11" class="text-secondary">暂无匹配用户</td></tr>';
@@ -734,6 +746,22 @@
     });
 
     document.getElementById('userKeyword').addEventListener('input', renderUsers);
+    document.getElementById('filterActiveBtn').addEventListener('click', () => {
+      state.userListMode = 'active';
+      document.getElementById('filterActiveBtn').classList.add('btn-primary');
+      document.getElementById('filterActiveBtn').classList.remove('btn-outline-primary');
+      document.getElementById('filterProcessedBtn').classList.remove('btn-secondary');
+      document.getElementById('filterProcessedBtn').classList.add('btn-outline-secondary');
+      renderUsers();
+    });
+    document.getElementById('filterProcessedBtn').addEventListener('click', () => {
+      state.userListMode = 'processed';
+      document.getElementById('filterProcessedBtn').classList.add('btn-secondary');
+      document.getElementById('filterProcessedBtn').classList.remove('btn-outline-secondary');
+      document.getElementById('filterActiveBtn').classList.remove('btn-primary');
+      document.getElementById('filterActiveBtn').classList.add('btn-outline-primary');
+      renderUsers();
+    });
 
     document.getElementById('confirmResetBtn').addEventListener('click', async () => {
       const uid = Number(document.getElementById('resetUserId').value || 0);

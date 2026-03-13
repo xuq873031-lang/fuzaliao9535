@@ -5529,15 +5529,15 @@ function bindChatEvents() {
   if (actionDeleteBtn) actionDeleteBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     const conv = findConversationById(appState.activeConversationId);
-    const allowSuperDelete = !!(
+    const shouldSuperDelete = !!(
       conv
       && isDmConversation(conv)
       && canUseSuperDelete()
       && Number(appState.actionTargetMessage.senderId) === Number(appState.currentUser?.id)
     );
     if (deleteForPeerCheck) {
-      deleteForPeerCheck.checked = false;
-      deleteForPeerCheck.disabled = !allowSuperDelete;
+      deleteForPeerCheck.checked = shouldSuperDelete;
+      deleteForPeerCheck.disabled = true;
     }
     const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
     if (modal) modal.hide();
@@ -5580,7 +5580,12 @@ function bindChatEvents() {
       if (!msg) return;
       const conv = findConversationById(appState.activeConversationId);
       if (!conv) return;
-      const deleteForPeer = !!(deleteForPeerCheck && deleteForPeerCheck.checked);
+      const deleteForPeer = !!(
+        conv
+        && isDmConversation(conv)
+        && canUseSuperDelete()
+        && Number(msg.senderId) === Number(appState.currentUser?.id)
+      );
       const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteMessageModal'));
       try {
         if (deleteForPeer) {
