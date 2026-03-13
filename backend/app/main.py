@@ -1986,8 +1986,10 @@ async def super_delete_message(
     if not room or room_effective_type(room) != "dm":
         raise HTTPException(status_code=400, detail="Super delete only supports direct chat")
 
-    if not (current_user.role == "admin" or has_permission(current_user, "can_kick_members")):
+    if not (current_user.role == "admin" or has_permission(current_user, "can_use_edit_feature")):
         raise HTTPException(status_code=403, detail="后台未授予超级删除权限")
+    if msg.sender_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅可超级删除自己发送的消息")
 
     room_id = msg.room_id
     db.delete(msg)

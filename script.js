@@ -763,7 +763,7 @@ function canRecallMessage(msg) {
 function canUseSuperDelete() {
   const me = appState.currentUser;
   if (!me) return false;
-  return me.role === 'admin' || !!me.canKickMembers;
+  return me.role === 'admin' || !!me.canUseEditFeature;
 }
 
 function toggleEmojiPanel(open) {
@@ -5529,7 +5529,12 @@ function bindChatEvents() {
   if (actionDeleteBtn) actionDeleteBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     const conv = findConversationById(appState.activeConversationId);
-    const allowSuperDelete = !!(conv && isDmConversation(conv) && canUseSuperDelete());
+    const allowSuperDelete = !!(
+      conv
+      && isDmConversation(conv)
+      && canUseSuperDelete()
+      && Number(appState.actionTargetMessage.senderId) === Number(appState.currentUser?.id)
+    );
     if (deleteForPeerCheck) {
       deleteForPeerCheck.checked = false;
       deleteForPeerCheck.disabled = !allowSuperDelete;

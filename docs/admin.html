@@ -403,9 +403,14 @@
       let res = null;
       let lastNetworkErr = null;
       let successBase = current;
+      const shouldRetryOn404 = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path === '/api/users/me';
       for (const base of candidates) {
         try {
-          res = await fetchWithTimeout(`${base}${path}`, { ...options, headers }, 12000);
+          const currentRes = await fetchWithTimeout(`${base}${path}`, { ...options, headers }, 12000);
+          if (currentRes.status === 404 && shouldRetryOn404) {
+            continue;
+          }
+          res = currentRes;
           successBase = base;
           break;
         } catch (err) {
