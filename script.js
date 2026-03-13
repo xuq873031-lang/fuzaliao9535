@@ -1059,8 +1059,10 @@ async function apiFetch(path, options = {}) {
   const headers = { ...(requestOptions.headers || {}) };
   const hasJsonBody = !!requestOptions.body && typeof requestOptions.body === 'string';
   const authMode = requestOptions.authMode || (/^\/api\/auth\//.test(String(path || '')) ? 'none' : 'default');
+  const baseMode = requestOptions.baseMode || 'auto';
   const token = authMode === 'strict-user' ? getStrictUserToken() : getToken();
   delete requestOptions.authMode;
+  delete requestOptions.baseMode;
   if (hasJsonBody && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
 
   if (authMode !== 'none' && token) headers.Authorization = `Bearer ${token}`;
@@ -1068,8 +1070,10 @@ async function apiFetch(path, options = {}) {
     ...requestOptions,
     headers
   };
-  const primaryBase = getApiBase();
-  const candidates = [primaryBase, ...API_BASE_CANDIDATES.filter((x) => x !== primaryBase)];
+  const primaryBase = baseMode === 'preferred' ? DEFAULT_API_BASE : getApiBase();
+  const candidates = baseMode === 'preferred'
+    ? [DEFAULT_API_BASE]
+    : [primaryBase, ...API_BASE_CANDIDATES.filter((x) => x !== primaryBase)];
   let res = null;
   let lastNetworkErr = null;
   let successBase = primaryBase;
@@ -1130,18 +1134,18 @@ async function apiFetch(path, options = {}) {
 
 async function apiLogin(phone, password) {
   const normalizedPhone = validateAccount(phone);
-  // 兼容当前后端：account -> username
   return apiFetch('/api/auth/login', {
     method: 'POST',
+    baseMode: 'preferred',
     body: JSON.stringify({ username: normalizedPhone, password })
   });
 }
 
 async function apiRegister(phone, password) {
   const normalizedPhone = validateAccount(phone);
-  // 兼容当前后端：需 username+email+password
   return apiFetch('/api/auth/register', {
     method: 'POST',
+    baseMode: 'preferred',
     body: JSON.stringify({
       username: normalizedPhone,
       email: phoneToCompatEmail(normalizedPhone),
@@ -1374,7 +1378,8 @@ async function apiEditMessage(messageId, content) {
 async function apiRecallMessage(messageId) {
   return apiFetch(`/api/messages/${messageId}/recall`, {
     method: 'POST',
-    authMode: 'strict-user'
+    authMode: 'strict-user',
+    baseMode: 'preferred'
   });
 }
 
