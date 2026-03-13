@@ -15,16 +15,6 @@ const DEFAULT_API_BASE = String(
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
 ).trim().replace(/\/$/, '');
-const API_BASE_CANDIDATES = Array.from(new Set(
-  [
-    DEFAULT_API_BASE,
-    'https://web-production-afb64.up.railway.app',
-    'https://web-production-be9f.up.railway.app',
-    'https://web-production-f9619e.up.railway.app'
-  ]
-    .map((x) => String(x || '').trim().replace(/\/$/, ''))
-    .filter((x) => /^https?:\/\//i.test(x))
-));
 const APP_BUILD = '20260313_authfix1';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
@@ -159,24 +149,25 @@ function clearToken() {
 
 function getApiBase() {
   const stored = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
-  if (!stored || !/^https?:\/\//i.test(stored)) {
+  if (stored !== DEFAULT_API_BASE) {
     localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
-    return DEFAULT_API_BASE;
   }
-  return stored;
+  return DEFAULT_API_BASE;
 }
 
 function getWsBase() {
   const stored = String(localStorage.getItem(STORAGE_KEYS.wsBase) || '').trim().replace(/\/$/, '');
-  if (stored && /^wss?:\/\//i.test(stored)) return stored;
-  const fromApi = getApiBase().replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
-  return fromApi || DEFAULT_WS_BASE;
+  if (stored !== DEFAULT_WS_BASE) {
+    localStorage.setItem(STORAGE_KEYS.wsBase, DEFAULT_WS_BASE);
+  }
+  return DEFAULT_WS_BASE;
 }
 
 function setApiBase(base) {
   const normalized = String(base || '').trim().replace(/\/$/, '');
   if (!/^https?:\/\//i.test(normalized)) return;
-  localStorage.setItem(STORAGE_KEYS.apiBase, normalized);
+  localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
+  localStorage.setItem(STORAGE_KEYS.wsBase, DEFAULT_WS_BASE);
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
@@ -190,23 +181,13 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
 }
 
 async function ensureReachableApiBase() {
-  const tried = [];
-  const candidates = [getApiBase(), ...API_BASE_CANDIDATES.filter((x) => x !== getApiBase())];
-  for (const base of candidates) {
-    tried.push(base);
-    try {
-      const res = await fetchWithTimeout(`${base}/health`, { method: 'GET', cache: 'no-store' }, 7000);
-      if (res && res.ok) {
-        if (base !== getApiBase()) {
-          setApiBase(base);
-        }
-        return { ok: true, base };
-      }
-    } catch (_) {
-      // try next candidate
-    }
+  const base = getApiBase();
+  try {
+    const res = await fetchWithTimeout(`${base}/health`, { method: 'GET', cache: 'no-store' }, 7000);
+    return { ok: !!(res && res.ok), base };
+  } catch (_) {
+    return { ok: false, base };
   }
-  return { ok: false, tried };
 }
 
 function getPinnedStorageKey() {
@@ -1079,33 +1060,18 @@ async function apiFetch(path, options = {}) {
     headers
   };
   const primaryBase = baseMode === 'preferred' ? DEFAULT_API_BASE : getApiBase();
-  const candidates = baseMode === 'preferred'
-    ? [DEFAULT_API_BASE]
-    : [primaryBase, ...API_BASE_CANDIDATES.filter((x) => x !== primaryBase)];
   let res = null;
   let lastNetworkErr = null;
-  let successBase = primaryBase;
-  for (const base of candidates) {
-    try {
-      const currentRes = await fetchWithTimeout(`${base}${path}`, request, 15000);
-      if (currentRes.status === 404 && base !== candidates[candidates.length - 1]) {
-        continue;
-      }
-      res = currentRes;
-      successBase = base;
-      break;
-    } catch (caughtErr) {
-      lastNetworkErr = caughtErr;
-    }
+  try {
+    res = await fetchWithTimeout(`${primaryBase}${path}`, request, 15000);
+  } catch (caughtErr) {
+    lastNetworkErr = caughtErr;
   }
   if (!res) {
     const err = new Error(`网络连接失败：无法连接后端 (${primaryBase})`);
     err.status = 0;
     err.detail = lastNetworkErr?.message || 'NetworkError';
     throw err;
-  }
-  if (successBase !== primaryBase) {
-    setApiBase(successBase);
   }
 
   if (!res.ok) {
