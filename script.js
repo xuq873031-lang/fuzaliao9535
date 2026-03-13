@@ -80,6 +80,7 @@ let appState = {
   wsMessageBatchTimer: null,
   conversationContextRoomId: null,
   conversationMenuRoomId: null,
+  groupMemberMenuState: null,
   userNearBottom: true,
   lastSoundAt: 0,
   audioCtx: null,
@@ -313,6 +314,7 @@ function toggleConversationMute(roomId) {
 function goBackOneLevelFromChat() {
   if (!appState.activeConversationId) return;
   closeGroupInfoDrawer();
+  hideGroupMemberContextMenu();
   appState.activeConversationId = null;
   appState.multiSelectMode = false;
   appState.multiSelectedMessageIds = new Set();
@@ -382,6 +384,71 @@ function openConversationContextMenu(x, y, roomId) {
     <button class="dropdown-item" type="button" data-action="multi">多选消息</button>
   `;
   appState.conversationMenuRoomId = Number(conv.id);
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  menu.style.display = 'block';
+  menu.classList.add('show');
+  const menuRect = menu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(x, window.innerWidth - menuRect.width - 8));
+  const top = Math.max(8, Math.min(y, window.innerHeight - menuRect.height - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function ensureGroupMemberContextMenu() {
+  let menu = document.getElementById('groupMemberContextMenu');
+  if (menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'groupMemberContextMenu';
+  menu.className = 'dropdown-menu';
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '2101';
+  menu.style.display = 'none';
+  menu.style.minWidth = '180px';
+  document.body.appendChild(menu);
+  return menu;
+}
+
+function hideGroupMemberContextMenu() {
+  const menu = document.getElementById('groupMemberContextMenu');
+  if (!menu || menu.style.display === 'none') return false;
+  menu.style.display = 'none';
+  menu.classList.remove('show');
+  appState.groupMemberMenuState = null;
+  return true;
+}
+
+async function openGroupMemberContextMenu(x, y, roomId, targetUserId) {
+  const conv = findConversationById(roomId);
+  if (!conv || conv.type !== 'group') return;
+  const members = await apiGetRoomMembers(roomId);
+  const me = (members || []).find((m) => Number(m.user_id) === Number(appState.currentUser?.id));
+  const target = (members || []).find((m) => Number(m.user_id) === Number(targetUserId));
+  if (!me || !target) return;
+
+  const actor = {
+    isOwner: me.role === 'owner',
+    canKick: !!appState.currentUser?.canKickMembers && !!(me.role === 'owner' || me.can_kick),
+    canMute: !!appState.currentUser?.canMuteMembers && !!(me.role === 'owner' || me.can_mute)
+  };
+  const isSelf = Number(target.user_id) === Number(appState.currentUser?.id);
+  const targetDelegated = !!(target.can_kick || target.can_mute);
+  const canOperateTarget = actor.isOwner || !targetDelegated;
+  const canMuteTarget = actor.canMute && canOperateTarget && !isSelf && target.role !== 'owner';
+  const canKickTarget = actor.canKick && canOperateTarget && !isSelf && target.role !== 'owner';
+  if (!canMuteTarget && !canKickTarget) return;
+
+  const menu = ensureGroupMemberContextMenu();
+  const muteText = target.muted ? '解除禁言' : '禁言';
+  menu.innerHTML = `
+    ${canMuteTarget ? `<button class="dropdown-item" type="button" data-action="mute">${muteText}</button>` : ''}
+    ${canKickTarget ? '<button class="dropdown-item text-danger" type="button" data-action="remove">移除出群</button>' : ''}
+  `;
+  appState.groupMemberMenuState = {
+    roomId: Number(roomId),
+    targetUserId: Number(target.user_id),
+    targetMuted: !!target.muted
+  };
   menu.style.left = '0px';
   menu.style.top = '0px';
   menu.style.display = 'block';
@@ -5599,7 +5666,14 @@ function bindChatEvents() {
     if (menu.contains(e.target)) return;
     hideConversationContextMenu();
   });
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('groupMemberContextMenu');
+    if (!menu || menu.style.display === 'none') return;
+    if (menu.contains(e.target)) return;
+    hideGroupMemberContextMenu();
+  });
   document.addEventListener('scroll', hideConversationContextMenu, true);
+  document.addEventListener('scroll', hideGroupMemberContextMenu, true);
   const contextMenu = ensureConversationContextMenu();
   contextMenu.addEventListener('click', (e) => {
     const item = e.target.closest('[data-action]');
@@ -5625,6 +5699,41 @@ function bindChatEvents() {
         enterMultiSelectMode();
         hideConversationContextMenu();
       });
+    }
+  });
+  const groupMemberMenu = ensureGroupMemberContextMenu();
+  groupMemberMenu.addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-action]');
+    if (!item) return;
+    const state = appState.groupMemberMenuState;
+    if (!state) {
+      hideGroupMemberContextMenu();
+      return;
+    }
+    const action = item.getAttribute('data-action');
+    hideGroupMemberContextMenu();
+    try {
+      if (action === 'mute') {
+        if (state.targetMuted) await apiUnmuteRoomMember(state.roomId, state.targetUserId);
+        else await apiMuteRoomMember(state.roomId, state.targetUserId);
+      } else if (action === 'remove') {
+        if (!confirm('确定移除该成员？')) return;
+        await apiRemoveRoomMember(state.roomId, state.targetUserId);
+      } else {
+        return;
+      }
+      await refreshRoomsAndMessages();
+      if (appState.managingGroupId === state.roomId) {
+        await refreshGroupManageModal(state.roomId);
+      } else {
+        await refreshCurrentUserMuteState(state.roomId);
+      }
+      renderGroupList();
+      if (appState.activeConversationId === state.roomId) {
+        renderMessages({ autoScroll: false });
+      }
+    } catch (err) {
+      alert(`操作失败：${err.message}`);
     }
   });
   if (chatHeaderMain) {
@@ -5683,6 +5792,10 @@ function bindChatEvents() {
       return;
     }
     if (hideConversationContextMenu()) {
+      e.preventDefault();
+      return;
+    }
+    if (hideGroupMemberContextMenu()) {
       e.preventDefault();
       return;
     }
@@ -6113,6 +6226,15 @@ function buildMessageRow(msg, conv) {
       e.stopPropagation();
       openFriendProfileModal(msg.senderId);
     });
+    avatar.addEventListener('contextmenu', (e) => {
+      if (conv.type !== 'group') return;
+      e.preventDefault();
+      e.stopPropagation();
+      openGroupMemberContextMenu(e.clientX, e.clientY, conv.id, msg.senderId)
+        .catch((err) => {
+          console.warn('打开成员管理菜单失败', err.message);
+        });
+    });
     row.appendChild(avatar);
   }
 
@@ -6283,6 +6405,7 @@ function renderMessages(options = {}) {
   handleConversationContextSwitch();
 
   listEl.innerHTML = '';
+  hideGroupMemberContextMenu();
 
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
