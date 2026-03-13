@@ -1154,8 +1154,8 @@ async function apiRegister(phone, password) {
   });
 }
 
-async function apiGetMe() {
-  return apiFetch('/api/users/me');
+async function apiGetMe(options = {}) {
+  return apiFetch('/api/users/me', options);
 }
 
 async function apiUpdateMe(payload) {
@@ -2967,7 +2967,8 @@ function bindAuthEvents() {
       const token = extractAuthToken(data);
       if (!token) throw new Error('登录响应缺少 token');
       setToken(token);
-      await bootstrapAfterLogin(data.user);
+      const me = await apiGetMe({ authMode: 'strict-user', baseMode: 'preferred' });
+      await bootstrapAfterLogin(me);
     } catch (err) {
       alert(`登录失败(${err.status || 'ERR'}): ${err.message}`);
     } finally {
@@ -2997,7 +2998,8 @@ function bindAuthEvents() {
       const token = extractAuthToken(data);
       if (!token) throw new Error('注册响应缺少 token');
       setToken(token);
-      await bootstrapAfterLogin(data.user);
+      const me = await apiGetMe({ authMode: 'strict-user', baseMode: 'preferred' });
+      await bootstrapAfterLogin(me);
     } catch (err) {
       alert(`注册失败(${err.status || 'ERR'}): ${err.message}`);
     } finally {
