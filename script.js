@@ -5637,12 +5637,18 @@ function bindChatEvents() {
   if (chatAvatar) {
     chatAvatar.addEventListener('click', (e) => {
       const conv = findConversationById(appState.activeConversationId);
-      if (!conv || conv.type !== 'private') return;
       e.preventDefault();
       e.stopPropagation();
-      const friend = getOtherUserInPrivateConversation(conv);
-      if (!friend) return;
-      openFriendProfileModal(friend.id);
+      if (!conv) return;
+      if (conv.type === 'private') {
+        const friend = getOtherUserInPrivateConversation(conv);
+        if (!friend) return;
+        openFriendProfileModal(friend.id);
+        return;
+      }
+      if (conv.type === 'group') {
+        openChatDetailsPanel();
+      }
     });
   }
 
