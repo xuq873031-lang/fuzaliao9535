@@ -10,7 +10,7 @@ const STORAGE_KEYS = {
 };
 const CHAT_CONFIG = window.__CHAT_CONFIG || {};
 const DEFAULT_API_BASE = String(
-  CHAT_CONFIG.API_BASE || 'https://web-production-afb64.up.railway.app'
+  CHAT_CONFIG.API_BASE || 'https://web-production-be9f.up.railway.app'
 ).trim().replace(/\/$/, '');
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
@@ -752,6 +752,9 @@ function canEditOwnMessage(msg) {
 function canRecallMessage(msg) {
   if (!msg || !appState.currentUser) return false;
   if (String(msg.text || '').startsWith('[已撤回]')) return false;
+  if (msg.localPending || msg.localFailed) return false;
+  const msgId = Number(msg.id);
+  if (!Number.isFinite(msgId) || msgId <= 0) return false;
   return Number(msg.senderId) === Number(appState.currentUser.id);
 }
 
