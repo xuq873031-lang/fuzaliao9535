@@ -25,7 +25,7 @@ const API_BASE_CANDIDATES = Array.from(new Set(
     .map((x) => String(x || '').trim().replace(/\/$/, ''))
     .filter((x) => /^https?:\/\//i.test(x))
 ));
-const APP_BUILD = '20260311_ui6';
+const APP_BUILD = '20260313_authfix1';
 const SHOW_DEBUG_BADGE = false;
 const ENABLE_IN_APP_ADMIN_VIEW = false;
 const SCROLL_DEBUG = !!CHAT_CONFIG.DEBUG_SCROLL;

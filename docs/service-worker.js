@@ -5,7 +5,7 @@
   - 不做离线消息、不做后台同步、不做推送
 */
 
-const CACHE_VERSION = 'chat-pwa-v2';
+const CACHE_VERSION = 'chat-pwa-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 const APP_BASE = self.location.pathname.replace(/\/service-worker\.js$/, '') || '';
@@ -48,6 +48,8 @@ function shouldBypass(request, url) {
   // 绝对禁止缓存的动态/鉴权/上传相关路径
   if (
     p.includes('/api/') ||
+    p.endsWith('/script.js') ||
+    p.endsWith('/style.css') ||
     p.includes('/login') ||
     p.includes('/register') ||
     p.includes('/messages') ||
