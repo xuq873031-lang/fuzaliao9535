@@ -421,9 +421,10 @@ def ensure_compatible_schema():
     """
     向后兼容迁移：
     - users.last_seen_at
-    - chat_rooms.type/title/avatar
+    - chat_rooms.type/title/avatar/is_dissolved
     - room_members.role/joined_at
-    - messages.reply_to_message_id
+    - messages.reply_to_message_id/edited_by_admin/updated_at
+    - friend_requests.message/responded_at
     """
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
@@ -483,6 +484,13 @@ def ensure_compatible_schema():
                 conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN invite_need_approval BOOLEAN"))
             if "global_mute" not in room_columns:
                 conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN global_mute BOOLEAN"))
+            if "is_dissolved" not in room_columns:
+                conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN is_dissolved BOOLEAN"))
+            if "dissolved_at" not in room_columns:
+                if engine.dialect.name == "sqlite":
+                    conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN dissolved_at DATETIME"))
+                else:
+                    conn.execute(text("ALTER TABLE chat_rooms ADD COLUMN dissolved_at TIMESTAMP NULL"))
 
             # 数据回填：旧 room_type=private -> type=dm，其余保留 group
             conn.execute(text("UPDATE chat_rooms SET type='dm' WHERE type IS NULL AND room_type='private'"))
@@ -496,6 +504,7 @@ def ensure_compatible_schema():
             conn.execute(text("UPDATE chat_rooms SET allow_member_invite=false WHERE allow_member_invite IS NULL"))
             conn.execute(text("UPDATE chat_rooms SET invite_need_approval=true WHERE invite_need_approval IS NULL"))
             conn.execute(text("UPDATE chat_rooms SET global_mute=false WHERE global_mute IS NULL"))
+            conn.execute(text("UPDATE chat_rooms SET is_dissolved=false WHERE is_dissolved IS NULL"))
 
         if "room_members" in table_names:
             member_columns = {col["name"] for col in inspector.get_columns("room_members")}
@@ -520,11 +529,24 @@ def ensure_compatible_schema():
             message_columns = {col["name"] for col in inspector.get_columns("messages")}
             if "reply_to_message_id" not in message_columns:
                 conn.execute(text("ALTER TABLE messages ADD COLUMN reply_to_message_id INTEGER"))
+            if "edited_by_admin" not in message_columns:
+                conn.execute(text("ALTER TABLE messages ADD COLUMN edited_by_admin BOOLEAN"))
+            if "updated_at" not in message_columns:
+                if engine.dialect.name == "sqlite":
+                    conn.execute(text("ALTER TABLE messages ADD COLUMN updated_at DATETIME"))
+                else:
+                    conn.execute(text("ALTER TABLE messages ADD COLUMN updated_at TIMESTAMP NULL"))
+            conn.execute(text("UPDATE messages SET edited_by_admin=false WHERE edited_by_admin IS NULL"))
 
         if "friend_requests" in table_names:
             req_columns = {col["name"] for col in inspector.get_columns("friend_requests")}
             if "message" not in req_columns:
                 conn.execute(text("ALTER TABLE friend_requests ADD COLUMN message VARCHAR(120)"))
+            if "responded_at" not in req_columns:
+                if engine.dialect.name == "sqlite":
+                    conn.execute(text("ALTER TABLE friend_requests ADD COLUMN responded_at DATETIME"))
+                else:
+                    conn.execute(text("ALTER TABLE friend_requests ADD COLUMN responded_at TIMESTAMP NULL"))
             conn.execute(text("UPDATE friend_requests SET message='' WHERE message IS NULL"))
 
 
