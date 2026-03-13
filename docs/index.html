@@ -420,6 +420,28 @@
           <div class="modal-content rounded-4">
             <div class="modal-header">
               <h5 class="modal-title" id="groupManageTitle">群资料</h5>
+              <div class="dropdown me-2">
+                <button id="groupTopActionsBtn" class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  设置
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><button id="groupTopOpenProfileItem" class="dropdown-item" type="button">群资料</button></li>
+                  <li><button id="groupTopEditNameItem" class="dropdown-item" type="button">编辑群名称</button></li>
+                  <li><button id="groupTopEditDescriptionItem" class="dropdown-item" type="button">编辑群简介</button></li>
+                  <li><button id="groupTopEditNoticeItem" class="dropdown-item" type="button">编辑群公告</button></li>
+                  <li><hr class="dropdown-divider" /></li>
+                  <li><button id="groupTopOpenMembersItem" class="dropdown-item" type="button">成员管理（踢人）</button></li>
+                  <li><button id="groupTopOpenSettingsItem" class="dropdown-item" type="button">群设置</button></li>
+                  <li><button id="groupTopMuteListItem" class="dropdown-item" type="button">禁言名单</button></li>
+                  <li><hr class="dropdown-divider" /></li>
+                  <li><button id="groupTopAvatarItem" class="dropdown-item" type="button">修改群头像</button></li>
+                  <li><button id="groupTopHistorySearchItem" class="dropdown-item" type="button">查找记录</button></li>
+                  <li><button id="groupTopHistoryPhotosItem" class="dropdown-item" type="button">历史照片</button></li>
+                  <li><hr class="dropdown-divider" /></li>
+                  <li><button id="groupTopDissolveItem" class="dropdown-item text-danger" type="button">解散群</button></li>
+                  <li><button id="groupTopExitItem" class="dropdown-item text-danger" type="button">退出群</button></li>
+                </ul>
+              </div>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -466,15 +488,6 @@
                   <div class="small text-secondary">本群昵称</div>
                   <div id="groupMyNickname" class="fw-semibold">未设置</div>
                 </div>
-              </div>
-
-              <div class="d-grid gap-2 mb-3">
-                <button id="groupMemberSectionToggleBtn" class="btn btn-outline-secondary text-start" type="button" data-bs-toggle="collapse" data-bs-target="#groupMemberSection">
-                  成员入口
-                </button>
-                <button id="groupSettingsSectionToggleBtn" class="btn btn-outline-secondary text-start" type="button" data-bs-toggle="collapse" data-bs-target="#groupSettingsSection">
-                  群设置入口
-                </button>
               </div>
 
               <div id="groupMemberSection" class="collapse mb-3">
@@ -533,19 +546,7 @@
                   </div>
                 </div>
               </div>
-
-              <div class="d-flex align-items-center justify-content-between mt-3">
-                <div class="dropdown">
-                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">更多操作</button>
-                  <ul class="dropdown-menu">
-                    <li><button id="groupAvatarEditBtn" class="dropdown-item" type="button">修改群头像</button></li>
-                    <li><button id="groupManageHistorySearchBtn" class="dropdown-item" type="button">查找记录</button></li>
-                    <li><button id="groupManageHistoryPhotosBtn" class="dropdown-item" type="button">历史照片</button></li>
-                  </ul>
-                </div>
-                <button id="groupExitBtn" class="btn btn-outline-danger btn-sm" type="button">退出群</button>
-                <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
-              </div>
+              <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
             </div>
           </div>
         </div>

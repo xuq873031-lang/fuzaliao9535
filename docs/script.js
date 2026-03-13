@@ -1159,6 +1159,10 @@ async function apiUpdateRoom(roomId, payload) {
   });
 }
 
+async function apiDeleteRoom(roomId) {
+  return apiFetch(`/api/rooms/${roomId}`, { method: 'DELETE' });
+}
+
 async function apiAdminListUsers() {
   return apiFetch('/api/admin/users');
 }
@@ -3776,22 +3780,77 @@ function bindGroupEvents() {
   });
 
   document.getElementById('createGroupModal').addEventListener('show.bs.modal', renderGroupMemberOptions);
-  const groupManageHistorySearchBtn = document.getElementById('groupManageHistorySearchBtn');
-  if (groupManageHistorySearchBtn) {
-    groupManageHistorySearchBtn.addEventListener('click', () => {
-      const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
-      if (modal) modal.hide();
-      openHistorySearchModal();
-    });
-  }
-  const groupManageHistoryPhotosBtn = document.getElementById('groupManageHistoryPhotosBtn');
-  if (groupManageHistoryPhotosBtn) {
-    groupManageHistoryPhotosBtn.addEventListener('click', () => {
-      const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
-      if (modal) modal.hide();
-      openHistoryPhotosModal();
-    });
-  }
+  const groupTopOpenProfileItem = document.getElementById('groupTopOpenProfileItem');
+  const groupTopEditNameItem = document.getElementById('groupTopEditNameItem');
+  const groupTopEditDescriptionItem = document.getElementById('groupTopEditDescriptionItem');
+  const groupTopEditNoticeItem = document.getElementById('groupTopEditNoticeItem');
+  const groupTopOpenMembersItem = document.getElementById('groupTopOpenMembersItem');
+  const groupTopOpenSettingsItem = document.getElementById('groupTopOpenSettingsItem');
+  const groupTopMuteListItem = document.getElementById('groupTopMuteListItem');
+  const groupTopAvatarItem = document.getElementById('groupTopAvatarItem');
+  const groupTopHistorySearchItem = document.getElementById('groupTopHistorySearchItem');
+  const groupTopHistoryPhotosItem = document.getElementById('groupTopHistoryPhotosItem');
+  const groupTopDissolveItem = document.getElementById('groupTopDissolveItem');
+  const groupTopExitItem = document.getElementById('groupTopExitItem');
+  const groupMemberSection = document.getElementById('groupMemberSection');
+  const groupSettingsSection = document.getElementById('groupSettingsSection');
+  const memberSectionCollapse = groupMemberSection ? bootstrap.Collapse.getOrCreateInstance(groupMemberSection, { toggle: false }) : null;
+  const settingsSectionCollapse = groupSettingsSection ? bootstrap.Collapse.getOrCreateInstance(groupSettingsSection, { toggle: false }) : null;
+
+  const hideGroupTopActions = () => {
+    const btn = document.getElementById('groupTopActionsBtn');
+    if (!btn) return false;
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    if (!expanded) return false;
+    bootstrap.Dropdown.getOrCreateInstance(btn).hide();
+    return true;
+  };
+
+  const closeGroupSections = () => {
+    let changed = false;
+    if (groupMemberSection?.classList.contains('show')) {
+      memberSectionCollapse?.hide();
+      changed = true;
+    }
+    if (groupSettingsSection?.classList.contains('show')) {
+      settingsSectionCollapse?.hide();
+      changed = true;
+    }
+    return changed;
+  };
+
+  const openMembersSection = () => {
+    settingsSectionCollapse?.hide();
+    memberSectionCollapse?.show();
+    hideGroupTopActions();
+  };
+
+  const openSettingsSection = () => {
+    memberSectionCollapse?.hide();
+    settingsSectionCollapse?.show();
+    hideGroupTopActions();
+  };
+
+  const showProfileMain = () => {
+    closeGroupSections();
+    hideGroupTopActions();
+  };
+
+  if (groupTopOpenProfileItem) groupTopOpenProfileItem.addEventListener('click', showProfileMain);
+  if (groupTopOpenMembersItem) groupTopOpenMembersItem.addEventListener('click', openMembersSection);
+  if (groupTopOpenSettingsItem) groupTopOpenSettingsItem.addEventListener('click', openSettingsSection);
+  const openGroupHistorySearch = () => {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
+    if (modal) modal.hide();
+    openHistorySearchModal();
+  };
+  const openGroupHistoryPhotos = () => {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
+    if (modal) modal.hide();
+    openHistoryPhotosModal();
+  };
+  if (groupTopHistorySearchItem) groupTopHistorySearchItem.addEventListener('click', openGroupHistorySearch);
+  if (groupTopHistoryPhotosItem) groupTopHistoryPhotosItem.addEventListener('click', openGroupHistoryPhotos);
   const groupEditDescriptionBtn = document.getElementById('groupEditDescriptionBtn');
   const groupSaveDescriptionBtn = document.getElementById('groupSaveDescriptionBtn');
   const groupCancelDescriptionBtn = document.getElementById('groupCancelDescriptionBtn');
@@ -3835,6 +3894,7 @@ function bindGroupEvents() {
       const conv = findConversationById(appState.managingGroupId);
       if (groupDescriptionEditor) groupDescriptionEditor.value = conv?.description || '';
       setDescriptionEditMode(true);
+      closeGroupSections();
       if (groupDescriptionEditor) groupDescriptionEditor.focus();
     });
   }
@@ -3868,6 +3928,7 @@ function bindGroupEvents() {
       const conv = findConversationById(appState.managingGroupId);
       if (groupNoticeEditor) groupNoticeEditor.value = conv?.notice || '';
       setNoticeEditMode(true);
+      closeGroupSections();
       if (groupNoticeEditor) groupNoticeEditor.focus();
     });
   }
@@ -3889,6 +3950,38 @@ function bindGroupEvents() {
         setNoticeEditMode(false);
       } catch (err) {
         alert(`保存群公告失败：${err.message}`);
+      }
+    });
+  }
+  if (groupTopEditDescriptionItem) groupTopEditDescriptionItem.addEventListener('click', () => groupEditDescriptionBtn?.click());
+  if (groupTopEditNoticeItem) groupTopEditNoticeItem.addEventListener('click', () => groupEditNoticeBtn?.click());
+  if (groupTopEditNameItem) {
+    groupTopEditNameItem.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      if (!canEditCurrentGroupProfile()) {
+        alert('仅群主或管理员可编辑群名称');
+        return;
+      }
+      const conv = findConversationById(groupId);
+      const currentName = conv?.title || conv?.name || '';
+      const nextName = String(prompt('编辑群名称', currentName) || '').trim();
+      if (!nextName || nextName === currentName) return;
+      try {
+        const updated = await apiUpdateRoom(groupId, { title: nextName });
+        if (conv) {
+          conv.title = updated?.title || nextName;
+          conv.name = updated?.name || nextName;
+        }
+        const nameEl = document.getElementById('groupManageName');
+        if (nameEl) nameEl.textContent = updated?.title || nextName;
+        const titleEl = document.getElementById('groupManageTitle');
+        if (titleEl) titleEl.textContent = `群资料 · ${updated?.title || nextName}`;
+        renderConversationList();
+        renderGroupList();
+        renderMessages({ autoScroll: false });
+      } catch (err) {
+        alert(`保存群名称失败：${err.message}`);
       }
     });
   }
@@ -4025,33 +4118,32 @@ function bindGroupEvents() {
       }
     });
   }
-  const exitGroupBtn = document.getElementById('groupExitBtn');
-  if (exitGroupBtn) {
-    exitGroupBtn.addEventListener('click', async () => {
-      const groupId = appState.managingGroupId;
-      if (!groupId) return;
-      if (!confirm('确定退出该群？')) return;
-      try {
-        await apiRemoveRoomMember(groupId, appState.currentUser.id);
-        const manageModal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
-        if (manageModal) manageModal.hide();
-        if (appState.activeConversationId === groupId) {
-          appState.activeConversationId = null;
-          stopRoomPolling();
-          renderMessages({ autoScroll: false });
-        }
-        await refreshRoomsAndMessages();
-        renderGroupList();
-        renderConversationList();
-      } catch (err) {
-        alert(`退出群失败：${err.message}`);
+  if (groupTopMuteListItem) groupTopMuteListItem.addEventListener('click', () => muteListBtn?.click());
+  const handleExitGroup = async () => {
+    const groupId = appState.managingGroupId;
+    if (!groupId) return;
+    if (!confirm('确定退出该群？')) return;
+    try {
+      await apiRemoveRoomMember(groupId, appState.currentUser.id);
+      const manageModal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
+      if (manageModal) manageModal.hide();
+      if (appState.activeConversationId === groupId) {
+        appState.activeConversationId = null;
+        stopRoomPolling();
+        renderMessages({ autoScroll: false });
       }
-    });
-  }
-  const groupAvatarEditBtn = document.getElementById('groupAvatarEditBtn');
+      await refreshRoomsAndMessages();
+      renderGroupList();
+      renderConversationList();
+    } catch (err) {
+      alert(`退出群失败：${err.message}`);
+    }
+  };
+  if (groupTopExitItem) groupTopExitItem.addEventListener('click', () => {
+    handleExitGroup().catch((err) => console.warn('退出群失败', err.message));
+  });
   const groupAvatarInput = document.getElementById('groupAvatarInput');
-  if (groupAvatarEditBtn && groupAvatarInput) {
-    groupAvatarEditBtn.addEventListener('click', () => groupAvatarInput.click());
+  if (groupAvatarInput) {
     groupAvatarInput.addEventListener('change', async (e) => {
       const file = e.target.files && e.target.files[0];
       e.target.value = '';
@@ -4082,12 +4174,42 @@ function bindGroupEvents() {
       }
     });
   }
+  if (groupTopAvatarItem && groupAvatarInput) groupTopAvatarItem.addEventListener('click', () => groupAvatarInput.click());
+  if (groupTopDissolveItem) {
+    groupTopDissolveItem.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId) return;
+      const me = appState.roomMyMemberMetaByRoom[groupId];
+      if (!me || me.role !== 'owner') {
+        alert('仅群主可解散群');
+        return;
+      }
+      if (!confirm('确定解散该群？该操作不可恢复。')) return;
+      try {
+        await apiDeleteRoom(groupId);
+        const manageModal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
+        if (manageModal) manageModal.hide();
+        if (appState.activeConversationId === groupId) {
+          appState.activeConversationId = null;
+          stopRoomPolling();
+          renderMessages({ autoScroll: false });
+        }
+        await refreshRoomsAndMessages();
+        renderGroupList();
+        renderConversationList();
+      } catch (err) {
+        alert(`解散群失败：${err.message}`);
+      }
+    });
+  }
   const manageModalEl = document.getElementById('groupManageModal');
   if (manageModalEl) {
     manageModalEl.addEventListener('hidden.bs.modal', () => {
       appState.managingGroupId = null;
       appState.managingGroupMembers = [];
       appState.groupMemberSearchKeyword = '';
+      closeGroupSections();
+      hideGroupTopActions();
       setDescriptionEditMode(false);
       setNoticeEditMode(false);
       const search = document.getElementById('groupMemberSearchInput');
@@ -4241,6 +4363,10 @@ async function openGroupManageModal(groupId) {
   if (saveNoticeBtn) saveNoticeBtn.classList.add('d-none');
   if (cancelNoticeBtn) cancelNoticeBtn.classList.add('d-none');
   if (editNoticeBtn) editNoticeBtn.classList.remove('d-none');
+  const groupMemberSection = document.getElementById('groupMemberSection');
+  const groupSettingsSection = document.getElementById('groupSettingsSection');
+  if (groupMemberSection) bootstrap.Collapse.getOrCreateInstance(groupMemberSection, { toggle: false }).hide();
+  if (groupSettingsSection) bootstrap.Collapse.getOrCreateInstance(groupSettingsSection, { toggle: false }).hide();
   await refreshGroupManageModal(groupId);
   const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
   modal.show();
@@ -4317,14 +4443,28 @@ async function refreshGroupManageModal(groupId) {
   renderGroupAddMemberOptions(groupId, members || [], actor.isOwner);
   const select = document.getElementById('groupRateLimitSelect');
   const saveBtn = document.getElementById('groupRateLimitSaveBtn');
-  const avatarEditBtn = document.getElementById('groupAvatarEditBtn');
+  const topEditNameItem = document.getElementById('groupTopEditNameItem');
+  const topEditDescriptionItem = document.getElementById('groupTopEditDescriptionItem');
+  const topEditNoticeItem = document.getElementById('groupTopEditNoticeItem');
+  const topAvatarItem = document.getElementById('groupTopAvatarItem');
+  const topOpenMembersItem = document.getElementById('groupTopOpenMembersItem');
+  const topOpenSettingsItem = document.getElementById('groupTopOpenSettingsItem');
+  const topMuteListItem = document.getElementById('groupTopMuteListItem');
+  const topDissolveItem = document.getElementById('groupTopDissolveItem');
   if (select) {
     const current = Number(conv?.rateLimitSeconds || 0);
     select.value = String([0, 3, 5, 10].includes(current) ? current : 0);
     select.disabled = !actor.isOwner;
   }
   if (saveBtn) saveBtn.disabled = !actor.isOwner;
-  if (avatarEditBtn) avatarEditBtn.disabled = !actor.isOwner;
+  if (topEditNameItem) topEditNameItem.disabled = !actor.canEditProfile;
+  if (topEditDescriptionItem) topEditDescriptionItem.disabled = !actor.canEditProfile;
+  if (topEditNoticeItem) topEditNoticeItem.disabled = !actor.canEditProfile;
+  if (topAvatarItem) topAvatarItem.disabled = !actor.isOwner;
+  if (topOpenMembersItem) topOpenMembersItem.disabled = false;
+  if (topOpenSettingsItem) topOpenSettingsItem.disabled = false;
+  if (topMuteListItem) topMuteListItem.disabled = !actor.canMute;
+  if (topDissolveItem) topDissolveItem.disabled = !actor.isOwner;
 }
 
 function renderGroupAddMemberOptions(groupId, members, isOwner) {
@@ -5330,11 +5470,78 @@ function bindChatEvents() {
     });
   }
 
+  const hideTopOpenDropdown = () => {
+    const shownMenus = Array.from(document.querySelectorAll('.dropdown-menu.show'));
+    if (!shownMenus.length) return false;
+    const topMenu = shownMenus[shownMenus.length - 1];
+    const toggle = topMenu.parentElement?.querySelector('[data-bs-toggle="dropdown"]');
+    if (!toggle) return false;
+    bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+    return true;
+  };
+
+  const closeGroupManageInnerLayer = () => {
+    const modal = document.getElementById('groupManageModal');
+    if (!modal || !modal.classList.contains('show')) return false;
+    const descEditor = document.getElementById('groupDescriptionEditor');
+    if (descEditor && !descEditor.classList.contains('d-none')) {
+      const cancelBtn = document.getElementById('groupCancelDescriptionBtn');
+      if (cancelBtn) cancelBtn.click();
+      return true;
+    }
+    const noticeEditor = document.getElementById('groupNoticeEditor');
+    if (noticeEditor && !noticeEditor.classList.contains('d-none')) {
+      const cancelBtn = document.getElementById('groupCancelNoticeBtn');
+      if (cancelBtn) cancelBtn.click();
+      return true;
+    }
+    const memberSection = document.getElementById('groupMemberSection');
+    if (memberSection && memberSection.classList.contains('show')) {
+      bootstrap.Collapse.getOrCreateInstance(memberSection, { toggle: false }).hide();
+      return true;
+    }
+    const settingsSection = document.getElementById('groupSettingsSection');
+    if (settingsSection && settingsSection.classList.contains('show')) {
+      bootstrap.Collapse.getOrCreateInstance(settingsSection, { toggle: false }).hide();
+      return true;
+    }
+    return false;
+  };
+
+  const hideTopOpenModal = () => {
+    const shownModals = Array.from(document.querySelectorAll('.modal.show'));
+    if (!shownModals.length) return false;
+    const topModal = shownModals[shownModals.length - 1];
+    bootstrap.Modal.getOrCreateInstance(topModal).hide();
+    return true;
+  };
+
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!window.matchMedia('(min-width: 992px)').matches) return;
-    const closed = hideConversationContextMenu();
-    if (closed) return;
+    if (hideTopOpenDropdown()) {
+      e.preventDefault();
+      return;
+    }
+    if (hideConversationContextMenu()) {
+      e.preventDefault();
+      return;
+    }
+    if (closeGroupManageInnerLayer()) {
+      e.preventDefault();
+      return;
+    }
+    if (hideTopOpenModal()) {
+      e.preventDefault();
+      return;
+    }
+    const active = document.activeElement;
+    const isTypingField = !!active && (
+      active.tagName === 'TEXTAREA'
+      || (active.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'reset', 'file'].includes(active.type))
+      || active.isContentEditable
+    );
+    if (isTypingField) return;
     goBackOneLevelFromChat();
   });
 
