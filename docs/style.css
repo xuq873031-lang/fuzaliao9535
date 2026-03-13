@@ -966,13 +966,58 @@ body.main-open #messageList {
   overflow-y: auto;
 }
 
-#groupManageModal .tab-content {
-  max-height: 62vh;
-  overflow-y: auto;
+.group-info-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(420px, 92vw);
+  height: 100vh;
+  z-index: 1200;
+  transform: translateX(100%);
+  transition: transform 0.24s ease;
 }
 
-#groupManageModal .nav-tabs .nav-link {
-  font-size: 13px;
+.group-info-drawer.open {
+  transform: translateX(0);
+}
+
+.group-info-drawer-panel {
+  height: 100%;
+  background: var(--tg-surface);
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+}
+
+.group-info-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.group-info-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.group-member-preview-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 12px;
+}
+
+@media (max-width: 991.98px) {
+  .group-info-drawer {
+    display: none;
+  }
 }
 
 #groupMuteListBox .list-group-item {

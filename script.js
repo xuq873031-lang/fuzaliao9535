@@ -312,6 +312,7 @@ function toggleConversationMute(roomId) {
 
 function goBackOneLevelFromChat() {
   if (!appState.activeConversationId) return;
+  closeGroupInfoDrawer();
   appState.activeConversationId = null;
   appState.multiSelectMode = false;
   appState.multiSelectedMessageIds = new Set();
@@ -390,6 +391,29 @@ function openConversationContextMenu(x, y, roomId) {
   const top = Math.max(8, Math.min(y, window.innerHeight - menuRect.height - 8));
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+}
+
+function isGroupInfoDrawerOpen() {
+  const drawer = document.getElementById('groupManageModal');
+  return !!drawer && drawer.classList.contains('open');
+}
+
+function openGroupInfoDrawer() {
+  const drawer = document.getElementById('groupManageModal');
+  if (!drawer) return;
+  drawer.classList.add('open');
+  drawer.setAttribute('aria-hidden', 'false');
+}
+
+function closeGroupInfoDrawer() {
+  const drawer = document.getElementById('groupManageModal');
+  if (!drawer || !drawer.classList.contains('open')) return false;
+  const topBtn = document.getElementById('groupTopActionsBtn');
+  if (topBtn) bootstrap.Dropdown.getOrCreateInstance(topBtn).hide();
+  drawer.classList.remove('open');
+  drawer.setAttribute('aria-hidden', 'true');
+  drawer.dispatchEvent(new Event('drawer:closed'));
+  return true;
 }
 
 function applyConversationLocalState() {
@@ -3792,6 +3816,9 @@ function bindGroupEvents() {
   const groupTopHistoryPhotosItem = document.getElementById('groupTopHistoryPhotosItem');
   const groupTopDissolveItem = document.getElementById('groupTopDissolveItem');
   const groupTopExitItem = document.getElementById('groupTopExitItem');
+  const groupDrawerCloseBtn = document.getElementById('groupDrawerCloseBtn');
+  const groupOpenMembersBtn = document.getElementById('groupOpenMembersBtn');
+  const groupQuickAddMemberBtn = document.getElementById('groupQuickAddMemberBtn');
   const groupMemberSection = document.getElementById('groupMemberSection');
   const groupSettingsSection = document.getElementById('groupSettingsSection');
   const memberSectionCollapse = groupMemberSection ? bootstrap.Collapse.getOrCreateInstance(groupMemberSection, { toggle: false }) : null;
@@ -3839,14 +3866,20 @@ function bindGroupEvents() {
   if (groupTopOpenProfileItem) groupTopOpenProfileItem.addEventListener('click', showProfileMain);
   if (groupTopOpenMembersItem) groupTopOpenMembersItem.addEventListener('click', openMembersSection);
   if (groupTopOpenSettingsItem) groupTopOpenSettingsItem.addEventListener('click', openSettingsSection);
+  if (groupOpenMembersBtn) groupOpenMembersBtn.addEventListener('click', openMembersSection);
+  if (groupQuickAddMemberBtn) {
+    groupQuickAddMemberBtn.addEventListener('click', () => {
+      openMembersSection();
+      setTimeout(() => document.getElementById('groupAddMemberSelect')?.focus(), 80);
+    });
+  }
+  if (groupDrawerCloseBtn) groupDrawerCloseBtn.addEventListener('click', closeGroupInfoDrawer);
   const openGroupHistorySearch = () => {
-    const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
-    if (modal) modal.hide();
+    closeGroupInfoDrawer();
     openHistorySearchModal();
   };
   const openGroupHistoryPhotos = () => {
-    const modal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
-    if (modal) modal.hide();
+    closeGroupInfoDrawer();
     openHistoryPhotosModal();
   };
   if (groupTopHistorySearchItem) groupTopHistorySearchItem.addEventListener('click', openGroupHistorySearch);
@@ -3976,7 +4009,7 @@ function bindGroupEvents() {
         const nameEl = document.getElementById('groupManageName');
         if (nameEl) nameEl.textContent = updated?.title || nextName;
         const titleEl = document.getElementById('groupManageTitle');
-        if (titleEl) titleEl.textContent = `群资料 · ${updated?.title || nextName}`;
+        if (titleEl) titleEl.textContent = `群信息 · ${updated?.title || nextName}`;
         renderConversationList();
         renderGroupList();
         renderMessages({ autoScroll: false });
@@ -4125,8 +4158,7 @@ function bindGroupEvents() {
     if (!confirm('确定退出该群？')) return;
     try {
       await apiRemoveRoomMember(groupId, appState.currentUser.id);
-      const manageModal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
-      if (manageModal) manageModal.hide();
+      closeGroupInfoDrawer();
       if (appState.activeConversationId === groupId) {
         appState.activeConversationId = null;
         stopRoomPolling();
@@ -4187,8 +4219,7 @@ function bindGroupEvents() {
       if (!confirm('确定解散该群？该操作不可恢复。')) return;
       try {
         await apiDeleteRoom(groupId);
-        const manageModal = bootstrap.Modal.getInstance(document.getElementById('groupManageModal'));
-        if (manageModal) manageModal.hide();
+        closeGroupInfoDrawer();
         if (appState.activeConversationId === groupId) {
           appState.activeConversationId = null;
           stopRoomPolling();
@@ -4204,7 +4235,7 @@ function bindGroupEvents() {
   }
   const manageModalEl = document.getElementById('groupManageModal');
   if (manageModalEl) {
-    manageModalEl.addEventListener('hidden.bs.modal', () => {
+    manageModalEl.addEventListener('drawer:closed', () => {
       appState.managingGroupId = null;
       appState.managingGroupMembers = [];
       appState.groupMemberSearchKeyword = '';
@@ -4330,7 +4361,7 @@ async function openGroupManageModal(groupId) {
   appState.managingGroupId = groupId;
   appState.groupMemberSearchKeyword = '';
   const titleEl = document.getElementById('groupManageTitle');
-  if (titleEl) titleEl.textContent = `群资料 · ${conv.title || conv.name}`;
+  if (titleEl) titleEl.textContent = `群信息 · ${conv.title || conv.name}`;
   const avatarEl = document.getElementById('groupManageAvatar');
   if (avatarEl) avatarEl.src = getConversationAvatar(conv);
   const nameEl = document.getElementById('groupManageName');
@@ -4368,8 +4399,7 @@ async function openGroupManageModal(groupId) {
   if (groupMemberSection) bootstrap.Collapse.getOrCreateInstance(groupMemberSection, { toggle: false }).hide();
   if (groupSettingsSection) bootstrap.Collapse.getOrCreateInstance(groupSettingsSection, { toggle: false }).hide();
   await refreshGroupManageModal(groupId);
-  const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
-  modal.show();
+  openGroupInfoDrawer();
 }
 
 async function refreshGroupManageModal(groupId) {
@@ -4406,6 +4436,8 @@ async function refreshGroupManageModal(groupId) {
   if (ownerEl) ownerEl.textContent = owner ? getGroupPublicDisplayNameByUserId(owner.user_id) : '未知';
   const myNickEl = document.getElementById('groupMyNickname');
   if (myNickEl) myNickEl.textContent = appState.currentUser?.nickname || '未设置';
+  const qrEl = document.getElementById('groupManageQr');
+  if (qrEl) qrEl.textContent = '暂未配置';
 
   const conv = findConversationById(groupId);
   const allowFriendAddEl = document.getElementById('groupAllowFriendAddSwitch');
@@ -4441,6 +4473,7 @@ async function refreshGroupManageModal(groupId) {
 
   renderGroupManageMembers(members || [], actor);
   renderGroupAddMemberOptions(groupId, members || [], actor.isOwner);
+  renderGroupMemberPreview(members || [], actor.isOwner);
   const select = document.getElementById('groupRateLimitSelect');
   const saveBtn = document.getElementById('groupRateLimitSaveBtn');
   const topEditNameItem = document.getElementById('groupTopEditNameItem');
@@ -4488,6 +4521,27 @@ function renderGroupAddMemberOptions(groupId, members, isOwner) {
   select.innerHTML = candidates
     .map((u) => `<option value="${u.id}">${escapeHtml(getDisplayNameByUserId(u.id))}</option>`)
     .join('');
+}
+
+function renderGroupMemberPreview(members, isOwner) {
+  const box = document.getElementById('groupMemberPreviewList');
+  const addBtn = document.getElementById('groupQuickAddMemberBtn');
+  if (addBtn) addBtn.classList.toggle('d-none', !isOwner);
+  if (!box) return;
+  box.innerHTML = '';
+  if (!members || !members.length) {
+    box.innerHTML = '<div class="small text-secondary">暂无成员</div>';
+    return;
+  }
+  members.slice(0, 8).forEach((m) => {
+    const item = document.createElement('div');
+    item.className = 'group-member-preview-item';
+    item.innerHTML = `
+      <img src="${getUserAvatarById(m.user_id)}" class="conversation-avatar" style="width:28px;height:28px;" alt="avatar" />
+      <span>${escapeHtml(getGroupPublicDisplayNameByUserId(m.user_id))}</span>
+    `;
+    box.appendChild(item);
+  });
 }
 
 function renderGroupManageMembers(members, actor) {
@@ -5480,34 +5534,6 @@ function bindChatEvents() {
     return true;
   };
 
-  const closeGroupManageInnerLayer = () => {
-    const modal = document.getElementById('groupManageModal');
-    if (!modal || !modal.classList.contains('show')) return false;
-    const descEditor = document.getElementById('groupDescriptionEditor');
-    if (descEditor && !descEditor.classList.contains('d-none')) {
-      const cancelBtn = document.getElementById('groupCancelDescriptionBtn');
-      if (cancelBtn) cancelBtn.click();
-      return true;
-    }
-    const noticeEditor = document.getElementById('groupNoticeEditor');
-    if (noticeEditor && !noticeEditor.classList.contains('d-none')) {
-      const cancelBtn = document.getElementById('groupCancelNoticeBtn');
-      if (cancelBtn) cancelBtn.click();
-      return true;
-    }
-    const memberSection = document.getElementById('groupMemberSection');
-    if (memberSection && memberSection.classList.contains('show')) {
-      bootstrap.Collapse.getOrCreateInstance(memberSection, { toggle: false }).hide();
-      return true;
-    }
-    const settingsSection = document.getElementById('groupSettingsSection');
-    if (settingsSection && settingsSection.classList.contains('show')) {
-      bootstrap.Collapse.getOrCreateInstance(settingsSection, { toggle: false }).hide();
-      return true;
-    }
-    return false;
-  };
-
   const hideTopOpenModal = () => {
     const shownModals = Array.from(document.querySelectorAll('.modal.show'));
     if (!shownModals.length) return false;
@@ -5519,15 +5545,16 @@ function bindChatEvents() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!window.matchMedia('(min-width: 992px)').matches) return;
+    if (isGroupInfoDrawerOpen()) {
+      closeGroupInfoDrawer();
+      e.preventDefault();
+      return;
+    }
     if (hideTopOpenDropdown()) {
       e.preventDefault();
       return;
     }
     if (hideConversationContextMenu()) {
-      e.preventDefault();
-      return;
-    }
-    if (closeGroupManageInnerLayer()) {
       e.preventDefault();
       return;
     }
@@ -6122,6 +6149,7 @@ function renderMessages(options = {}) {
 
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
+    closeGroupInfoDrawer();
     appState.multiSelectMode = false;
     appState.multiSelectedMessageIds = new Set();
     updateMultiSelectBar();
@@ -6134,6 +6162,7 @@ function renderMessages(options = {}) {
     if (emptyStateEl) emptyStateEl.classList.remove('d-none');
     listEl.classList.add('d-none');
     if (chatDetailsBtn) chatDetailsBtn.disabled = true;
+    if (chatDetailsBtn) chatDetailsBtn.classList.add('d-none');
     loadMoreBtn.classList.add('d-none');
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     composer.classList.add('d-none');
@@ -6152,6 +6181,7 @@ function renderMessages(options = {}) {
   listEl.classList.remove('d-none');
   updateMultiSelectBar();
   if (chatDetailsBtn) chatDetailsBtn.disabled = false;
+  if (chatDetailsBtn) chatDetailsBtn.classList.remove('d-none');
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
   applyMuteComposerState(conv);
