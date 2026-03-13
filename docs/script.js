@@ -793,7 +793,7 @@ function canRecallMessage(msg) {
 function canUseSuperDelete() {
   const me = appState.currentUser;
   if (!me) return false;
-  return me.role === 'admin' || !!me.canUseSuperDelete;
+  return me.role === 'admin' || !!me.canUseEditFeature;
 }
 
 function toggleEmojiPanel(open) {
@@ -6773,8 +6773,7 @@ async function bootstrapAfterLogin(userFromAuth = null) {
     online: !!me.is_online,
     canKickMembers: !!me.can_kick_members,
     canMuteMembers: !!me.can_mute_members,
-    canUseEditFeature: !!me.can_use_edit_feature,
-    canUseSuperDelete: !!me.can_use_super_delete
+    canUseEditFeature: !!me.can_use_edit_feature
   };
 
   mergeUserToMap(me);
