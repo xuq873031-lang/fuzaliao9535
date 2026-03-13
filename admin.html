@@ -13,11 +13,15 @@
   </script>
   <style>
     :root {
-      --panel-bg: #f4f7fb;
+      --panel-bg: #eef3f9;
       --card-bg: #ffffff;
-      --line: #dce5f2;
-      --blue: #2f83e4;
-      --text: #1f2d3d;
+      --line: #d3deec;
+      --blue: #1f6fd6;
+      --blue-soft: #e9f2ff;
+      --text: #1d2a3a;
+      --muted: #66768b;
+      --danger: #c93a3a;
+      --danger-soft: #fff1f1;
     }
     body {
       margin: 0;
@@ -31,7 +35,7 @@
     }
     .admin-sidebar {
       width: 220px;
-      background: #f0f5fc;
+      background: #e8f0fb;
       border-right: 1px solid var(--line);
       padding: 16px 12px;
     }
@@ -39,12 +43,17 @@
       font-weight: 700;
       color: var(--blue);
       margin-bottom: 18px;
+      letter-spacing: 0.4px;
     }
     .admin-nav .btn {
       width: 100%;
       text-align: left;
       margin-bottom: 8px;
       border-radius: 10px;
+    }
+    .admin-nav .btn.btn-primary {
+      background: linear-gradient(180deg, #2d81e5, #1e6fd7);
+      border-color: #1e6fd7;
     }
     .admin-main {
       flex: 1;
@@ -67,6 +76,7 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       padding: 14px;
+      box-shadow: 0 6px 16px rgba(19, 46, 84, 0.04);
     }
     .login-wrap {
       min-height: 100vh;
@@ -82,6 +92,59 @@
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 20px;
+      box-shadow: 0 10px 28px rgba(16, 38, 70, 0.08);
+    }
+    .form-control:focus {
+      border-color: #94bff7;
+      box-shadow: 0 0 0 0.2rem rgba(47, 131, 228, 0.16);
+    }
+    .table > :not(caption) > * > * {
+      border-bottom-color: #e5edf8;
+      vertical-align: middle;
+    }
+    .table thead th {
+      background: #f6f9fe;
+      color: #38506f;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .table-hover > tbody > tr:hover > * {
+      background: #f8fbff;
+    }
+    .btn-outline-danger {
+      color: var(--danger);
+      border-color: #e3a5a5;
+      background: #fff;
+    }
+    .btn-outline-danger:hover,
+    .btn-outline-danger:focus {
+      color: #fff;
+      background: var(--danger);
+      border-color: var(--danger);
+    }
+    .btn-danger {
+      background: var(--danger);
+      border-color: var(--danger);
+      box-shadow: 0 2px 0 rgba(130, 22, 22, 0.15);
+    }
+    .btn-danger:hover,
+    .btn-danger:focus {
+      background: #b22f2f;
+      border-color: #b22f2f;
+    }
+    .badge.text-bg-danger {
+      background: #d9534f !important;
+    }
+    .badge.text-bg-secondary {
+      background: #74859e !important;
+    }
+    .badge.text-bg-success {
+      background: #2f9b5f !important;
+    }
+    [data-delete-cancelled] {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: #efb6b6;
     }
     @media (max-width: 991.98px) {
       .admin-sidebar {
@@ -203,6 +266,16 @@
     const DEFAULT_API_BASE = String(
       (window.__CHAT_CONFIG && window.__CHAT_CONFIG.API_BASE) || 'https://web-production-afb64.up.railway.app'
     ).trim().replace(/\/$/, '');
+    const API_BASE_CANDIDATES = Array.from(new Set(
+      [
+        DEFAULT_API_BASE,
+        'https://web-production-afb64.up.railway.app',
+        'https://web-production-be9f.up.railway.app',
+        'https://web-production-f9619e.up.railway.app'
+      ]
+        .map((x) => String(x || '').trim().replace(/\/$/, ''))
+        .filter((x) => /^https?:\/\//i.test(x))
+    ));
 
     const state = {
       users: [],
@@ -210,11 +283,41 @@
     };
 
     function getApiBase() {
-      const saved = (localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim();
-      if (!saved || saved !== DEFAULT_API_BASE) {
-        localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
-      }
+      const saved = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
+      if (saved && API_BASE_CANDIDATES.includes(saved)) return saved;
+      localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
       return DEFAULT_API_BASE;
+    }
+
+    function setApiBase(base) {
+      const normalized = String(base || '').trim().replace(/\/$/, '');
+      if (!normalized || !/^https?:\/\//i.test(normalized)) return;
+      localStorage.setItem(STORAGE_KEYS.apiBase, normalized);
+    }
+
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function ensureReachableApiBase() {
+      const current = getApiBase();
+      const candidates = [current, ...API_BASE_CANDIDATES.filter((x) => x !== current)];
+      for (const base of candidates) {
+        try {
+          const res = await fetchWithTimeout(`${base}/health`, { method: 'GET', cache: 'no-store' }, 7000);
+          if (res && res.ok) {
+            if (base !== current) setApiBase(base);
+            return base;
+          }
+        } catch (_) {}
+      }
+      return current;
     }
 
     function getToken() {
@@ -295,7 +398,28 @@
         switchToLogin();
         throw err;
       }
-      const res = await fetch(`${getApiBase()}${path}`, { ...options, headers });
+      const current = getApiBase();
+      const candidates = [current, ...API_BASE_CANDIDATES.filter((x) => x !== current)];
+      let res = null;
+      let lastNetworkErr = null;
+      let successBase = current;
+      for (const base of candidates) {
+        try {
+          res = await fetchWithTimeout(`${base}${path}`, { ...options, headers }, 12000);
+          successBase = base;
+          break;
+        } catch (err) {
+          lastNetworkErr = err;
+        }
+      }
+      if (!res) {
+        const err = new Error(`网络请求失败：${lastNetworkErr?.message || 'Load failed'}`);
+        err.status = 0;
+        throw err;
+      }
+      if (successBase !== current) {
+        setApiBase(successBase);
+      }
 
       if (!res.ok) {
         let detail = `请求失败(${res.status})`;
@@ -364,6 +488,10 @@
       });
     }
 
+    async function deleteCancelledUser(userId) {
+      return apiFetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+    }
+
     function renderUsers() {
       const tbody = document.getElementById('userTableBody');
       const keyword = (document.getElementById('userKeyword').value || '').trim().toLowerCase();
@@ -384,6 +512,9 @@
         const statusAction = !u.is_active
           ? '<button class="btn btn-sm btn-outline-success" data-reactivate="' + u.id + '">恢复账号</button>'
           : '<button class="btn btn-sm btn-outline-secondary" data-deactivate="' + u.id + '">注销账号</button>';
+        const deleteCancelledAction = !u.is_active
+          ? '<button class="btn btn-sm btn-danger" data-delete-cancelled="' + u.id + '">删除已注销</button>'
+          : '';
         const banAction = u.is_banned
           ? '<button class="btn btn-sm btn-outline-success" data-unban="' + u.id + '">解除封禁</button>'
           : '<button class="btn btn-sm btn-outline-danger" data-ban="' + u.id + '">封禁账号</button>';
@@ -404,6 +535,7 @@
             <button class="btn btn-sm btn-outline-primary" data-save-perm="${u.id}">保存权限</button>
             <button class="btn btn-sm btn-outline-danger" data-reset="${u.id}">重置密码</button>
             ${statusAction}
+            ${deleteCancelledAction}
             ${banAction}
           </td>
         `;
@@ -471,6 +603,25 @@
               alert(`恢复失败(${err.status || 'ERR'}): ${err.message}`);
             } finally {
               reactivateBtn.disabled = false;
+            }
+          });
+        }
+
+        const deleteCancelledBtn = tr.querySelector('[data-delete-cancelled]');
+        if (deleteCancelledBtn) {
+          deleteCancelledBtn.addEventListener('click', async () => {
+            if (!confirm(`确认永久删除已注销账号 ${u.username} 吗？`)) return;
+            if (!confirm('此操作不可恢复，确定继续删除？')) return;
+            try {
+              deleteCancelledBtn.disabled = true;
+              await deleteCancelledUser(u.id);
+              state.users = state.users.filter((x) => Number(x.id) !== Number(u.id));
+              renderUsers();
+              setHint(`已删除已注销账号：${u.username}`);
+            } catch (err) {
+              alert(`删除失败(${err.status || 'ERR'}): ${err.message}`);
+            } finally {
+              deleteCancelledBtn.disabled = false;
             }
           });
         }
@@ -617,7 +768,7 @@
       setHint('已退出');
     });
 
-    ensureAdminSession();
+    ensureReachableApiBase().finally(() => ensureAdminSession());
   </script>
 </body>
 </html>

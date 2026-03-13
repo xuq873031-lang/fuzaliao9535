@@ -67,6 +67,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"https://.*\.github\.io",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -759,6 +760,55 @@ async def admin_update_user_status(
         "is_active": bool(user.is_active),
         "is_banned": bool(user.is_banned),
     }
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_cancelled_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_admin_user(current_user)
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="不能删除当前登录管理员账号")
+    if bool(user.is_active):
+        raise HTTPException(status_code=400, detail="仅可删除已注销账号")
+
+    # 先踢下线，避免残留会话
+    await manager.force_disconnect_user(
+        user.id,
+        payload={
+            "type": "force_logout",
+            "reason": "账号已被管理员删除",
+        },
+        code=4003,
+    )
+
+    # 清理关联数据（兼容 SQLite 外键未开启场景）
+    db.execute(delete(room_members).where(room_members.c.user_id == user_id))
+    db.execute(delete(friends).where((friends.c.user_id == user_id) | (friends.c.friend_id == user_id)))
+    db.execute(delete(FriendRequest).where((FriendRequest.from_user_id == user_id) | (FriendRequest.to_user_id == user_id)))
+    db.execute(delete(FriendRemark).where((FriendRemark.user_id == user_id) | (FriendRemark.friend_id == user_id)))
+    db.execute(delete(RoomRead).where(RoomRead.user_id == user_id))
+    db.execute(delete(UserHiddenMessage).where(UserHiddenMessage.user_id == user_id))
+    db.execute(delete(RoomMute).where(RoomMute.user_id == user_id))
+    db.execute(text("UPDATE room_mutes SET muted_by=NULL WHERE muted_by=:uid"), {"uid": user_id})
+    db.execute(delete(Message).where(Message.sender_id == user_id))
+    db.execute(text("UPDATE chat_rooms SET created_by=:admin_id WHERE created_by=:uid"), {"admin_id": current_user.id, "uid": user_id})
+    db.delete(user)
+    db.commit()
+    manager.refresh_user_rooms(user_id, [])
+    await manager.broadcast_global(
+        {
+            "type": "presence",
+            "user_id": user_id,
+            "online": False,
+        }
+    )
+    return {"ok": True, "user_id": user_id, "deleted": True}
 
 
 @app.get("/api/users/search", response_model=list[SearchUserOut])
