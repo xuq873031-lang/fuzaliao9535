@@ -1938,7 +1938,6 @@ async def edit_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ensure_permission(current_user, "can_use_edit_feature", "后台未授予编辑权限")
     msg = db.get(Message, message_id)
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -1951,6 +1950,12 @@ async def edit_message(
     new_content = payload.content.strip()
     if not new_content:
         raise HTTPException(status_code=422, detail="Empty content")
+    is_recall = new_content == "[已撤回]"
+
+    if not is_recall:
+        ensure_permission(current_user, "can_use_edit_feature", "后台未授予编辑权限")
+    elif not is_admin and not is_owner:
+        raise HTTPException(status_code=403, detail="No permission to recall message")
 
     # 文本编辑限制：普通用户只能编辑自己的文本消息且在时间窗内
     if is_owner and not is_admin:
@@ -1958,6 +1963,9 @@ async def edit_message(
             raise HTTPException(status_code=400, detail="Image message cannot be edited")
         if new_content.startswith("![img]("):
             raise HTTPException(status_code=400, detail="Image message cannot be edited")
+
+    if is_recall and msg.content == "[已撤回]":
+        return build_message_out(db, msg)
 
     msg.content = new_content
     msg.edited_by_admin = bool(is_admin)

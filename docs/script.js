@@ -1376,10 +1376,11 @@ async function apiEditMessage(messageId, content) {
 }
 
 async function apiRecallMessage(messageId) {
-  return apiFetch(`/api/messages/${messageId}/recall`, {
-    method: 'POST',
+  return apiFetch(`/api/messages/${messageId}`, {
+    method: 'PATCH',
     authMode: 'strict-user',
-    baseMode: 'preferred'
+    baseMode: 'preferred',
+    body: JSON.stringify({ content: '[已撤回]' })
   });
 }
 
