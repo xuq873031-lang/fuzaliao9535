@@ -41,6 +41,7 @@ const DEFAULT_AVATAR =
 const EMOJIS = ['😀', '😁', '😂', '😊', '😍', '😎', '🤔', '😭', '👍', '🎉', '❤️', '🔥'];
 
 let appState = {
+  sessionToken: '',
   currentUser: null,
   friends: [],
   incomingRequests: [],
@@ -134,21 +135,24 @@ function getToken() {
 }
 
 function getStrictUserToken() {
-  return String(localStorage.getItem(STORAGE_KEYS.token) || '').trim();
+  return String(appState.sessionToken || localStorage.getItem(STORAGE_KEYS.token) || '').trim();
 }
 
 function setToken(token) {
   const safe = String(token || '').trim();
   if (!safe || safe === 'undefined' || safe === 'null') {
+    appState.sessionToken = '';
     localStorage.removeItem(STORAGE_KEYS.token);
     localStorage.removeItem('token');
     return;
   }
+  appState.sessionToken = safe;
   localStorage.setItem(STORAGE_KEYS.token, safe);
   localStorage.removeItem('token');
 }
 
 function clearToken() {
+  appState.sessionToken = '';
   localStorage.removeItem(STORAGE_KEYS.token);
   localStorage.removeItem('token');
 }
@@ -6797,6 +6801,7 @@ async function init() {
   document.addEventListener('click', () => ensureAudioContext(), { once: true });
   document.addEventListener('touchstart', () => ensureAudioContext(), { once: true, passive: true });
 
+  appState.sessionToken = getStrictUserToken();
   const token = getToken();
   if (!token) {
     setAuthLoading(false);
