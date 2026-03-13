@@ -1852,6 +1852,13 @@ def get_room_messages(
     if UserHiddenMessage is not None:
         hidden_subquery = select(UserHiddenMessage.message_id).where(UserHiddenMessage.user_id == current_user.id)
         query = query.where(~Message.id.in_(hidden_subquery))
+    else:
+        hidden_ids = db.execute(
+            text("SELECT message_id FROM user_hidden_messages WHERE user_id=:uid"),
+            {"uid": current_user.id},
+        ).scalars().all()
+        if hidden_ids:
+            query = query.where(~Message.id.in_(hidden_ids))
     cursor_id = before_id or before
     if cursor_id:
         anchor = db.get(Message, cursor_id)
@@ -2005,23 +2012,38 @@ async def delete_message_for_self(
     ensure_user_in_room(db, current_user.id, msg.room_id)
 
     if UserHiddenMessage is None:
-        raise HTTPException(status_code=500, detail="Message hide model unavailable")
-
-    existed = db.execute(
-        select(UserHiddenMessage.id).where(
-            UserHiddenMessage.user_id == current_user.id,
-            UserHiddenMessage.message_id == message_id,
-        )
-    ).first()
-    if not existed:
-        db.add(
-            UserHiddenMessage(
-                user_id=current_user.id,
-                room_id=msg.room_id,
-                message_id=message_id,
+        existed = db.execute(
+            text(
+                "SELECT id FROM user_hidden_messages "
+                "WHERE user_id=:uid AND message_id=:mid LIMIT 1"
+            ),
+            {"uid": current_user.id, "mid": message_id},
+        ).first()
+        if not existed:
+            db.execute(
+                text(
+                    "INSERT INTO user_hidden_messages (user_id, room_id, message_id, created_at) "
+                    "VALUES (:uid, :rid, :mid, CURRENT_TIMESTAMP)"
+                ),
+                {"uid": current_user.id, "rid": msg.room_id, "mid": message_id},
             )
-        )
-        db.commit()
+            db.commit()
+    else:
+        existed = db.execute(
+            select(UserHiddenMessage.id).where(
+                UserHiddenMessage.user_id == current_user.id,
+                UserHiddenMessage.message_id == message_id,
+            )
+        ).first()
+        if not existed:
+            db.add(
+                UserHiddenMessage(
+                    user_id=current_user.id,
+                    room_id=msg.room_id,
+                    message_id=message_id,
+                )
+            )
+            db.commit()
 
     await manager.send_json_to_user(
         current_user.id,

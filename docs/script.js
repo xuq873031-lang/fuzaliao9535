@@ -755,7 +755,6 @@ function canEditOwnMessage(msg) {
 
 function canRecallMessage(msg) {
   if (!msg || !appState.currentUser) return false;
-  if (isImageMessageText(msg.text)) return false;
   if (String(msg.text || '').startsWith('[已撤回]')) return false;
   return Number(msg.senderId) === Number(appState.currentUser.id);
 }
