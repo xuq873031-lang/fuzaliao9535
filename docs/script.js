@@ -927,25 +927,14 @@ async function apiFetch(path, options = {}) {
     ...options,
     headers
   };
-  const bases = [getApiBase(), ...API_BASE_CANDIDATES.filter((x) => x !== getApiBase())];
-  let res = null;
   let base = getApiBase();
-  let lastNetworkErr = null;
-  for (let i = 0; i < bases.length; i += 1) {
-    base = bases[i];
-    try {
-      res = await fetchWithTimeout(`${base}${path}`, request, 15000);
-      if (base !== getApiBase()) setApiBase(base);
-      break;
-    } catch (err) {
-      lastNetworkErr = err;
-    }
-  }
-
-  if (!res) {
+  let res = null;
+  try {
+    res = await fetchWithTimeout(`${base}${path}`, request, 15000);
+  } catch (caughtErr) {
     const err = new Error(`网络连接失败：无法连接后端 (${getApiBase()})`);
     err.status = 0;
-    err.detail = lastNetworkErr?.message || 'NetworkError';
+    err.detail = caughtErr?.message || 'NetworkError';
     throw err;
   }
 
