@@ -10,7 +10,7 @@ const STORAGE_KEYS = {
 };
 const CHAT_CONFIG = window.__CHAT_CONFIG || {};
 const DEFAULT_API_BASE = String(
-  CHAT_CONFIG.API_BASE || 'https://web-production-be9f.up.railway.app'
+  CHAT_CONFIG.API_BASE || 'https://web-production-afb64.up.railway.app'
 ).trim().replace(/\/$/, '');
 const DEFAULT_WS_BASE = String(
   CHAT_CONFIG.WS_BASE || DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
@@ -159,6 +159,13 @@ function clearToken() {
 
 function getApiBase() {
   const stored = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
+  if (
+    stored === 'https://web-production-be9f.up.railway.app'
+    || stored === 'https://web-production-f9619e.up.railway.app'
+  ) {
+    localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
+    return DEFAULT_API_BASE;
+  }
   if (!stored || !/^https?:\/\//i.test(stored)) {
     localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
     return DEFAULT_API_BASE;
@@ -168,6 +175,14 @@ function getApiBase() {
 
 function getWsBase() {
   const stored = String(localStorage.getItem(STORAGE_KEYS.wsBase) || '').trim().replace(/\/$/, '');
+  if (
+    stored === 'wss://web-production-be9f.up.railway.app'
+    || stored === 'wss://web-production-f9619e.up.railway.app'
+  ) {
+    const migrated = DEFAULT_API_BASE.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+    localStorage.setItem(STORAGE_KEYS.wsBase, migrated);
+    return migrated;
+  }
   if (stored && /^wss?:\/\//i.test(stored)) return stored;
   const fromApi = getApiBase().replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
   return fromApi || DEFAULT_WS_BASE;
