@@ -134,7 +134,12 @@ function getToken() {
 }
 
 function setToken(token) {
-  localStorage.setItem(STORAGE_KEYS.token, token);
+  const safe = String(token || '').trim();
+  if (!safe || safe === 'undefined' || safe === 'null') {
+    localStorage.removeItem(STORAGE_KEYS.token);
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.token, safe);
 }
 
 function clearToken() {
@@ -668,6 +673,14 @@ function validateAccount(input) {
   return account;
 }
 
+function extractAuthToken(data) {
+  if (!data || typeof data !== 'object') return '';
+  const raw = data.token || data.access_token || data.jwt || '';
+  const token = String(raw || '').trim();
+  if (!token || token === 'undefined' || token === 'null') return '';
+  return token;
+}
+
 function formatTime(ts) {
   try {
     return new Intl.DateTimeFormat(undefined, {
@@ -1034,9 +1047,10 @@ async function apiFetch(path, options = {}) {
   const token = getToken();
   const headers = { ...(options.headers || {}) };
   const hasJsonBody = !!options.body && typeof options.body === 'string';
+  const skipAuth = /^\/api\/auth\//.test(String(path || ''));
   if (hasJsonBody && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
 
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (!skipAuth && token) headers.Authorization = `Bearer ${token}`;
   const request = {
     ...options,
     headers
@@ -1085,7 +1099,7 @@ async function apiFetch(path, options = {}) {
     }
 
     detail = translateErrorDetail(detail);
-    if (res.status === 401) {
+    if (res.status === 401 && !skipAuth) {
       showLoginBy401(detail);
     } else if (res.status === 403 && /(账号已注销|账号已封禁|账号已被管理员禁用)/.test(String(detail))) {
       forceLogoutByAdmin(detail);
@@ -2929,7 +2943,9 @@ function bindAuthEvents() {
     try {
       setButtonLoading(submitBtn, true, '登录中...', '登录');
       const data = await apiLogin(phone, password);
-      setToken(data.token);
+      const token = extractAuthToken(data);
+      if (!token) throw new Error('登录响应缺少 token');
+      setToken(token);
       await bootstrapAfterLogin(data.user);
     } catch (err) {
       alert(`登录失败(${err.status || 'ERR'}): ${err.message}`);
@@ -2957,7 +2973,9 @@ function bindAuthEvents() {
     try {
       setButtonLoading(submitBtn, true, '注册中...', '注册并登录');
       const data = await apiRegister(phone, password);
-      setToken(data.token);
+      const token = extractAuthToken(data);
+      if (!token) throw new Error('注册响应缺少 token');
+      setToken(token);
       await bootstrapAfterLogin(data.user);
     } catch (err) {
       alert(`注册失败(${err.status || 'ERR'}): ${err.message}`);
