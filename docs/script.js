@@ -1128,6 +1128,29 @@ async function apiSetFriendRemark(friendId, remark) {
   });
 }
 
+async function apiBlockFriend(friendId) {
+  const id = Number(friendId || 0);
+  if (!id) throw new Error('无效好友 ID');
+  const candidates = [
+    { path: `/api/friends/${id}/block`, method: 'POST' },
+    { path: `/api/blacklist/${id}`, method: 'POST' },
+    { path: '/api/blacklist', method: 'POST', body: JSON.stringify({ user_id: id }) }
+  ];
+  let lastErr = null;
+  for (const item of candidates) {
+    try {
+      return await apiFetch(item.path, {
+        method: item.method,
+        body: item.body
+      });
+    } catch (err) {
+      lastErr = err;
+      if (![404, 405, 422].includes(Number(err?.status || 0))) throw err;
+    }
+  }
+  throw lastErr || new Error('当前服务未启用拉黑接口');
+}
+
 async function apiGetOnlinePresence() {
   return apiFetch('/api/presence/online');
 }
@@ -3318,6 +3341,25 @@ function bindFriendEvents() {
       openDeleteFriendConfirmModal(fid);
     });
   }
+  const profileBlockBtn = document.getElementById('friendProfileBlockAction');
+  if (profileBlockBtn) {
+    profileBlockBtn.addEventListener('click', async () => {
+      const fid = Number(appState.activeFriendProfileId || 0);
+      if (!fid) return;
+      const ok = confirm('确认将该好友拉入黑名单？');
+      if (!ok) return;
+      try {
+        await apiBlockFriend(fid);
+        await removeFriend(fid);
+        const profileModal = bootstrap.Modal.getInstance(document.getElementById('friendProfileModal'));
+        if (profileModal) profileModal.hide();
+        appState.activeFriendProfileId = null;
+        alert('已拉入黑名单');
+      } catch (err) {
+        alert(`拉黑失败：${err.message}`);
+      }
+    });
+  }
   const contactActionChatBtn = document.getElementById('contactActionChatBtn');
   if (contactActionChatBtn) {
     contactActionChatBtn.addEventListener('click', async () => {
@@ -3489,13 +3531,22 @@ function openFriendProfileModal(friendId) {
   const avatarEl = document.getElementById('friendProfileAvatar');
   const nameEl = document.getElementById('friendProfileName');
   const accountEl = document.getElementById('friendProfileAccount');
+  const idEl = document.getElementById('friendProfileId');
+  const statusEl = document.getElementById('friendProfileStatus');
   const remarkEl = document.getElementById('friendProfileRemark');
+  const signatureEl = document.getElementById('friendProfileSignature');
   if (avatarEl) avatarEl.src = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
   if (nameEl) nameEl.textContent = getDisplayNameByUserId(f.id);
   if (accountEl) accountEl.textContent = `@${f.username || ''}`;
+  if (idEl) idEl.textContent = `ID：${f.id}`;
+  if (statusEl) statusEl.textContent = f.online ? '在线' : '离线';
   if (remarkEl) {
     const remark = appState.friendRemarks[f.id] || '';
     remarkEl.textContent = remark || '未设置';
+  }
+  if (signatureEl) {
+    const signature = String(appState.userMap[f.id]?.signature || '').trim();
+    signatureEl.textContent = signature || '暂无';
   }
   const modal = new bootstrap.Modal(document.getElementById('friendProfileModal'));
   modal.show();
@@ -3542,7 +3593,9 @@ function renderFriendList() {
       item.className = 'contacts-friend-item';
       item.innerHTML = `
         <span class="contacts-friend-left">
-          <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
+          <button class="contacts-friend-avatar-btn" type="button" data-profile-id="${f.id}" aria-label="查看好友资料">
+            <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
+          </button>
           <span>
             <span class="contacts-friend-name d-block">${displayName}</span>
             <span class="contacts-friend-sub">${f.online ? '在线' : '离线'}</span>
@@ -3558,6 +3611,14 @@ function renderFriendList() {
         e.preventDefault();
         openContactActionModal(f.id);
       });
+      const avatarBtn = item.querySelector('.contacts-friend-avatar-btn');
+      if (avatarBtn) {
+        avatarBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openFriendProfileModal(f.id);
+        });
+      }
       box.appendChild(item);
     });
   });
@@ -5283,6 +5344,7 @@ function bindChatEvents() {
   const multiSelectClearBtn = document.getElementById('multiSelectClearBtn');
   const forwardTargetSearchInput = document.getElementById('forwardTargetSearchInput');
   const chatHeaderMain = document.getElementById('chatHeaderMain');
+  const chatAvatar = document.getElementById('chatAvatar');
   const emojiToggleBtn = document.getElementById('emojiToggleBtn');
   const directDetailsHistorySearchBtn = document.getElementById('directDetailsHistorySearchBtn');
   const directDetailsHistoryPhotosBtn = document.getElementById('directDetailsHistoryPhotosBtn');
@@ -5549,6 +5611,17 @@ function bindChatEvents() {
       const conv = findConversationById(appState.activeConversationId);
       if (!conv || conv.type !== 'group') return;
       openChatDetailsPanel();
+    });
+  }
+  if (chatAvatar) {
+    chatAvatar.addEventListener('click', (e) => {
+      const conv = findConversationById(appState.activeConversationId);
+      if (!conv || conv.type !== 'private') return;
+      e.preventDefault();
+      e.stopPropagation();
+      const friend = getOtherUserInPrivateConversation(conv);
+      if (!friend) return;
+      openFriendProfileModal(friend.id);
     });
   }
 
@@ -6230,6 +6303,7 @@ function renderMessages(options = {}) {
     if (chatGroupMenuWrap) chatGroupMenuWrap.classList.remove('d-none');
     if (chatGroupMenuBtn) chatGroupMenuBtn.disabled = false;
     if (chatHeaderMain) chatHeaderMain.style.cursor = 'pointer';
+    if (avatarEl) avatarEl.style.cursor = 'pointer';
     syncGroupDrawerLayout();
     if (groupMembersBtn) groupMembersBtn.classList.remove('d-none');
   } else {
@@ -6238,6 +6312,7 @@ function renderMessages(options = {}) {
     if (chatGroupMenuWrap) chatGroupMenuWrap.classList.add('d-none');
     if (chatGroupMenuBtn) chatGroupMenuBtn.disabled = true;
     if (chatHeaderMain) chatHeaderMain.style.cursor = 'default';
+    if (avatarEl) avatarEl.style.cursor = 'pointer';
     closeGroupInfoDrawer();
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     hideMentionSuggestions();

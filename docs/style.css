@@ -1434,6 +1434,14 @@ body.main-open #messageList {
   flex: 0 0 36px;
 }
 
+.contacts-friend-avatar-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 0;
+}
+
 .contacts-friend-name {
   font-weight: 600;
   line-height: 1.1;
@@ -1460,6 +1468,22 @@ body.main-open #messageList {
 .contacts-friend-chevron {
   font-size: 12px;
   opacity: 0.75;
+}
+
+.friend-profile-body {
+  padding-top: 10px;
+}
+
+.friend-profile-info {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(248, 249, 250, 0.8);
+}
+
+.friend-profile-info-title {
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 .contacts-az-index {

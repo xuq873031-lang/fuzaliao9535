@@ -637,26 +637,29 @@
           <div class="modal-content rounded-4">
             <div class="modal-header">
               <h5 class="modal-title">好友资料</h5>
-              <div class="dropdown ms-auto me-2">
-                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">更多</button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                  <li><button id="friendProfileRemarkAction" class="dropdown-item" type="button">修改备注</button></li>
-                  <li><hr class="dropdown-divider" /></li>
-                  <li><button id="friendProfileDeleteAction" class="dropdown-item text-danger" type="button">删除好友</button></li>
-                </ul>
-              </div>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body friend-profile-body">
               <div class="d-flex align-items-center gap-3 mb-3">
                 <img id="friendProfileAvatar" class="chat-header-avatar" alt="friend-avatar" />
                 <div>
                   <div id="friendProfileName" class="fw-semibold">好友</div>
                   <div id="friendProfileAccount" class="small text-secondary">@账号</div>
+                  <div id="friendProfileId" class="small text-secondary">ID：-</div>
                 </div>
               </div>
-              <div class="small text-secondary mb-3">备注：<span id="friendProfileRemark">未设置</span></div>
-              <button id="friendProfileChatBtn" class="btn btn-primary w-100" type="button">发消息</button>
+              <div class="friend-profile-info">
+                <div class="friend-profile-info-title">个人资料</div>
+                <div class="small text-secondary mb-1">状态：<span id="friendProfileStatus">离线</span></div>
+                <div class="small text-secondary mb-1">备注：<span id="friendProfileRemark">未设置</span></div>
+                <div class="small text-secondary">签名：<span id="friendProfileSignature">暂无</span></div>
+              </div>
+              <div class="d-grid gap-2 mt-3">
+                <button id="friendProfileChatBtn" class="btn btn-primary w-100" type="button">发消息</button>
+                <button id="friendProfileRemarkAction" class="btn btn-outline-secondary w-100" type="button">设置备注</button>
+                <button id="friendProfileBlockAction" class="btn btn-outline-warning w-100" type="button">拉入黑名单</button>
+                <button id="friendProfileDeleteAction" class="btn btn-outline-danger w-100" type="button">解除好友关系</button>
+              </div>
             </div>
           </div>
         </div>
