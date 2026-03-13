@@ -175,7 +175,15 @@
                         </div>
                       </div>
                       <div class="d-flex align-items-center gap-2">
-                        <button id="chatDetailsBtn" class="btn btn-outline-secondary btn-sm d-none" type="button">群信息</button>
+                        <div id="chatGroupMenuWrap" class="dropdown d-none">
+                          <button id="chatGroupMenuBtn" class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="群菜单">⋯</button>
+                          <ul class="dropdown-menu dropdown-menu-end">
+                            <li><button id="chatGroupInfoMenuItem" class="dropdown-item" type="button">群信息</button></li>
+                            <li><button id="chatGroupNoticeMenuItem" class="dropdown-item" type="button">群公告</button></li>
+                            <li><button id="chatGroupDescriptionMenuItem" class="dropdown-item" type="button">群简介</button></li>
+                            <li><button id="chatGroupMembersMenuItem" class="dropdown-item" type="button">群成员</button></li>
+                          </ul>
+                        </div>
                         <button id="loadMoreBtn" class="btn btn-outline-secondary btn-sm d-none">加载更多</button>
                       </div>
                     </div>

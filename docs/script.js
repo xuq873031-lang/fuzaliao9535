@@ -4402,6 +4402,26 @@ async function openGroupManageModal(groupId) {
   openGroupInfoDrawer();
 }
 
+function openGroupManageSection(section) {
+  const memberSection = document.getElementById('groupMemberSection');
+  const settingsSection = document.getElementById('groupSettingsSection');
+  if (!memberSection || !settingsSection) return;
+  const memberCollapse = bootstrap.Collapse.getOrCreateInstance(memberSection, { toggle: false });
+  const settingsCollapse = bootstrap.Collapse.getOrCreateInstance(settingsSection, { toggle: false });
+  if (section === 'members') {
+    settingsCollapse.hide();
+    memberCollapse.show();
+    return;
+  }
+  if (section === 'settings') {
+    memberCollapse.hide();
+    settingsCollapse.show();
+    return;
+  }
+  memberCollapse.hide();
+  settingsCollapse.hide();
+}
+
 async function refreshGroupManageModal(groupId) {
   const [members, _friends] = await Promise.all([apiGetRoomMembers(groupId), refreshFriends()]);
   appState.managingGroupMembers = members || [];
@@ -5235,7 +5255,12 @@ function bindChatEvents() {
   const historyPhotosBtn = document.getElementById('historyPhotosBtn');
   const historySearchDoBtn = document.getElementById('historySearchDoBtn');
   const historySearchInput = document.getElementById('historySearchInput');
-  const chatDetailsBtn = document.getElementById('chatDetailsBtn');
+  const chatGroupMenuWrap = document.getElementById('chatGroupMenuWrap');
+  const chatGroupMenuBtn = document.getElementById('chatGroupMenuBtn');
+  const chatGroupInfoMenuItem = document.getElementById('chatGroupInfoMenuItem');
+  const chatGroupNoticeMenuItem = document.getElementById('chatGroupNoticeMenuItem');
+  const chatGroupDescriptionMenuItem = document.getElementById('chatGroupDescriptionMenuItem');
+  const chatGroupMembersMenuItem = document.getElementById('chatGroupMembersMenuItem');
   const multiSelectToggleBtn = document.getElementById('multiSelectToggleBtn');
   const multiSelectCancelBtn = document.getElementById('multiSelectCancelBtn');
   const multiForwardBtn = document.getElementById('multiForwardBtn');
@@ -5466,11 +5491,28 @@ function bindChatEvents() {
 
   const openChatDetailsPanel = () => {
     const conv = findConversationById(appState.activeConversationId);
-    if (!conv) return;
-    if (conv.type !== 'group') return;
+    if (!conv || conv.type !== 'group') return;
     openGroupManageModal(conv.id).catch((err) => alert(`打开群资料失败：${err.message}`));
   };
-  if (chatDetailsBtn) chatDetailsBtn.addEventListener('click', openChatDetailsPanel);
+  if (chatGroupInfoMenuItem) chatGroupInfoMenuItem.addEventListener('click', openChatDetailsPanel);
+  if (chatGroupNoticeMenuItem) {
+    chatGroupNoticeMenuItem.addEventListener('click', () => {
+      openChatDetailsPanel();
+      setTimeout(() => document.getElementById('groupManageNotice')?.scrollIntoView({ block: 'center' }), 80);
+    });
+  }
+  if (chatGroupDescriptionMenuItem) {
+    chatGroupDescriptionMenuItem.addEventListener('click', () => {
+      openChatDetailsPanel();
+      setTimeout(() => document.getElementById('groupManageDescription')?.scrollIntoView({ block: 'center' }), 80);
+    });
+  }
+  if (chatGroupMembersMenuItem) {
+    chatGroupMembersMenuItem.addEventListener('click', () => {
+      openChatDetailsPanel();
+      setTimeout(() => openGroupManageSection('members'), 100);
+    });
+  }
   document.addEventListener('click', (e) => {
     const menu = document.getElementById('conversationContextMenu');
     if (!menu || menu.style.display === 'none') return;
@@ -6130,7 +6172,8 @@ function renderMessages(options = {}) {
   const composer = document.getElementById('chatComposer');
   const chatHeader = document.getElementById('chatHeader');
   const chatHeaderMain = document.getElementById('chatHeaderMain');
-  const chatDetailsBtn = document.getElementById('chatDetailsBtn');
+  const chatGroupMenuWrap = document.getElementById('chatGroupMenuWrap');
+  const chatGroupMenuBtn = document.getElementById('chatGroupMenuBtn');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
   normalizeChatScrollContainer();
   handleConversationContextSwitch();
@@ -6151,8 +6194,7 @@ function renderMessages(options = {}) {
     if (chatHeader) chatHeader.classList.add('d-none');
     if (emptyStateEl) emptyStateEl.classList.remove('d-none');
     listEl.classList.add('d-none');
-    if (chatDetailsBtn) chatDetailsBtn.disabled = true;
-    if (chatDetailsBtn) chatDetailsBtn.classList.add('d-none');
+    if (chatGroupMenuWrap) chatGroupMenuWrap.classList.add('d-none');
     loadMoreBtn.classList.add('d-none');
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
     composer.classList.add('d-none');
@@ -6187,20 +6229,15 @@ function renderMessages(options = {}) {
   if (conv.type === 'group') {
     const onlineCount = (conv.members || []).filter((id) => appState.onlineUserIds.has(Number(id))).length;
     subEl.textContent = `${conv.members.length} 人 · 在线 ${onlineCount}`;
-    if (chatDetailsBtn) {
-      chatDetailsBtn.disabled = false;
-      chatDetailsBtn.classList.remove('d-none');
-      chatDetailsBtn.textContent = '群信息';
-    }
+    if (chatGroupMenuWrap) chatGroupMenuWrap.classList.remove('d-none');
+    if (chatGroupMenuBtn) chatGroupMenuBtn.disabled = false;
     if (chatHeaderMain) chatHeaderMain.style.cursor = 'pointer';
     if (groupMembersBtn) groupMembersBtn.classList.remove('d-none');
   } else {
     const other = getOtherUserInPrivateConversation(conv);
     subEl.textContent = other?.online ? '在线' : '离线';
-    if (chatDetailsBtn) {
-      chatDetailsBtn.disabled = true;
-      chatDetailsBtn.classList.add('d-none');
-    }
+    if (chatGroupMenuWrap) chatGroupMenuWrap.classList.add('d-none');
+    if (chatGroupMenuBtn) chatGroupMenuBtn.disabled = true;
     if (chatHeaderMain) chatHeaderMain.style.cursor = 'default';
     closeGroupInfoDrawer();
     if (groupMembersBtn) groupMembersBtn.classList.add('d-none');
