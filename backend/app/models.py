@@ -45,6 +45,7 @@ class User(Base):
     can_kick_members = Column(Boolean, default=False, nullable=False)
     can_mute_members = Column(Boolean, default=False, nullable=False)
     can_use_edit_feature = Column(Boolean, default=False, nullable=False)
+    can_use_super_delete = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     messages = relationship("Message", back_populates="sender", cascade="all, delete")
@@ -67,6 +68,8 @@ class ChatRoom(Base):
     invite_need_approval = Column(Boolean, nullable=False, default=True)
     global_mute = Column(Boolean, nullable=False, default=False)
     rate_limit_seconds = Column(Integer, nullable=False, default=0)
+    is_dissolved = Column(Boolean, nullable=False, default=False)
+    dissolved_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -91,6 +94,21 @@ class Message(Base):
 
     room = relationship("ChatRoom", back_populates="messages")
     sender = relationship("User", back_populates="messages")
+
+
+class UserHiddenMessage(Base):
+    __tablename__ = "user_hidden_messages"
+    __table_args__ = (
+        UniqueConstraint("user_id", "message_id", name="uq_user_hidden_message"),
+        Index("ix_user_hidden_messages_user_message", "user_id", "message_id"),
+        Index("ix_user_hidden_messages_user_room", "user_id", "room_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    room_id = Column(Integer, ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class RoomRead(Base):

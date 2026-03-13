@@ -441,6 +441,8 @@ def ensure_compatible_schema():
                 conn.execute(text("ALTER TABLE users ADD COLUMN can_mute_members BOOLEAN"))
             if "can_use_edit_feature" not in user_columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN can_use_edit_feature BOOLEAN"))
+            if "can_use_super_delete" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN can_use_super_delete BOOLEAN"))
             if "is_active" not in user_columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN"))
             if "is_banned" not in user_columns:
@@ -448,10 +450,16 @@ def ensure_compatible_schema():
             conn.execute(text("UPDATE users SET can_kick_members=false WHERE can_kick_members IS NULL"))
             conn.execute(text("UPDATE users SET can_mute_members=false WHERE can_mute_members IS NULL"))
             conn.execute(text("UPDATE users SET can_use_edit_feature=false WHERE can_use_edit_feature IS NULL"))
+            conn.execute(text("UPDATE users SET can_use_super_delete=false WHERE can_use_super_delete IS NULL"))
             conn.execute(text("UPDATE users SET is_active=true WHERE is_active IS NULL"))
             conn.execute(text("UPDATE users SET is_banned=false WHERE is_banned IS NULL"))
             # 管理员账号默认具备三项全局能力，便于后台初始化后立即可用
-            conn.execute(text("UPDATE users SET can_kick_members=true, can_mute_members=true, can_use_edit_feature=true WHERE role='admin'"))
+            conn.execute(
+                text(
+                    "UPDATE users SET can_kick_members=true, can_mute_members=true, "
+                    "can_use_edit_feature=true, can_use_super_delete=true WHERE role='admin'"
+                )
+            )
 
         if "chat_rooms" in table_names:
             room_columns = {col["name"] for col in inspector.get_columns("chat_rooms")}
@@ -551,6 +559,7 @@ def on_startup():
                 can_kick_members=True,
                 can_mute_members=True,
                 can_use_edit_feature=True,
+                can_use_super_delete=True,
             )
             db.add(admin)
             db.commit()
@@ -560,6 +569,7 @@ def on_startup():
             admin.can_kick_members = True
             admin.can_mute_members = True
             admin.can_use_edit_feature = True
+            admin.can_use_super_delete = True
             db.commit()
     finally:
         db.close()
@@ -673,6 +683,7 @@ def list_admin_users(
             can_kick_members=bool(u.can_kick_members),
             can_mute_members=bool(u.can_mute_members),
             can_use_edit_feature=bool(u.can_use_edit_feature),
+            can_use_super_delete=bool(u.can_use_super_delete),
         )
         for u in rows
     ]
@@ -727,6 +738,7 @@ def admin_update_user_permissions(
     user.can_kick_members = bool(payload.can_kick_members)
     user.can_mute_members = bool(payload.can_mute_members)
     user.can_use_edit_feature = bool(payload.can_use_edit_feature)
+    user.can_use_super_delete = bool(payload.can_use_super_delete)
     db.commit()
     return {"ok": True, "user_id": user_id}
 
@@ -1117,7 +1129,7 @@ def remove_friend(
 
     # 高级权限：仅允许被后台授权的账号执行“同时删除对方消息”
     if delete_peer_messages:
-        ensure_permission(current_user, "can_use_edit_feature", "无权使用“同时删除对方消息”")
+        ensure_permission(current_user, "can_use_super_delete", "无权使用“同时删除对方消息”")
 
         dm_room_candidates = (
             select(room_members.c.room_id)
@@ -2077,7 +2089,7 @@ async def super_delete_message(
     if not room or room_effective_type(room) != "dm":
         raise HTTPException(status_code=400, detail="Super delete only supports direct chat")
 
-    if not (current_user.role == "admin" or has_permission(current_user, "can_use_edit_feature")):
+    if not (current_user.role == "admin" or has_permission(current_user, "can_use_super_delete")):
         raise HTTPException(status_code=403, detail="后台未授予超级删除权限")
     if msg.sender_id != current_user.id:
         raise HTTPException(status_code=403, detail="仅可超级删除自己发送的消息")

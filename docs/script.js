@@ -793,7 +793,7 @@ function canRecallMessage(msg) {
 function canUseSuperDelete() {
   const me = appState.currentUser;
   if (!me) return false;
-  return me.role === 'admin' || !!me.canUseEditFeature;
+  return me.role === 'admin' || !!me.canUseSuperDelete;
 }
 
 function toggleEmojiPanel(open) {
@@ -3105,7 +3105,7 @@ function openDeleteFriendConfirmModal(friendId) {
   const wrap = document.getElementById('deleteFriendPeerOptionWrap');
   const peerCheckbox = document.getElementById('deleteFriendPeerMessages');
   if (idInput) idInput.value = String(fid);
-  const canAdvanced = !!appState.currentUser?.canUseEditFeature;
+  const canAdvanced = !!appState.currentUser?.canUseSuperDelete;
   if (wrap) wrap.classList.toggle('d-none', !canAdvanced);
   if (peerCheckbox) peerCheckbox.checked = false;
   bootstrap.Modal.getOrCreateInstance(modalEl).show();
@@ -6773,7 +6773,8 @@ async function bootstrapAfterLogin(userFromAuth = null) {
     online: !!me.is_online,
     canKickMembers: !!me.can_kick_members,
     canMuteMembers: !!me.can_mute_members,
-    canUseEditFeature: !!me.can_use_edit_feature
+    canUseEditFeature: !!me.can_use_edit_feature,
+    canUseSuperDelete: !!me.can_use_super_delete
   };
 
   mergeUserToMap(me);

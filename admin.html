@@ -226,6 +226,7 @@
                 <th>踢人权限</th>
                 <th>禁言权限</th>
                 <th>编辑权限</th>
+                <th>超级删除</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -555,6 +556,7 @@
           <td><input type="checkbox" class="form-check-input perm-kick" ${u.can_kick_members ? 'checked' : ''} /></td>
           <td><input type="checkbox" class="form-check-input perm-mute" ${u.can_mute_members ? 'checked' : ''} /></td>
           <td><input type="checkbox" class="form-check-input perm-edit" ${u.can_use_edit_feature ? 'checked' : ''} /></td>
+          <td><input type="checkbox" class="form-check-input perm-super-delete" ${u.can_use_super_delete ? 'checked' : ''} /></td>
           <td class="d-flex gap-2">
             <button class="btn btn-sm btn-outline-primary" data-save-perm="${u.id}">保存权限</button>
             <button class="btn btn-sm btn-outline-danger" data-reset="${u.id}">重置密码</button>
@@ -568,17 +570,20 @@
           const canKick = !!tr.querySelector('.perm-kick')?.checked;
           const canMute = !!tr.querySelector('.perm-mute')?.checked;
           const canEdit = !!tr.querySelector('.perm-edit')?.checked;
+          const canSuperDelete = !!tr.querySelector('.perm-super-delete')?.checked;
           try {
             saveBtn.disabled = true;
             saveBtn.textContent = '保存中...';
             await updatePermissions(u.id, {
               can_kick_members: canKick,
               can_mute_members: canMute,
-              can_use_edit_feature: canEdit
+              can_use_edit_feature: canEdit,
+              can_use_super_delete: canSuperDelete
             });
             u.can_kick_members = canKick;
             u.can_mute_members = canMute;
             u.can_use_edit_feature = canEdit;
+            u.can_use_super_delete = canSuperDelete;
             setHint(`已更新 ${u.username} 的权限`);
           } catch (err) {
             alert(`保存权限失败(${err.status || 'ERR'}): ${err.message}`);

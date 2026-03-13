@@ -35,6 +35,7 @@ class UserOut(BaseModel):
     can_kick_members: bool = False
     can_mute_members: bool = False
     can_use_edit_feature: bool = False
+    can_use_super_delete: bool = False
 
     class Config:
         from_attributes = True
@@ -85,6 +86,7 @@ class RoomOut(BaseModel):
     member_ids: list[int]
     member_count: int | None = None
     rate_limit_seconds: int | None = 0
+    is_dissolved: bool = False
 
 
 class AddRoomMemberIn(BaseModel):
@@ -203,6 +205,7 @@ class AdminUserOut(BaseModel):
     can_kick_members: bool = False
     can_mute_members: bool = False
     can_use_edit_feature: bool = False
+    can_use_super_delete: bool = False
 
 
 class AdminResetPasswordIn(BaseModel):
@@ -214,6 +217,7 @@ class AdminUserPermissionsIn(BaseModel):
     can_kick_members: bool = False
     can_mute_members: bool = False
     can_use_edit_feature: bool = False
+    can_use_super_delete: bool = False
 
 
 class AdminUserStatusIn(BaseModel):
