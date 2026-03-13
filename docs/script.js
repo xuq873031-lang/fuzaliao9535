@@ -398,11 +398,29 @@ function isGroupInfoDrawerOpen() {
   return !!drawer && drawer.classList.contains('open');
 }
 
+function syncGroupDrawerLayout() {
+  const drawer = document.getElementById('groupManageModal');
+  const chatPane = document.querySelector('.chat-pane');
+  if (!drawer || !chatPane) return;
+  const isDesktop = window.matchMedia('(min-width: 992px)').matches;
+  if (!isDesktop || !isGroupInfoDrawerOpen()) {
+    chatPane.classList.remove('group-drawer-open');
+    document.documentElement.style.removeProperty('--group-drawer-width');
+    return;
+  }
+  const ideal = Math.round(window.innerWidth * 0.34);
+  const clamped = Math.max(320, Math.min(460, ideal));
+  const finalWidth = Math.max(300, Math.min(window.innerWidth - 24, clamped));
+  document.documentElement.style.setProperty('--group-drawer-width', `${finalWidth}px`);
+  chatPane.classList.add('group-drawer-open');
+}
+
 function openGroupInfoDrawer() {
   const drawer = document.getElementById('groupManageModal');
   if (!drawer) return;
   drawer.classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
+  syncGroupDrawerLayout();
 }
 
 function closeGroupInfoDrawer() {
@@ -412,6 +430,7 @@ function closeGroupInfoDrawer() {
   if (topBtn) bootstrap.Dropdown.getOrCreateInstance(topBtn).hide();
   drawer.classList.remove('open');
   drawer.setAttribute('aria-hidden', 'true');
+  syncGroupDrawerLayout();
   drawer.dispatchEvent(new Event('drawer:closed'));
   return true;
 }
@@ -5629,6 +5648,7 @@ function bindChatEvents() {
     setChatPaneVisible(!!conv);
     updateMultiSelectBar();
     updateCallButtonsState();
+    syncGroupDrawerLayout();
   });
 
   const emojiBar = document.getElementById('emojiBar');
@@ -6232,6 +6252,7 @@ function renderMessages(options = {}) {
     if (chatGroupMenuWrap) chatGroupMenuWrap.classList.remove('d-none');
     if (chatGroupMenuBtn) chatGroupMenuBtn.disabled = false;
     if (chatHeaderMain) chatHeaderMain.style.cursor = 'pointer';
+    syncGroupDrawerLayout();
     if (groupMembersBtn) groupMembersBtn.classList.remove('d-none');
   } else {
     const other = getOtherUserInPrivateConversation(conv);
