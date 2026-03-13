@@ -291,7 +291,7 @@
 
     function getApiBase() {
       const saved = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
-      if (saved && API_BASE_CANDIDATES.includes(saved)) return saved;
+      if (saved && /^https?:\/\//i.test(saved)) return saved;
       localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
       return DEFAULT_API_BASE;
     }
@@ -410,10 +410,12 @@
       let res = null;
       let lastNetworkErr = null;
       let successBase = current;
+      let lastHttpRes = null;
       const shouldRetryOn404 = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path === '/api/users/me';
       for (const base of candidates) {
         try {
           const currentRes = await fetchWithTimeout(`${base}${path}`, { ...options, headers }, 12000);
+          lastHttpRes = currentRes;
           if (currentRes.status === 404 && shouldRetryOn404) {
             continue;
           }
@@ -425,9 +427,14 @@
         }
       }
       if (!res) {
-        const err = new Error(`网络请求失败：${lastNetworkErr?.message || 'Load failed'}`);
-        err.status = 0;
-        throw err;
+        if (lastHttpRes) {
+          res = lastHttpRes;
+          successBase = current;
+        } else {
+          const err = new Error(`网络请求失败：${lastNetworkErr?.message || 'Load failed'}`);
+          err.status = 0;
+          throw err;
+        }
       }
       if (successBase !== current) {
         setApiBase(successBase);

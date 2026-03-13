@@ -679,7 +679,7 @@ def list_admin_users(
 
 
 @app.post("/api/admin/users/{user_id}/reset-password")
-def admin_reset_user_password(
+async def admin_reset_user_password(
     user_id: int,
     payload: AdminResetPasswordIn,
     db: Session = Depends(get_db),
@@ -692,7 +692,23 @@ def admin_reset_user_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.password_hash = hash_password(payload.new_password)
+    user.is_online = False
     db.commit()
+    await manager.force_disconnect_user(
+        user.id,
+        payload={
+            "type": "force_logout",
+            "reason": "密码已被管理员重置，请重新登录",
+        },
+        code=4003,
+    )
+    await manager.broadcast_global(
+        {
+            "type": "presence",
+            "user_id": user.id,
+            "online": False,
+        }
+    )
     return {"ok": True, "user_id": user_id}
 
 
