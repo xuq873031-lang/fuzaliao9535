@@ -723,8 +723,7 @@ async def admin_reset_user_password(
     return {"ok": True, "user_id": user_id}
 
 
-@app.put("/api/admin/users/{user_id}/permissions")
-def admin_update_user_permissions(
+def _admin_update_user_permissions(
     user_id: int,
     payload: AdminUserPermissionsIn,
     db: Session = Depends(get_db),
@@ -743,8 +742,27 @@ def admin_update_user_permissions(
     return {"ok": True, "user_id": user_id}
 
 
-@app.put("/api/admin/users/{user_id}/status")
-async def admin_update_user_status(
+@app.put("/api/admin/users/{user_id}/permissions")
+def admin_update_user_permissions(
+    user_id: int,
+    payload: AdminUserPermissionsIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _admin_update_user_permissions(user_id=user_id, payload=payload, db=db, current_user=current_user)
+
+
+@app.post("/api/admin/users/{user_id}/permissions", include_in_schema=False)
+def admin_update_user_permissions_compat(
+    user_id: int,
+    payload: AdminUserPermissionsIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _admin_update_user_permissions(user_id=user_id, payload=payload, db=db, current_user=current_user)
+
+
+async def _admin_update_user_status(
     user_id: int,
     payload: AdminUserStatusIn,
     db: Session = Depends(get_db),
@@ -792,6 +810,26 @@ async def admin_update_user_status(
         "is_active": bool(user.is_active),
         "is_banned": bool(user.is_banned),
     }
+
+
+@app.put("/api/admin/users/{user_id}/status")
+async def admin_update_user_status(
+    user_id: int,
+    payload: AdminUserStatusIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await _admin_update_user_status(user_id=user_id, payload=payload, db=db, current_user=current_user)
+
+
+@app.post("/api/admin/users/{user_id}/status", include_in_schema=False)
+async def admin_update_user_status_compat(
+    user_id: int,
+    payload: AdminUserStatusIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await _admin_update_user_status(user_id=user_id, payload=payload, db=db, current_user=current_user)
 
 
 @app.delete("/api/admin/users/{user_id}")
