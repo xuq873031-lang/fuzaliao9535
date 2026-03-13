@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
 from .manager import ConnectionManager
-from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, friends, room_members
+from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, UserHiddenMessage, friends, room_members
 from .schemas import (
     AdminUserStatusIn,
     AdminUserPermissionsIn,
@@ -1014,7 +1014,12 @@ def add_friend(friend_id: int, db: Session = Depends(get_db), current_user: User
 
 
 @app.delete("/api/friends/{friend_id}")
-def remove_friend(friend_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def remove_friend(
+    friend_id: int,
+    delete_peer_messages: bool = Query(default=False, description="是否同时删除对方发给我的私聊消息（仅我视角）"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     if friend_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
 
@@ -1038,8 +1043,53 @@ def remove_friend(friend_id: int, db: Session = Depends(get_db), current_user: U
             (FriendRemark.user_id == friend_id) & (FriendRemark.friend_id == current_user.id)
         )
     )
+
+    # 高级权限：仅允许被后台授权的账号执行“同时删除对方消息”
+    if delete_peer_messages:
+        ensure_permission(current_user, "can_use_edit_feature", "无权使用“同时删除对方消息”")
+
+        dm_room_candidates = (
+            select(room_members.c.room_id)
+            .where(room_members.c.user_id.in_([current_user.id, friend_id]))
+            .group_by(room_members.c.room_id)
+            .having(func.count(func.distinct(room_members.c.user_id)) == 2)
+        )
+        dm_room_ids = db.execute(
+            select(ChatRoom.id).where(
+                ChatRoom.id.in_(dm_room_candidates),
+                or_(ChatRoom.type == "dm", ChatRoom.room_type == "private"),
+            )
+        ).scalars().all()
+
+        if dm_room_ids:
+            peer_rows = db.execute(
+                select(Message.id, Message.room_id).where(
+                    Message.room_id.in_(dm_room_ids),
+                    Message.sender_id == friend_id,
+                )
+            ).all()
+            peer_message_ids = [row[0] for row in peer_rows]
+            if peer_rows:
+                existed = set(
+                    db.execute(
+                        select(UserHiddenMessage.message_id).where(
+                            UserHiddenMessage.user_id == current_user.id,
+                            UserHiddenMessage.message_id.in_(peer_message_ids),
+                        )
+                    ).scalars().all()
+                )
+                for mid, rid in peer_rows:
+                    if mid in existed:
+                        continue
+                    db.add(
+                        UserHiddenMessage(
+                            user_id=current_user.id,
+                            room_id=rid,
+                            message_id=mid,
+                        )
+                    )
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "delete_peer_messages_applied": bool(delete_peer_messages)}
 
 
 @app.get("/api/friends", response_model=list[SearchUserOut])
@@ -1255,8 +1305,10 @@ def update_group_room(
         raise HTTPException(status_code=404, detail="Room not found")
     if room_effective_type(room) != "group":
         raise HTTPException(status_code=400, detail="Only group room can be updated")
-    if get_room_member_role(db, room_id, current_user.id) != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can update group profile")
+    my_role = get_room_member_role(db, room_id, current_user.id)
+    is_admin = (current_user.role or "").lower() == "admin"
+    if my_role != "owner" and not is_admin:
+        raise HTTPException(status_code=403, detail="Only owner or admin can update group profile")
 
     if payload.title is not None:
         title = payload.title.strip()
@@ -1726,6 +1778,8 @@ def get_room_messages(
     ensure_user_in_room(db, current_user.id, room_id)
 
     query = select(Message).where(Message.room_id == room_id)
+    hidden_subquery = select(UserHiddenMessage.message_id).where(UserHiddenMessage.user_id == current_user.id)
+    query = query.where(~Message.id.in_(hidden_subquery))
     cursor_id = before_id or before
     if cursor_id:
         anchor = db.get(Message, cursor_id)

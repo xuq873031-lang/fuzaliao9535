@@ -3792,6 +3792,106 @@ function bindGroupEvents() {
       openHistoryPhotosModal();
     });
   }
+  const groupEditDescriptionBtn = document.getElementById('groupEditDescriptionBtn');
+  const groupSaveDescriptionBtn = document.getElementById('groupSaveDescriptionBtn');
+  const groupCancelDescriptionBtn = document.getElementById('groupCancelDescriptionBtn');
+  const groupDescriptionEditor = document.getElementById('groupDescriptionEditor');
+  const groupManageDescription = document.getElementById('groupManageDescription');
+  const groupEditNoticeBtn = document.getElementById('groupEditNoticeBtn');
+  const groupSaveNoticeBtn = document.getElementById('groupSaveNoticeBtn');
+  const groupCancelNoticeBtn = document.getElementById('groupCancelNoticeBtn');
+  const groupNoticeEditor = document.getElementById('groupNoticeEditor');
+  const groupManageNotice = document.getElementById('groupManageNotice');
+
+  const canEditCurrentGroupProfile = () => {
+    const groupId = appState.managingGroupId;
+    if (!groupId) return false;
+    const me = appState.roomMyMemberMetaByRoom[groupId];
+    return !!(me && (me.role === 'owner' || isAdminUser()));
+  };
+
+  const setDescriptionEditMode = (editing) => {
+    if (groupDescriptionEditor) groupDescriptionEditor.classList.toggle('d-none', !editing);
+    if (groupManageDescription) groupManageDescription.classList.toggle('d-none', editing);
+    if (groupSaveDescriptionBtn) groupSaveDescriptionBtn.classList.toggle('d-none', !editing);
+    if (groupCancelDescriptionBtn) groupCancelDescriptionBtn.classList.toggle('d-none', !editing);
+    if (groupEditDescriptionBtn) groupEditDescriptionBtn.classList.toggle('d-none', editing);
+  };
+
+  const setNoticeEditMode = (editing) => {
+    if (groupNoticeEditor) groupNoticeEditor.classList.toggle('d-none', !editing);
+    if (groupManageNotice) groupManageNotice.classList.toggle('d-none', editing);
+    if (groupSaveNoticeBtn) groupSaveNoticeBtn.classList.toggle('d-none', !editing);
+    if (groupCancelNoticeBtn) groupCancelNoticeBtn.classList.toggle('d-none', !editing);
+    if (groupEditNoticeBtn) groupEditNoticeBtn.classList.toggle('d-none', editing);
+  };
+
+  if (groupEditDescriptionBtn) {
+    groupEditDescriptionBtn.addEventListener('click', () => {
+      if (!canEditCurrentGroupProfile()) {
+        alert('仅群主或管理员可编辑群简介');
+        return;
+      }
+      const conv = findConversationById(appState.managingGroupId);
+      if (groupDescriptionEditor) groupDescriptionEditor.value = conv?.description || '';
+      setDescriptionEditMode(true);
+      if (groupDescriptionEditor) groupDescriptionEditor.focus();
+    });
+  }
+  if (groupCancelDescriptionBtn) {
+    groupCancelDescriptionBtn.addEventListener('click', () => setDescriptionEditMode(false));
+  }
+  if (groupSaveDescriptionBtn) {
+    groupSaveDescriptionBtn.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId || !canEditCurrentGroupProfile()) return;
+      const nextDescription = String(groupDescriptionEditor?.value || '').trim();
+      try {
+        const updated = await apiUpdateRoom(groupId, { description: nextDescription });
+        const conv = findConversationById(groupId);
+        if (conv) conv.description = updated?.description || nextDescription;
+        if (groupManageDescription) groupManageDescription.textContent = (updated?.description || nextDescription) || '暂无简介';
+        await refreshRoomsAndMessages();
+        renderConversationList();
+        setDescriptionEditMode(false);
+      } catch (err) {
+        alert(`保存群简介失败：${err.message}`);
+      }
+    });
+  }
+  if (groupEditNoticeBtn) {
+    groupEditNoticeBtn.addEventListener('click', () => {
+      if (!canEditCurrentGroupProfile()) {
+        alert('仅群主或管理员可编辑群公告');
+        return;
+      }
+      const conv = findConversationById(appState.managingGroupId);
+      if (groupNoticeEditor) groupNoticeEditor.value = conv?.notice || '';
+      setNoticeEditMode(true);
+      if (groupNoticeEditor) groupNoticeEditor.focus();
+    });
+  }
+  if (groupCancelNoticeBtn) {
+    groupCancelNoticeBtn.addEventListener('click', () => setNoticeEditMode(false));
+  }
+  if (groupSaveNoticeBtn) {
+    groupSaveNoticeBtn.addEventListener('click', async () => {
+      const groupId = appState.managingGroupId;
+      if (!groupId || !canEditCurrentGroupProfile()) return;
+      const nextNotice = String(groupNoticeEditor?.value || '').trim();
+      try {
+        const updated = await apiUpdateRoom(groupId, { notice: nextNotice });
+        const conv = findConversationById(groupId);
+        if (conv) conv.notice = updated?.notice || nextNotice;
+        if (groupManageNotice) groupManageNotice.textContent = (updated?.notice || nextNotice) || '暂无公告';
+        await refreshRoomsAndMessages();
+        renderConversationList();
+        setNoticeEditMode(false);
+      } catch (err) {
+        alert(`保存群公告失败：${err.message}`);
+      }
+    });
+  }
   const memberSearchInput = document.getElementById('groupMemberSearchInput');
   if (memberSearchInput) {
     memberSearchInput.addEventListener('input', () => {
@@ -3988,6 +4088,8 @@ function bindGroupEvents() {
       appState.managingGroupId = null;
       appState.managingGroupMembers = [];
       appState.groupMemberSearchKeyword = '';
+      setDescriptionEditMode(false);
+      setNoticeEditMode(false);
       const search = document.getElementById('groupMemberSearchInput');
       if (search) search.value = '';
     });
@@ -4044,22 +4146,24 @@ function renderGroupList() {
   }
 
   groups.forEach((g) => {
-    const names = g.members
-      .map((id) => getGroupPublicDisplayNameByUserId(id))
-      .join('、');
-
     const item = document.createElement('button');
     item.className = 'list-group-item list-group-item-action';
     const isOwner = Number(g.createdBy) === Number(appState.currentUser?.id);
+    const memberCount = g.memberCount || (g.members || []).length;
+    const introText = (g.description || '').trim() || '暂无群简介';
     item.innerHTML = `
       <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <div class="fw-semibold">${g.name}</div>
-          <small class="text-secondary">成员：${names}</small>
+        <div class="d-flex align-items-center gap-2">
+          <img src="${getConversationAvatar(g)}" class="conversation-avatar" alt="group-avatar" />
+          <div class="text-start">
+            <div class="fw-semibold">${escapeHtml(g.title || g.name || '群聊')}</div>
+            <small class="text-secondary d-block">${memberCount} 人</small>
+            <small class="text-secondary d-block">${escapeHtml(introText)}</small>
+          </div>
         </div>
         <div class="d-flex align-items-center gap-2">
-          <span class="badge text-bg-info">${g.members.length}人</span>
-          ${isOwner ? '<button class="btn btn-sm btn-outline-primary group-manage-btn" type="button">管理</button>' : ''}
+          <button class="btn btn-sm btn-outline-secondary group-manage-btn" type="button">群资料</button>
+          ${isOwner ? '<span class="badge text-bg-warning">群主</span>' : ''}
         </div>
       </div>
     `;
@@ -4113,8 +4217,30 @@ async function openGroupManageModal(groupId) {
   if (countEl) countEl.textContent = `${conv.memberCount || (conv.members || []).length} 人`;
   const descEl = document.getElementById('groupManageDescription');
   if (descEl) descEl.textContent = conv.description || '暂无简介';
+  const descEditor = document.getElementById('groupDescriptionEditor');
+  if (descEditor) {
+    descEditor.value = conv.description || '';
+    descEditor.classList.add('d-none');
+  }
   const noticeEl = document.getElementById('groupManageNotice');
   if (noticeEl) noticeEl.textContent = conv.notice || '暂无公告';
+  const noticeEditor = document.getElementById('groupNoticeEditor');
+  if (noticeEditor) {
+    noticeEditor.value = conv.notice || '';
+    noticeEditor.classList.add('d-none');
+  }
+  const saveDescBtn = document.getElementById('groupSaveDescriptionBtn');
+  const cancelDescBtn = document.getElementById('groupCancelDescriptionBtn');
+  const editDescBtn = document.getElementById('groupEditDescriptionBtn');
+  if (saveDescBtn) saveDescBtn.classList.add('d-none');
+  if (cancelDescBtn) cancelDescBtn.classList.add('d-none');
+  if (editDescBtn) editDescBtn.classList.remove('d-none');
+  const saveNoticeBtn = document.getElementById('groupSaveNoticeBtn');
+  const cancelNoticeBtn = document.getElementById('groupCancelNoticeBtn');
+  const editNoticeBtn = document.getElementById('groupEditNoticeBtn');
+  if (saveNoticeBtn) saveNoticeBtn.classList.add('d-none');
+  if (cancelNoticeBtn) cancelNoticeBtn.classList.add('d-none');
+  if (editNoticeBtn) editNoticeBtn.classList.remove('d-none');
   await refreshGroupManageModal(groupId);
   const modal = new bootstrap.Modal(document.getElementById('groupManageModal'));
   modal.show();
@@ -4139,6 +4265,7 @@ async function refreshGroupManageModal(groupId) {
   const me = (members || []).find((m) => Number(m.user_id) === Number(appState.currentUser?.id));
   const actor = {
     isOwner: me?.role === 'owner',
+    canEditProfile: !!(me && (me.role === 'owner' || isAdminUser())),
     canKick: !!appState.currentUser?.canKickMembers && !!(me?.role === 'owner' || me?.can_kick),
     canMute: !!appState.currentUser?.canMuteMembers && !!(me?.role === 'owner' || me?.can_mute)
   };
@@ -4167,6 +4294,24 @@ async function refreshGroupManageModal(groupId) {
   if (allowInviteEl) allowInviteEl.checked = !!conv?.allowMemberInvite;
   if (inviteApproveEl) inviteApproveEl.checked = !!conv?.inviteNeedApproval;
   if (globalMuteEl) globalMuteEl.checked = !!conv?.globalMute;
+  const descEl = document.getElementById('groupManageDescription');
+  if (descEl) descEl.textContent = conv?.description || '暂无简介';
+  const noticeEl = document.getElementById('groupManageNotice');
+  if (noticeEl) noticeEl.textContent = conv?.notice || '暂无公告';
+  const descEditor = document.getElementById('groupDescriptionEditor');
+  if (descEditor) descEditor.value = conv?.description || '';
+  const noticeEditor = document.getElementById('groupNoticeEditor');
+  if (noticeEditor) noticeEditor.value = conv?.notice || '';
+  const editDescriptionBtn = document.getElementById('groupEditDescriptionBtn');
+  const saveDescriptionBtn = document.getElementById('groupSaveDescriptionBtn');
+  const cancelDescriptionBtn = document.getElementById('groupCancelDescriptionBtn');
+  const editNoticeBtn = document.getElementById('groupEditNoticeBtn');
+  const saveNoticeBtn = document.getElementById('groupSaveNoticeBtn');
+  const cancelNoticeBtn = document.getElementById('groupCancelNoticeBtn');
+  [editDescriptionBtn, saveDescriptionBtn, cancelDescriptionBtn, editNoticeBtn, saveNoticeBtn, cancelNoticeBtn]
+    .forEach((el) => {
+      if (el) el.disabled = !actor.canEditProfile;
+    });
 
   renderGroupManageMembers(members || [], actor);
   renderGroupAddMemberOptions(groupId, members || [], actor.isOwner);
@@ -4493,7 +4638,7 @@ function openMessageActionMenu(msg) {
   // 第七阶段：消息菜单先只保留 引用/转发/撤回/删除
   if (editBtn) editBtn.classList.add('d-none');
   if (recallBtn) recallBtn.classList.toggle('d-none', !canRecallMessage(msg));
-  if (multiBtn) multiBtn.classList.add('d-none');
+  if (multiBtn) multiBtn.classList.toggle('d-none', !appState.activeConversationId);
   if (deleteBtn) deleteBtn.textContent = canUseSuperDelete() ? '删除/超级删除' : '删除';
   const modal = new bootstrap.Modal(document.getElementById('messageActionModal'));
   modal.show();

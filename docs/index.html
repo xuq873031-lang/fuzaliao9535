@@ -430,47 +430,55 @@
                   <div id="groupManageMemberCount" class="small text-secondary">0 人</div>
                 </div>
               </div>
-
-              <ul class="nav nav-tabs mb-3" role="tablist">
-                <li class="nav-item" role="presentation">
-                  <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#groupInfoTabPane" type="button" role="tab">群信息</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#groupMembersTabPane" type="button" role="tab">群成员</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#groupSettingsTabPane" type="button" role="tab">群管理</button>
-                </li>
-              </ul>
-
-              <div class="tab-content">
-                <div class="tab-pane fade show active" id="groupInfoTabPane" role="tabpanel">
-                  <div class="mb-2">
-                    <label class="form-label">群简介</label>
-                    <div id="groupManageDescription" class="form-control bg-body-tertiary">暂无简介</div>
-                  </div>
-                  <div class="mb-2">
-                    <label class="form-label">群公告</label>
-                    <div id="groupManageNotice" class="form-control bg-body-tertiary">暂无公告</div>
-                  </div>
-                  <div class="mb-2">
-                    <label class="form-label">群主</label>
-                    <div id="groupOwnerName" class="form-control bg-body-tertiary">未知</div>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">本群昵称</label>
-                    <div id="groupMyNickname" class="form-control bg-body-tertiary">未设置</div>
-                  </div>
-                  <div class="d-flex gap-2 flex-wrap">
-                    <button id="groupAvatarEditBtn" class="btn btn-sm btn-outline-secondary" type="button">修改群头像</button>
-                    <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
-                    <button id="groupManageHistorySearchBtn" class="btn btn-outline-secondary btn-sm" type="button">查找记录</button>
-                    <button id="groupManageHistoryPhotosBtn" class="btn btn-outline-secondary btn-sm" type="button">历史照片</button>
-                    <button id="groupExitBtn" class="btn btn-outline-danger btn-sm" type="button">退出群</button>
+              <div class="border rounded-3 p-3 mb-3 bg-body-tertiary">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="small text-secondary">群简介</div>
+                  <div class="d-flex gap-2">
+                    <button id="groupEditDescriptionBtn" class="btn btn-sm btn-outline-secondary" type="button">编辑</button>
+                    <button id="groupSaveDescriptionBtn" class="btn btn-sm btn-primary d-none" type="button">保存</button>
+                    <button id="groupCancelDescriptionBtn" class="btn btn-sm btn-outline-secondary d-none" type="button">取消</button>
                   </div>
                 </div>
+                <div id="groupManageDescription" class="small">暂无简介</div>
+                <textarea id="groupDescriptionEditor" class="form-control mt-2 d-none" rows="3" maxlength="300" placeholder="输入群简介（最多 300 字）"></textarea>
+              </div>
 
-                <div class="tab-pane fade" id="groupMembersTabPane" role="tabpanel">
+              <div class="border rounded-3 p-3 mb-3 bg-body-tertiary">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="small text-secondary">群公告</div>
+                  <div class="d-flex gap-2">
+                    <button id="groupEditNoticeBtn" class="btn btn-sm btn-outline-secondary" type="button">编辑</button>
+                    <button id="groupSaveNoticeBtn" class="btn btn-sm btn-primary d-none" type="button">保存</button>
+                    <button id="groupCancelNoticeBtn" class="btn btn-sm btn-outline-secondary d-none" type="button">取消</button>
+                  </div>
+                </div>
+                <div id="groupManageNotice" class="small">暂无公告</div>
+                <textarea id="groupNoticeEditor" class="form-control mt-2 d-none" rows="3" maxlength="300" placeholder="输入群公告（最多 300 字）"></textarea>
+              </div>
+
+              <div class="border rounded-3 p-3 mb-3">
+                <div class="small text-secondary mb-2">群信息</div>
+                <div class="mb-2">
+                  <div class="small text-secondary">群主</div>
+                  <div id="groupOwnerName" class="fw-semibold">未知</div>
+                </div>
+                <div>
+                  <div class="small text-secondary">本群昵称</div>
+                  <div id="groupMyNickname" class="fw-semibold">未设置</div>
+                </div>
+              </div>
+
+              <div class="d-grid gap-2 mb-3">
+                <button id="groupMemberSectionToggleBtn" class="btn btn-outline-secondary text-start" type="button" data-bs-toggle="collapse" data-bs-target="#groupMemberSection">
+                  成员入口
+                </button>
+                <button id="groupSettingsSectionToggleBtn" class="btn btn-outline-secondary text-start" type="button" data-bs-toggle="collapse" data-bs-target="#groupSettingsSection">
+                  群设置入口
+                </button>
+              </div>
+
+              <div id="groupMemberSection" class="collapse mb-3">
+                <div class="border rounded-3 p-3">
                   <div class="mb-3">
                     <label for="groupMemberSearchInput" class="form-label">搜索群成员</label>
                     <input id="groupMemberSearchInput" class="form-control" placeholder="输入昵称搜索" />
@@ -487,8 +495,10 @@
                     <div id="groupMemberManageList" class="list-group"></div>
                   </div>
                 </div>
+              </div>
 
-                <div class="tab-pane fade" id="groupSettingsTabPane" role="tabpanel">
+              <div id="groupSettingsSection" class="collapse">
+                <div class="border rounded-3 p-3">
                   <div class="form-check form-switch mb-2">
                     <input class="form-check-input" type="checkbox" id="groupAllowFriendAddSwitch" />
                     <label class="form-check-label" for="groupAllowFriendAddSwitch">群内互加好友</label>
@@ -506,7 +516,7 @@
                     <label class="form-check-label" for="groupGlobalMuteSwitch">全员禁言</label>
                   </div>
                   <div class="mb-3">
-                    <label for="groupRateLimitSelect" class="form-label">发言频率限制（仅群主可设置）</label>
+                    <label for="groupRateLimitSelect" class="form-label">发言频率限制</label>
                     <div class="input-group">
                       <select id="groupRateLimitSelect" class="form-select">
                         <option value="0">关闭限制</option>
@@ -519,9 +529,22 @@
                   </div>
                   <div class="d-grid gap-2">
                     <button id="groupMuteListBtn" class="btn btn-outline-secondary btn-sm" type="button">禁言名单</button>
-                    <button id="groupSettingsSaveBtn" class="btn btn-primary btn-sm" type="button">保存群管理设置</button>
+                    <button id="groupSettingsSaveBtn" class="btn btn-primary btn-sm" type="button">保存群设置</button>
                   </div>
                 </div>
+              </div>
+
+              <div class="d-flex align-items-center justify-content-between mt-3">
+                <div class="dropdown">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">更多操作</button>
+                  <ul class="dropdown-menu">
+                    <li><button id="groupAvatarEditBtn" class="dropdown-item" type="button">修改群头像</button></li>
+                    <li><button id="groupManageHistorySearchBtn" class="dropdown-item" type="button">查找记录</button></li>
+                    <li><button id="groupManageHistoryPhotosBtn" class="dropdown-item" type="button">历史照片</button></li>
+                  </ul>
+                </div>
+                <button id="groupExitBtn" class="btn btn-outline-danger btn-sm" type="button">退出群</button>
+                <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />
               </div>
             </div>
           </div>
@@ -679,7 +702,7 @@
               <button id="msgActionReplyBtn" class="btn btn-outline-primary">回复</button>
               <button id="msgActionEditBtn" class="btn btn-outline-secondary d-none">编辑</button>
               <button id="msgActionRecallBtn" class="btn btn-outline-warning d-none">撤回</button>
-              <button id="msgActionMultiBtn" class="btn btn-outline-secondary d-none">多选</button>
+              <button id="msgActionMultiBtn" class="btn btn-outline-secondary">多选</button>
               <button id="msgActionForwardBtn" class="btn btn-outline-success">转发</button>
               <button id="msgActionDeleteBtn" class="btn btn-outline-danger">删除</button>
             </div>
