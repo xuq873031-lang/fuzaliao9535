@@ -2018,6 +2018,8 @@ async def delete_message_for_self(
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
     ensure_user_in_room(db, current_user.id, msg.room_id)
+    if msg.sender_id != current_user.id:
+        raise HTTPException(status_code=403, detail="仅可删除自己发送的消息")
 
     if UserHiddenMessage is None:
         existed = db.execute(

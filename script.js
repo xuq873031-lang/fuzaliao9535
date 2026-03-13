@@ -773,6 +773,14 @@ function canEditOwnMessage(msg) {
   return true;
 }
 
+function canDeleteOwnMessage(msg) {
+  if (!msg || !appState.currentUser) return false;
+  if (msg.localPending || msg.localFailed) return false;
+  const msgId = Number(msg.id);
+  if (!Number.isFinite(msgId) || msgId <= 0) return false;
+  return Number(msg.senderId) === Number(appState.currentUser.id);
+}
+
 function canRecallMessage(msg) {
   if (!msg || !appState.currentUser) return false;
   if (String(msg.text || '').startsWith('[已撤回]')) return false;
@@ -5091,11 +5099,13 @@ function openMessageActionMenu(msg) {
   const recallBtn = document.getElementById('msgActionRecallBtn');
   const multiBtn = document.getElementById('msgActionMultiBtn');
   const deleteBtn = document.getElementById('msgActionDeleteBtn');
-  // 第七阶段：消息菜单先只保留 引用/转发/撤回/删除
-  if (editBtn) editBtn.classList.add('d-none');
+  if (editBtn) editBtn.classList.toggle('d-none', !canEditOwnMessage(msg));
   if (recallBtn) recallBtn.classList.toggle('d-none', !canRecallMessage(msg));
   if (multiBtn) multiBtn.classList.toggle('d-none', !appState.activeConversationId);
-  if (deleteBtn) deleteBtn.textContent = canUseSuperDelete() ? '删除/超级删除' : '删除';
+  if (deleteBtn) {
+    deleteBtn.classList.toggle('d-none', !canDeleteOwnMessage(msg));
+    deleteBtn.textContent = canUseSuperDelete() ? '删除/超级删除' : '删除';
+  }
   const modal = new bootstrap.Modal(document.getElementById('messageActionModal'));
   modal.show();
 }
@@ -5602,6 +5612,10 @@ function bindChatEvents() {
   });
   if (actionDeleteBtn) actionDeleteBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
+    if (!canDeleteOwnMessage(appState.actionTargetMessage)) {
+      alert('仅可删除自己发送的消息');
+      return;
+    }
     const conv = findConversationById(appState.activeConversationId);
     const canSuperDelete = !!(
       conv
@@ -5652,6 +5666,10 @@ function bindChatEvents() {
     confirmDeleteMessageBtn.addEventListener('click', async () => {
       const msg = appState.actionTargetMessage;
       if (!msg) return;
+      if (!canDeleteOwnMessage(msg)) {
+        alert('仅可删除自己发送的消息');
+        return;
+      }
       const conv = findConversationById(appState.activeConversationId);
       if (!conv) return;
       const canSuperDelete = !!(
