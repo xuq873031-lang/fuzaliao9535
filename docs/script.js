@@ -147,10 +147,6 @@ function getApiBase() {
     localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
     return DEFAULT_API_BASE;
   }
-  if (!API_BASE_CANDIDATES.includes(stored)) {
-    localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
-    return DEFAULT_API_BASE;
-  }
   return stored;
 }
 
@@ -1042,15 +1038,32 @@ async function apiFetch(path, options = {}) {
     ...options,
     headers
   };
-  let base = getApiBase();
+  const primaryBase = getApiBase();
+  const candidates = [primaryBase, ...API_BASE_CANDIDATES.filter((x) => x !== primaryBase)];
   let res = null;
-  try {
-    res = await fetchWithTimeout(`${base}${path}`, request, 15000);
-  } catch (caughtErr) {
-    const err = new Error(`网络连接失败：无法连接后端 (${getApiBase()})`);
+  let lastNetworkErr = null;
+  let successBase = primaryBase;
+  for (const base of candidates) {
+    try {
+      const currentRes = await fetchWithTimeout(`${base}${path}`, request, 15000);
+      if (currentRes.status === 404 && base !== candidates[candidates.length - 1]) {
+        continue;
+      }
+      res = currentRes;
+      successBase = base;
+      break;
+    } catch (caughtErr) {
+      lastNetworkErr = caughtErr;
+    }
+  }
+  if (!res) {
+    const err = new Error(`网络连接失败：无法连接后端 (${primaryBase})`);
     err.status = 0;
-    err.detail = caughtErr?.message || 'NetworkError';
+    err.detail = lastNetworkErr?.message || 'NetworkError';
     throw err;
+  }
+  if (successBase !== primaryBase) {
+    setApiBase(successBase);
   }
 
   if (!res.ok) {
@@ -1129,23 +1142,10 @@ async function apiSearchUsers(keyword) {
       if (data && Array.isArray(data.data)) return data.data;
       return [];
     };
-    // 兼容不同后端实现：优先 q，其次 keyword/account
-    const candidates = [
-      `/api/users/search?q=${encodeURIComponent(q)}`,
-      `/api/users/search?keyword=${encodeURIComponent(q)}`,
-      `/api/users/search?account=${encodeURIComponent(q)}`
-    ];
-    for (let i = 0; i < candidates.length; i += 1) {
-      try {
-        const data = await apiFetch(candidates[i]);
-        const rows = parseRows(data);
-        console.log(`[search] base=${base} q=${q} status=200`);
-        if (rows.length || i === candidates.length - 1) return rows;
-      } catch (innerErr) {
-        if (i === candidates.length - 1) throw innerErr;
-      }
-    }
-    return [];
+    const data = await apiFetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+    const rows = parseRows(data);
+    console.log(`[search] base=${base} q=${q} status=200`);
+    return rows;
   } catch (err) {
     console.warn(`[search] base=${base} q=${q} status=${err.status || 'ERR'}`);
     throw err;
