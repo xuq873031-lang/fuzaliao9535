@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
 from .manager import ConnectionManager
-from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, UserHiddenMessage, friends, room_members
+from .models import ChatRoom, FriendRemark, FriendRequest, Message, RoomMute, RoomRead, User, friends, room_members
+try:
+    from .models import UserHiddenMessage
+except ImportError:
+    UserHiddenMessage = None
 from .schemas import (
     AdminUserStatusIn,
     AdminUserPermissionsIn,
@@ -793,7 +797,8 @@ async def admin_delete_cancelled_user(
     db.execute(delete(FriendRequest).where((FriendRequest.from_user_id == user_id) | (FriendRequest.to_user_id == user_id)))
     db.execute(delete(FriendRemark).where((FriendRemark.user_id == user_id) | (FriendRemark.friend_id == user_id)))
     db.execute(delete(RoomRead).where(RoomRead.user_id == user_id))
-    db.execute(delete(UserHiddenMessage).where(UserHiddenMessage.user_id == user_id))
+    if UserHiddenMessage is not None:
+        db.execute(delete(UserHiddenMessage).where(UserHiddenMessage.user_id == user_id))
     db.execute(delete(RoomMute).where(RoomMute.user_id == user_id))
     db.execute(text("UPDATE room_mutes SET muted_by=NULL WHERE muted_by=:uid"), {"uid": user_id})
     db.execute(delete(Message).where(Message.sender_id == user_id))
@@ -1119,7 +1124,7 @@ def remove_friend(
                 )
             ).all()
             peer_message_ids = [row[0] for row in peer_rows]
-            if peer_rows:
+            if peer_rows and UserHiddenMessage is not None:
                 existed = set(
                     db.execute(
                         select(UserHiddenMessage.message_id).where(
@@ -1828,8 +1833,9 @@ def get_room_messages(
     ensure_user_in_room(db, current_user.id, room_id)
 
     query = select(Message).where(Message.room_id == room_id)
-    hidden_subquery = select(UserHiddenMessage.message_id).where(UserHiddenMessage.user_id == current_user.id)
-    query = query.where(~Message.id.in_(hidden_subquery))
+    if UserHiddenMessage is not None:
+        hidden_subquery = select(UserHiddenMessage.message_id).where(UserHiddenMessage.user_id == current_user.id)
+        query = query.where(~Message.id.in_(hidden_subquery))
     cursor_id = before_id or before
     if cursor_id:
         anchor = db.get(Message, cursor_id)
