@@ -1383,6 +1383,32 @@ async function apiRecallMessage(messageId) {
   });
 }
 
+async function recallMessageWithFallback(msg, roomId) {
+  const initialId = Number(msg?.id);
+  if (!Number.isFinite(initialId) || initialId <= 0) {
+    throw new Error('资源不存在');
+  }
+  try {
+    return await apiRecallMessage(initialId);
+  } catch (err) {
+    if (!(err.status === 404 || err.message === '资源不存在')) throw err;
+    const currentRoomId = Number(roomId || appState.activeConversationId);
+    if (!Number.isFinite(currentRoomId) || currentRoomId <= 0) throw err;
+    const latest = await apiGetRoomMessages(currentRoomId, 50);
+    const createdAt = Number(msg?.createdAt || 0);
+    const fallback = latest
+      .map(normalizeMessage)
+      .find((item) => (
+        Number(item.senderId) === Number(msg?.senderId)
+        && String(item.text || '') === String(msg?.text || '')
+        && Math.abs(Number(item.createdAt || 0) - createdAt) <= 15000
+      ));
+    if (!fallback?.id || Number(fallback.id) === initialId) throw err;
+    msg.id = fallback.id;
+    return apiRecallMessage(fallback.id);
+  }
+}
+
 async function apiSuperDeleteMessage(messageId) {
   return apiFetch(`/api/messages/${messageId}/super-delete`, { method: 'DELETE' });
 }
@@ -5551,7 +5577,7 @@ function bindChatEvents() {
       return;
     }
     try {
-      const updated = await apiRecallMessage(msg.id);
+      const updated = await recallMessageWithFallback(msg, appState.activeConversationId);
       const conv = findConversationById(updated.room_id);
       if (conv) {
         const target = conv.messages.find((m) => Number(m.id) === Number(updated.id));
