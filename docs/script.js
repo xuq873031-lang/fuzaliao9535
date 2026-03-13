@@ -1350,6 +1350,10 @@ async function apiSuperDeleteMessage(messageId) {
   return apiFetch(`/api/messages/${messageId}/super-delete`, { method: 'DELETE' });
 }
 
+async function apiDeleteMessage(messageId) {
+  return apiFetch(`/api/messages/${messageId}`, { method: 'DELETE' });
+}
+
 async function apiUploadImage(file) {
   const form = new FormData();
   form.append('file', file);
@@ -5529,15 +5533,15 @@ function bindChatEvents() {
   if (actionDeleteBtn) actionDeleteBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     const conv = findConversationById(appState.activeConversationId);
-    const shouldSuperDelete = !!(
+    const canSuperDelete = !!(
       conv
       && isDmConversation(conv)
       && canUseSuperDelete()
       && Number(appState.actionTargetMessage.senderId) === Number(appState.currentUser?.id)
     );
     if (deleteForPeerCheck) {
-      deleteForPeerCheck.checked = shouldSuperDelete;
-      deleteForPeerCheck.disabled = true;
+      deleteForPeerCheck.checked = false;
+      deleteForPeerCheck.disabled = !canSuperDelete;
     }
     const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
     if (modal) modal.hide();
@@ -5580,20 +5584,21 @@ function bindChatEvents() {
       if (!msg) return;
       const conv = findConversationById(appState.activeConversationId);
       if (!conv) return;
-      const deleteForPeer = !!(
+      const canSuperDelete = !!(
         conv
         && isDmConversation(conv)
         && canUseSuperDelete()
         && Number(msg.senderId) === Number(appState.currentUser?.id)
       );
+      const deleteForPeer = !!(canSuperDelete && deleteForPeerCheck && deleteForPeerCheck.checked);
       const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteMessageModal'));
       try {
         if (deleteForPeer) {
           await apiSuperDeleteMessage(msg.id);
-          conv.messages = conv.messages.filter((m) => Number(m.id) !== Number(msg.id));
         } else {
-          conv.messages = conv.messages.filter((m) => Number(m.id) !== Number(msg.id));
+          await apiDeleteMessage(msg.id);
         }
+        conv.messages = conv.messages.filter((m) => Number(m.id) !== Number(msg.id));
         renderMessages({ autoScroll: false });
         scheduleConversationListRender();
         if (deleteModal) deleteModal.hide();
@@ -6829,6 +6834,7 @@ window.__api = {
   apiEditMessage,
   apiRecallMessage,
   apiSuperDeleteMessage,
+  apiDeleteMessage,
   apiSendMessage,
   apiUploadImage,
   apiAdminListUsers,

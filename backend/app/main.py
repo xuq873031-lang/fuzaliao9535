@@ -1993,6 +1993,43 @@ async def recall_message(
     return build_message_out(db, msg)
 
 
+@app.delete("/api/messages/{message_id}")
+async def delete_message_for_self(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    msg = db.get(Message, message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    ensure_user_in_room(db, current_user.id, msg.room_id)
+
+    if UserHiddenMessage is None:
+        raise HTTPException(status_code=500, detail="Message hide model unavailable")
+
+    existed = db.execute(
+        select(UserHiddenMessage.id).where(
+            UserHiddenMessage.user_id == current_user.id,
+            UserHiddenMessage.message_id == message_id,
+        )
+    ).first()
+    if not existed:
+        db.add(
+            UserHiddenMessage(
+                user_id=current_user.id,
+                room_id=msg.room_id,
+                message_id=message_id,
+            )
+        )
+        db.commit()
+
+    await manager.send_json_to_user(
+        current_user.id,
+        {"type": "message_deleted", "payload": {"id": message_id, "room_id": msg.room_id}},
+    )
+    return {"ok": True, "message_id": message_id, "room_id": msg.room_id, "scope": "self"}
+
+
 @app.delete("/api/messages/{message_id}/super-delete")
 async def super_delete_message(
     message_id: int,
