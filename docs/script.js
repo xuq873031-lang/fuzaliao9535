@@ -752,6 +752,12 @@ function getConversationAvatar(conv) {
   return other.avatar || other.avatar_base64 || DEFAULT_AVATAR;
 }
 
+function isFriendUserId(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return false;
+  return appState.friends.some((f) => Number(f.id) === uid);
+}
+
 function updateFriendRequestBadges() {
   const count = (appState.incomingRequests || []).length;
   ['friendReqBadgeDesktop', 'friendReqBadgeDrawer', 'friendReqBadgeMobileTab'].forEach((id) => {
@@ -3327,6 +3333,10 @@ function bindFriendEvents() {
     profileRemarkBtn.addEventListener('click', async () => {
       const fid = Number(appState.activeFriendProfileId || 0);
       if (!fid) return;
+      if (!isFriendUserId(fid)) {
+        alert('非好友暂不支持设置备注');
+        return;
+      }
       await hideModalAndWait('friendProfileModal');
       await editFriendRemark(fid);
       cleanupStuckUiOverlay();
@@ -3338,6 +3348,10 @@ function bindFriendEvents() {
     profileDeleteBtn.addEventListener('click', () => {
       const fid = Number(appState.activeFriendProfileId || 0);
       if (!fid) return;
+      if (!isFriendUserId(fid)) {
+        alert('当前不是好友关系，无需解除');
+        return;
+      }
       openDeleteFriendConfirmModal(fid);
     });
   }
@@ -3525,9 +3539,12 @@ async function addFriendById(friendId, displayName = '') {
 }
 
 function openFriendProfileModal(friendId) {
-  const f = appState.friends.find((x) => Number(x.id) === Number(friendId));
+  const uid = Number(friendId || 0);
+  if (!uid) return;
+  const f = appState.friends.find((x) => Number(x.id) === uid) || appState.userMap[uid] || null;
   if (!f) return;
-  appState.activeFriendProfileId = f.id;
+  appState.activeFriendProfileId = uid;
+  const isFriend = isFriendUserId(uid);
   const avatarEl = document.getElementById('friendProfileAvatar');
   const nameEl = document.getElementById('friendProfileName');
   const accountEl = document.getElementById('friendProfileAccount');
@@ -3535,19 +3552,23 @@ function openFriendProfileModal(friendId) {
   const statusEl = document.getElementById('friendProfileStatus');
   const remarkEl = document.getElementById('friendProfileRemark');
   const signatureEl = document.getElementById('friendProfileSignature');
-  if (avatarEl) avatarEl.src = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
-  if (nameEl) nameEl.textContent = getDisplayNameByUserId(f.id);
+  const remarkBtn = document.getElementById('friendProfileRemarkAction');
+  const deleteBtn = document.getElementById('friendProfileDeleteAction');
+  if (avatarEl) avatarEl.src = appState.userMap[uid]?.avatar || f.avatar || f.avatar_base64 || DEFAULT_AVATAR;
+  if (nameEl) nameEl.textContent = getDisplayNameByUserId(uid);
   if (accountEl) accountEl.textContent = `@${f.username || ''}`;
-  if (idEl) idEl.textContent = `ID：${f.id}`;
+  if (idEl) idEl.textContent = `ID：${uid}`;
   if (statusEl) statusEl.textContent = f.online ? '在线' : '离线';
   if (remarkEl) {
-    const remark = appState.friendRemarks[f.id] || '';
+    const remark = appState.friendRemarks[uid] || '';
     remarkEl.textContent = remark || '未设置';
   }
   if (signatureEl) {
-    const signature = String(appState.userMap[f.id]?.signature || '').trim();
+    const signature = String(appState.userMap[uid]?.signature || f.signature || '').trim();
     signatureEl.textContent = signature || '暂无';
   }
+  if (remarkBtn) remarkBtn.disabled = !isFriend;
+  if (deleteBtn) deleteBtn.disabled = !isFriend;
   const modal = new bootstrap.Modal(document.getElementById('friendProfileModal'));
   modal.show();
 }
@@ -6080,6 +6101,12 @@ function buildMessageRow(msg, conv) {
     avatar.style.height = '28px';
     avatar.src = getUserAvatarById(msg.senderId);
     avatar.alt = 'avatar';
+    avatar.style.cursor = 'pointer';
+    avatar.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openFriendProfileModal(msg.senderId);
+    });
     row.appendChild(avatar);
   }
 
