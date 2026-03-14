@@ -5242,10 +5242,8 @@ function resetImageComposerState() {
   const preview = document.getElementById('imageComposePreview');
   const videoPreview = document.getElementById('imageComposeVideoPreview');
   const captionInput = document.getElementById('imageComposeCaptionInput');
-  const textInput = document.getElementById('imageComposeTextInput');
   const layer = document.getElementById('imageComposeOverlayLayer');
   const unsupportedHint = document.getElementById('imageComposeUnsupportedHint');
-  const addTextBtn = document.getElementById('imageComposeAddTextBtn');
   const sendBtn = document.getElementById('imageComposeSendBtn');
   if (preview) preview.src = '';
   if (preview) preview.classList.add('d-none');
@@ -5256,11 +5254,6 @@ function resetImageComposerState() {
     videoPreview.classList.add('d-none');
   }
   if (captionInput) captionInput.value = '';
-  if (textInput) {
-    textInput.value = '';
-    textInput.disabled = false;
-  }
-  if (addTextBtn) addTextBtn.disabled = false;
   if (layer) layer.innerHTML = '';
   if (layer) layer.classList.remove('d-none');
   if (unsupportedHint) unsupportedHint.classList.add('d-none');
@@ -5361,10 +5354,8 @@ async function openImageComposeFromFile(file) {
   const preview = document.getElementById('imageComposePreview');
   const videoPreview = document.getElementById('imageComposeVideoPreview');
   const layer = document.getElementById('imageComposeOverlayLayer');
-  const textInput = document.getElementById('imageComposeTextInput');
   const captionInput = document.getElementById('imageComposeCaptionInput');
   const unsupportedHint = document.getElementById('imageComposeUnsupportedHint');
-  const addTextBtn = document.getElementById('imageComposeAddTextBtn');
   const sendBtn = document.getElementById('imageComposeSendBtn');
   if (preview) {
     preview.src = state.previewUrl;
@@ -5375,8 +5366,6 @@ async function openImageComposeFromFile(file) {
     videoPreview.classList.toggle('d-none', !isVideo);
   }
   if (layer) layer.classList.toggle('d-none', !isImage);
-  if (textInput) textInput.disabled = !isImage;
-  if (addTextBtn) addTextBtn.disabled = !isImage;
   if (unsupportedHint) unsupportedHint.classList.toggle('d-none', !isVideo);
   if (sendBtn) {
     sendBtn.disabled = isVideo;
@@ -5464,36 +5453,54 @@ function bindChatImageDropEvents() {
     const hint = document.getElementById('chatImageDropHint');
     if (hint && canAcceptChatImageDrop()) hint.classList.remove('d-none');
   };
+  const preventNativeFileDrop = (e) => {
+    if (!hasMediaFile(e.dataTransfer)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  };
+  const isDropInsideChat = (target) => {
+    const composer = document.getElementById('chatComposer');
+    const list = document.getElementById('messageList');
+    return !!(
+      (composer && composer.contains(target))
+      || (list && list.contains(target))
+    );
+  };
+
+  window.addEventListener('dragover', preventNativeFileDrop, true);
+  window.addEventListener('drop', preventNativeFileDrop, true);
 
   document.addEventListener('dragenter', (e) => {
     if (!hasMediaFile(e.dataTransfer)) return;
     dragDepth += 1;
+    e.preventDefault();
     if (!canAcceptChatImageDrop()) return;
-    e.preventDefault();
     showHint();
-  });
+  }, true);
   document.addEventListener('dragover', (e) => {
-    if (!hasMediaFile(e.dataTransfer) || !canAcceptChatImageDrop()) return;
+    if (!hasMediaFile(e.dataTransfer)) return;
     e.preventDefault();
+    if (!canAcceptChatImageDrop()) return;
     showHint();
-  });
+  }, true);
   document.addEventListener('dragleave', (e) => {
     if (!hasMediaFile(e.dataTransfer)) return;
     dragDepth = Math.max(0, dragDepth - 1);
     if (dragDepth === 0) hideChatImageDropHint();
-  });
+  }, true);
   document.addEventListener('drop', async (e) => {
     if (!hasMediaFile(e.dataTransfer)) return;
     e.preventDefault();
+    e.stopPropagation();
     dragDepth = 0;
     hideChatImageDropHint();
-    if (!canAcceptChatImageDrop()) return;
+    if (!canAcceptChatImageDrop() || !isDropInsideChat(e.target)) return;
     const file = Array.from(e.dataTransfer.files || []).find((item) => {
       const type = String(item.type || '').toLowerCase();
       return type.startsWith('image/') || type.startsWith('video/');
     });
     if (file) await openImageComposeFromFile(file);
-  });
+  }, true);
 }
 
 async function sendImageComposeMessage() {
@@ -5839,11 +5846,9 @@ function bindChatEvents() {
   const directDetailsHistorySearchBtn = document.getElementById('directDetailsHistorySearchBtn');
   const directDetailsHistoryPhotosBtn = document.getElementById('directDetailsHistoryPhotosBtn');
   const imageComposeCard = document.getElementById('imageComposeCard');
-  const imageComposeAddTextBtn = document.getElementById('imageComposeAddTextBtn');
   const imageComposeCloseBtn = document.getElementById('imageComposeCloseBtn');
   const imageComposeSendBtn = document.getElementById('imageComposeSendBtn');
   const imageComposeReplaceBtn = document.getElementById('imageComposeReplaceBtn');
-  const imageComposeTextInput = document.getElementById('imageComposeTextInput');
   const imageComposeCaptionInput = document.getElementById('imageComposeCaptionInput');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
@@ -5898,15 +5903,6 @@ function bindChatEvents() {
   if (uploadImageBtn && imageInput) {
     uploadImageBtn.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', handleImageUpload);
-  }
-  if (imageComposeAddTextBtn) imageComposeAddTextBtn.addEventListener('click', addImageComposeTextOverlay);
-  if (imageComposeTextInput) {
-    imageComposeTextInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        addImageComposeTextOverlay();
-      }
-    });
   }
   if (imageComposeSendBtn) imageComposeSendBtn.addEventListener('click', sendImageComposeMessage);
   if (imageComposeReplaceBtn && imageInput) imageComposeReplaceBtn.addEventListener('click', () => imageInput.click());

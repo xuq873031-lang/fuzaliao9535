@@ -931,6 +931,7 @@ body.main-open #messageList {
   inset: 0;
   overflow: hidden;
   border-radius: 16px;
+  pointer-events: none;
 }
 
 .image-compose-card-main {
