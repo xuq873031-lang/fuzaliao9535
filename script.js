@@ -6455,6 +6455,17 @@ function scheduleMarkCurrentRoomRead() {
   }, 180);
 }
 
+function focusMessageInputForDesktop() {
+  const input = document.getElementById('messageInput');
+  if (!input || !appState.activeConversationId || appState.currentView !== 'messagesView') return;
+  const isMobileLike = window.matchMedia('(max-width: 991.98px), (pointer: coarse)').matches;
+  if (isMobileLike) return;
+  requestAnimationFrame(() => {
+    if (document.activeElement === input) return;
+    input.focus({ preventScroll: true });
+  });
+}
+
 function renderMessages(options = {}) {
   const { autoScroll = true, forceBottom = false } = options;
   const listEl = getMessageScrollContainer() || normalizeChatScrollContainer() || document.getElementById('messageList');
@@ -6550,6 +6561,7 @@ function renderMessages(options = {}) {
     scrollMessagesToBottom({ force: true });
   }
   renderComposerState();
+  focusMessageInputForDesktop();
   const renderRoomId = conv.id;
   refreshCurrentUserMuteState(conv.id)
     .then(() => {
