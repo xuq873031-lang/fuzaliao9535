@@ -371,9 +371,76 @@
                           <label for="signatureInput" class="form-label">签名</label>
                           <input id="signatureInput" class="form-control" />
                         </div>
-                        <div class="mb-3 d-flex align-items-center gap-2">
-                          <label class="form-label mb-0">主题</label>
-                          <button id="toggleThemeBtn" class="btn btn-outline-secondary btn-sm">切换明/暗</button>
+                        <div class="theme-settings-panel mb-3">
+                          <div class="theme-panel-head">
+                            <div>
+                              <div class="theme-panel-title">主题设置</div>
+                              <div class="theme-panel-sub">即时切换外观，自动保留你的偏好</div>
+                            </div>
+                          </div>
+                          <div class="theme-panel-group">
+                            <div class="theme-panel-label">预设主题</div>
+                            <div class="theme-preset-grid">
+                              <button class="theme-preset-card" type="button" data-theme-preset="classic">
+                                <span class="theme-preset-preview theme-preset-preview-classic"></span>
+                                <span class="theme-preset-name">经典日间</span>
+                              </button>
+                              <button class="theme-preset-card" type="button" data-theme-preset="bright">
+                                <span class="theme-preset-preview theme-preset-preview-bright"></span>
+                                <span class="theme-preset-name">标准亮色调</span>
+                              </button>
+                              <button class="theme-preset-card" type="button" data-theme-preset="night">
+                                <span class="theme-preset-preview theme-preset-preview-night"></span>
+                                <span class="theme-preset-name">夜间配色</span>
+                              </button>
+                              <button class="theme-preset-card" type="button" data-theme-preset="clean">
+                                <span class="theme-preset-preview theme-preset-preview-clean"></span>
+                                <span class="theme-preset-name">简洁模式</span>
+                              </button>
+                            </div>
+                          </div>
+                          <div class="theme-panel-group">
+                            <div class="theme-panel-label">主题主色</div>
+                            <div class="theme-accent-row">
+                              <button class="theme-accent-dot" type="button" data-theme-accent="blue" aria-label="蓝色"></button>
+                              <button class="theme-accent-dot" type="button" data-theme-accent="red" aria-label="红色"></button>
+                              <button class="theme-accent-dot" type="button" data-theme-accent="orange" aria-label="橙色"></button>
+                              <button class="theme-accent-dot" type="button" data-theme-accent="yellow" aria-label="黄色"></button>
+                              <button class="theme-accent-dot" type="button" data-theme-accent="green" aria-label="绿色"></button>
+                              <button class="theme-accent-dot" type="button" data-theme-accent="cyan" aria-label="青色"></button>
+                              <button class="theme-accent-dot" type="button" data-theme-accent="purple" aria-label="紫色"></button>
+                              <button class="theme-accent-dot" type="button" data-theme-accent="pink" aria-label="粉色"></button>
+                            </div>
+                          </div>
+                          <div class="theme-panel-group">
+                            <div class="theme-toggle-list">
+                              <label class="theme-toggle-item" for="themeNightSwitch">
+                                <span>
+                                  <span class="theme-toggle-title">夜间模式</span>
+                                  <span class="theme-toggle-sub">立即切换整体深浅色</span>
+                                </span>
+                                <span class="form-check form-switch m-0">
+                                  <input id="themeNightSwitch" class="form-check-input" type="checkbox" role="switch" />
+                                </span>
+                              </label>
+                              <label class="theme-toggle-item" for="themeBubbleSwitch">
+                                <span>
+                                  <span class="theme-toggle-title">气泡模式</span>
+                                  <span class="theme-toggle-sub">让聊天气泡层次更明显</span>
+                                </span>
+                                <span class="form-check form-switch m-0">
+                                  <input id="themeBubbleSwitch" class="form-check-input" type="checkbox" role="switch" />
+                                </span>
+                              </label>
+                              <button id="themeBackgroundBtn" class="theme-entry-btn" type="button">
+                                <span>
+                                  <span class="theme-toggle-title">聊天背景</span>
+                                  <span class="theme-toggle-sub">入口已预留，下一版可继续扩展</span>
+                                </span>
+                                <i class="bi bi-chevron-right"></i>
+                              </button>
+                            </div>
+                          </div>
                         </div>
                         <button id="saveProfileBtn" class="btn btn-primary">保存资料</button>
                       </div>

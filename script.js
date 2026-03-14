@@ -5,6 +5,9 @@
 const STORAGE_KEYS = {
   token: 'chatwave_token',
   theme: 'chatwave_theme',
+  themePreset: 'chatwave_theme_preset',
+  themeAccent: 'chatwave_theme_accent',
+  themeBubble: 'chatwave_theme_bubble',
   apiBase: 'chat_api_base',
   wsBase: 'chat_ws_base'
 };
@@ -124,6 +127,15 @@ let appState = {
     remoteStream: null
   }
 };
+
+const THEME_PRESETS = {
+  classic: { mode: 'light', accent: 'blue', bubble: 'off' },
+  bright: { mode: 'light', accent: 'cyan', bubble: 'off' },
+  night: { mode: 'dark', accent: 'purple', bubble: 'on' },
+  clean: { mode: 'light', accent: 'green', bubble: 'off' }
+};
+
+const THEME_ACCENTS = ['blue', 'red', 'orange', 'yellow', 'green', 'cyan', 'purple', 'pink'];
 
 // ============================
 // 工具方法
@@ -929,9 +941,72 @@ function markLatestPendingAsFailed(roomId) {
   }
 }
 
+function getThemeSettings() {
+  const preset = localStorage.getItem(STORAGE_KEYS.themePreset) || 'classic';
+  const accent = localStorage.getItem(STORAGE_KEYS.themeAccent) || THEME_PRESETS[preset]?.accent || 'blue';
+  const theme = localStorage.getItem(STORAGE_KEYS.theme) || THEME_PRESETS[preset]?.mode || 'light';
+  const bubble = localStorage.getItem(STORAGE_KEYS.themeBubble) || THEME_PRESETS[preset]?.bubble || 'off';
+  return {
+    preset: THEME_PRESETS[preset] ? preset : 'classic',
+    accent: THEME_ACCENTS.includes(accent) ? accent : 'blue',
+    theme: theme === 'dark' ? 'dark' : 'light',
+    bubble: bubble === 'on' ? 'on' : 'off'
+  };
+}
+
+function updateThemeMetaColor(theme, accent) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  const palette = {
+    blue: ['#6f8fcb', '#0f1823'],
+    red: ['#dd6f75', '#1d1418'],
+    orange: ['#dc9057', '#20160f'],
+    yellow: ['#d3af4d', '#201b10'],
+    green: ['#62af84', '#122018'],
+    cyan: ['#57aeb3', '#102024'],
+    purple: ['#8a7cc7', '#151325'],
+    pink: ['#d97ea8', '#22131d']
+  };
+  const entry = palette[accent] || palette.blue;
+  meta.setAttribute('content', theme === 'dark' ? entry[1] : entry[0]);
+}
+
+function syncThemeSettingsPanel() {
+  const settings = getThemeSettings();
+  document.querySelectorAll('[data-theme-preset]').forEach((el) => {
+    el.classList.toggle('active', el.dataset.themePreset === settings.preset);
+  });
+  document.querySelectorAll('[data-theme-accent]').forEach((el) => {
+    el.classList.toggle('active', el.dataset.themeAccent === settings.accent);
+  });
+  const nightSwitch = document.getElementById('themeNightSwitch');
+  const bubbleSwitch = document.getElementById('themeBubbleSwitch');
+  if (nightSwitch) nightSwitch.checked = settings.theme === 'dark';
+  if (bubbleSwitch) bubbleSwitch.checked = settings.bubble === 'on';
+}
+
+function applyThemeSettings(nextSettings, persist = true) {
+  const settings = {
+    ...getThemeSettings(),
+    ...nextSettings
+  };
+  const root = document.documentElement;
+  root.setAttribute('data-bs-theme', settings.theme === 'dark' ? 'dark' : 'light');
+  root.setAttribute('data-theme-preset', THEME_PRESETS[settings.preset] ? settings.preset : 'classic');
+  root.setAttribute('data-accent', THEME_ACCENTS.includes(settings.accent) ? settings.accent : 'blue');
+  root.setAttribute('data-bubble-mode', settings.bubble === 'on' ? 'on' : 'off');
+  if (persist) {
+    localStorage.setItem(STORAGE_KEYS.theme, settings.theme);
+    localStorage.setItem(STORAGE_KEYS.themePreset, settings.preset);
+    localStorage.setItem(STORAGE_KEYS.themeAccent, settings.accent);
+    localStorage.setItem(STORAGE_KEYS.themeBubble, settings.bubble);
+  }
+  updateThemeMetaColor(settings.theme, settings.accent);
+  syncThemeSettingsPanel();
+}
+
 function setTheme(theme) {
-  document.documentElement.setAttribute('data-bs-theme', theme);
-  localStorage.setItem(STORAGE_KEYS.theme, theme);
+  applyThemeSettings({ theme: theme === 'dark' ? 'dark' : 'light' });
 }
 
 function showAuth() {
@@ -3241,11 +3316,42 @@ function bindProfileEvents() {
     }
   });
 
-  const toggleThemeBtn = document.getElementById('toggleThemeBtn');
-  if (toggleThemeBtn) toggleThemeBtn.addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-bs-theme') || 'light';
-    setTheme(current === 'light' ? 'dark' : 'light');
+  document.querySelectorAll('[data-theme-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const preset = btn.dataset.themePreset;
+      const next = THEME_PRESETS[preset];
+      if (!next) return;
+      applyThemeSettings({ preset, theme: next.mode, accent: next.accent, bubble: next.bubble });
+    });
   });
+
+  document.querySelectorAll('[data-theme-accent]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const accent = btn.dataset.themeAccent;
+      applyThemeSettings({ accent });
+    });
+  });
+
+  const themeNightSwitch = document.getElementById('themeNightSwitch');
+  if (themeNightSwitch) {
+    themeNightSwitch.addEventListener('change', () => {
+      applyThemeSettings({ theme: themeNightSwitch.checked ? 'dark' : 'light' });
+    });
+  }
+
+  const themeBubbleSwitch = document.getElementById('themeBubbleSwitch');
+  if (themeBubbleSwitch) {
+    themeBubbleSwitch.addEventListener('change', () => {
+      applyThemeSettings({ bubble: themeBubbleSwitch.checked ? 'on' : 'off' });
+    });
+  }
+
+  const themeBackgroundBtn = document.getElementById('themeBackgroundBtn');
+  if (themeBackgroundBtn) {
+    themeBackgroundBtn.addEventListener('click', () => {
+      alert('聊天背景入口已预留，下一版可继续扩展。');
+    });
+  }
 }
 
 function renderProfile() {
@@ -3256,6 +3362,7 @@ function renderProfile() {
   if (desktopRailAvatar) desktopRailAvatar.src = avatar;
   document.getElementById('nicknameInput').value = appState.currentUser.nickname || '';
   document.getElementById('signatureInput').value = appState.currentUser.signature || '';
+  syncThemeSettingsPanel();
 }
 
 function updateUserHeader() {
@@ -7159,8 +7266,7 @@ async function init() {
 
   localStorage.removeItem('token');
 
-  const theme = localStorage.getItem(STORAGE_KEYS.theme) || 'light';
-  setTheme(theme);
+  applyThemeSettings(getThemeSettings(), false);
 
   bindAuthEvents();
   bindNavigationEvents();
