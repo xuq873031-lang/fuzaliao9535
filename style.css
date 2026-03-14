@@ -146,6 +146,7 @@ body.main-open .app-shell {
   height: 100%;
   min-height: 0;
   margin: 0;
+  --bs-gutter-x: 0.5rem;
 }
 
 body.main-open .main-card {
@@ -178,6 +179,14 @@ body.main-open .conversation-list {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
+}
+
+body.main-open .sidebar-card.tg-rail-shell {
+  margin-right: 2px;
+}
+
+body.main-open .main-card {
+  margin-left: 0;
 }
 
 body.main-open #chatHeader,
@@ -5251,7 +5260,7 @@ body,
 }
 
 .tg-conversation-header {
-  padding-bottom: 14px !important;
+  padding: 12px 14px 8px !important;
 }
 
 .tg-filter-tabs {
@@ -5264,7 +5273,7 @@ body,
 }
 
 .conversation-list {
-  padding: 4px 12px 16px;
+  padding: 2px 8px 12px;
 }
 
 .conversation-item-btn {
@@ -5484,7 +5493,7 @@ body,
 .chat-home-topbar {
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .chat-home-title {
@@ -5540,12 +5549,12 @@ body,
 }
 
 .conversation-list {
-  padding: 6px 0 10px;
+  padding: 2px 0 8px;
 }
 
 .conversation-item-btn {
   margin-bottom: 0;
-  padding: 14px 16px !important;
+  padding: 13px 14px !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
@@ -5873,6 +5882,23 @@ body.chat-split-resizing {
 
 .search-panel-dialog {
   max-width: min(720px, calc(100vw - 32px));
+}
+
+#mainContainer > .row.app-shell {
+  --bs-gutter-x: 0.5rem;
+}
+
+#mainContainer > .row.app-shell > aside {
+  padding-right: 4px;
+}
+
+#mainContainer > .row.app-shell > main {
+  padding-left: 4px;
+}
+
+#createGroupBtn[disabled] {
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 
 .search-panel-content {

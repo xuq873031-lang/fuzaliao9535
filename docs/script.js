@@ -4493,7 +4493,10 @@ async function openPrivateChatWith(friendId) {
 // 群组系统
 // ============================
 function bindGroupEvents() {
-  document.getElementById('createGroupBtn').addEventListener('click', async () => {
+  const createGroupBtn = document.getElementById('createGroupBtn');
+  if (!createGroupBtn) return;
+  createGroupBtn.addEventListener('click', async () => {
+    if (createGroupBtn.disabled) return;
     const name = document.getElementById('groupNameInput').value.trim();
     if (!name) {
       alert('请输入群名称');
@@ -4503,6 +4506,7 @@ function bindGroupEvents() {
     const checkedIds = [...document.querySelectorAll('.group-member-check:checked')].map((i) => Number(i.value));
 
     try {
+      setButtonLoading(createGroupBtn, true, '创建中...', '创建');
       await apiCreateRoom(name, checkedIds);
       await refreshRoomsAndMessages();
       await refreshUnreadCounts();
@@ -4518,6 +4522,8 @@ function bindGroupEvents() {
       if (modal) modal.hide();
     } catch (err) {
       alert(`创建群聊失败：${err.message}`);
+    } finally {
+      setButtonLoading(createGroupBtn, false, '创建中...', '创建');
     }
   });
 
