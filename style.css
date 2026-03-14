@@ -5866,3 +5866,103 @@ body.chat-split-resizing {
     min-width: 300px;
   }
 }
+
+/* Auth layout restore */
+#authContainer {
+  display: block !important;
+  width: 100%;
+  max-width: 100%;
+}
+
+#authContainer > .row {
+  width: 100%;
+  margin: 0;
+}
+
+#authContainer > .row > [class*="col-"] {
+  width: 100%;
+  max-width: 560px;
+  flex: 0 0 100%;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  margin: 0 auto;
+}
+
+#authContainer .card-body,
+#loginPage,
+#registerPage,
+#loginForm,
+#registerForm {
+  width: 100%;
+  min-width: 0;
+}
+
+#authContainer h2,
+#authContainer h5,
+#authContainer .form-label,
+#authContainer .btn-link,
+#authContainer .form-check-label {
+  word-break: normal;
+  overflow-wrap: normal;
+  white-space: normal;
+}
+
+#authContainer .form-control,
+#authContainer .btn-primary,
+#authContainer .btn-success,
+#authContainer .btn-link {
+  width: 100%;
+}
+
+#authContainer .btn-link {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+#authContainer .text-center {
+  text-align: center !important;
+}
+
+#authContainer .form-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+#authContainer .form-check-input {
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+
+#authContainer .form-check-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+@media (max-width: 767.98px) {
+  #authContainer {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  #authContainer > .row > [class*="col-"] {
+    max-width: 100%;
+  }
+
+  .auth-card {
+    max-width: none;
+  }
+
+  #authContainer .card-body {
+    padding: 24px !important;
+  }
+}
