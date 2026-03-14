@@ -3420,3 +3420,7 @@ body {
 .mobile-tab.active {
   color: #7590c5;
 }
+
+#loadMoreBtn:disabled {
+  display: none !important;
+}
