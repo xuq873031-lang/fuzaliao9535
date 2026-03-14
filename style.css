@@ -5868,10 +5868,14 @@ body.chat-split-resizing {
 }
 
 /* Auth layout restore */
-#authContainer {
+#authContainer:not(.d-none) {
   display: block !important;
   width: 100%;
   max-width: 100%;
+}
+
+#authContainer.d-none {
+  display: none !important;
 }
 
 #authContainer > .row {
