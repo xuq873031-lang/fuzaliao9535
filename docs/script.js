@@ -3293,19 +3293,10 @@ function bindNavigationEvents() {
   document.getElementById('logoutBtn').addEventListener('click', logout);
   document.getElementById('mobileLogoutBtn').addEventListener('click', logout);
 
-  const conversationSearchInput = document.getElementById('conversationSearchInput');
-  if (conversationSearchInput) {
-    conversationSearchInput.addEventListener('input', (e) => {
-      appState.conversationSearchKeyword = String(e.target.value || '');
-      renderConversationList();
-    });
-  }
   const conversationSearchFocusBtn = document.getElementById('conversationSearchFocusBtn');
-  if (conversationSearchFocusBtn && conversationSearchInput) {
+  if (conversationSearchFocusBtn) {
     conversationSearchFocusBtn.addEventListener('click', () => {
-      switchView('messagesView');
-      conversationSearchInput.focus();
-      conversationSearchInput.select();
+      openGlobalSearchModal();
     });
   }
 
@@ -3372,6 +3363,7 @@ function bindChatSplitResize() {
   const rightPane = document.querySelector('#messagesView .chat-pane');
   const handle = document.getElementById('chatSplitHandle');
   if (!layout || !leftPane || !rightPane || !handle) return;
+  const isDesktopLike = () => !window.matchMedia('(max-width: 991.98px), (pointer: coarse)').matches;
 
   const getBounds = () => {
     const total = layout.clientWidth || window.innerWidth || 1200;
@@ -3392,7 +3384,7 @@ function bindChatSplitResize() {
   };
 
   const saved = Number(localStorage.getItem(STORAGE_KEYS.chatSplitWidth) || 0);
-  if (saved > 0) applyWidth(saved);
+  if (saved > 0 && isDesktopLike()) applyWidth(saved);
 
   let dragging = false;
   let pointerId = null;
@@ -3410,6 +3402,7 @@ function bindChatSplitResize() {
   };
 
   handle.addEventListener('pointerdown', (event) => {
+    if (!isDesktopLike()) return;
     dragging = true;
     pointerId = event.pointerId;
     handle.setPointerCapture(pointerId);
@@ -3421,9 +3414,200 @@ function bindChatSplitResize() {
   handle.addEventListener('pointerup', stopDrag);
   handle.addEventListener('pointercancel', stopDrag);
   window.addEventListener('resize', () => {
+    if (!isDesktopLike()) {
+      stopDrag();
+      return;
+    }
     const current = Number(getComputedStyle(document.documentElement).getPropertyValue('--chat-split-width').replace('px', '')) || saved || 360;
     applyWidth(current);
   }, { passive: true });
+}
+
+function getGlobalSearchActiveTab() {
+  return document.querySelector('.search-panel-tab.active')?.dataset.searchTab || 'chats';
+}
+
+function setGlobalSearchTab(tab) {
+  document.querySelectorAll('.search-panel-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.searchTab === tab);
+  });
+}
+
+function buildGlobalSearchResults(tab, keyword) {
+  const lower = String(keyword || '').trim().toLowerCase();
+  if (tab === 'contacts') {
+    return appState.friends
+      .filter((friend) => {
+        if (!lower) return true;
+        const name = String(getDisplayNameByUserId(friend.id) || '').toLowerCase();
+        const signature = String(appState.userMap[friend.id]?.signature || friend.signature || '').toLowerCase();
+        return name.includes(lower) || signature.includes(lower);
+      })
+      .map((friend) => ({
+        key: `contact-${friend.id}`,
+        type: 'contact',
+        id: friend.id,
+        title: getDisplayNameByUserId(friend.id),
+        subtitle: getFriendStatusText(friend),
+        avatar: appState.userMap[friend.id]?.avatar || DEFAULT_AVATAR
+      }));
+  }
+
+  if (tab === 'groups') {
+    return appState.conversations
+      .filter((conv) => conv.type === 'group')
+      .filter((conv) => {
+        if (!lower) return true;
+        const title = String(getConversationTitle(conv) || '').toLowerCase();
+        const desc = String(conv.description || '').toLowerCase();
+        return title.includes(lower) || desc.includes(lower);
+      })
+      .map((conv) => ({
+        key: `group-${conv.id}`,
+        type: 'group',
+        id: conv.id,
+        title: getConversationTitle(conv),
+        subtitle: `${conv.memberCount || (conv.members || []).length}人群聊`,
+        avatar: getConversationAvatar(conv)
+      }));
+  }
+
+  if (tab === 'photos') {
+    const rows = [];
+    appState.conversations.forEach((conv) => {
+      (conv.messages || []).forEach((msg) => {
+        const parsed = parseImageMessageContent(msg.text);
+        if (!parsed?.url) return;
+        const title = getConversationTitle(conv);
+        const haystack = `${title} ${parsed.caption || ''}`.toLowerCase();
+        if (lower && !haystack.includes(lower)) return;
+        rows.push({
+          key: `photo-${conv.id}-${msg.id || msg.createdAt}`,
+          type: 'photo',
+          id: conv.id,
+          title,
+          subtitle: parsed.caption || formatConversationTime(msg.createdAt) || '图片消息',
+          avatar: parsed.url,
+          photoUrl: parsed.url,
+          meta: `${title} · ${formatConversationTime(msg.createdAt) || ''}`.replace(/ · $/, '')
+        });
+      });
+    });
+    return rows.sort((a, b) => String(b.key).localeCompare(String(a.key))).slice(0, 60);
+  }
+
+  return appState.conversations
+    .filter((conv) => {
+      if (!lower) return true;
+      const title = String(getConversationTitle(conv) || '').toLowerCase();
+      const lastMsg = String((conv.messages || []).slice(-1)[0]?.text || '').toLowerCase();
+      return title.includes(lower) || lastMsg.includes(lower);
+    })
+    .map((conv) => {
+      const lastMsg = (conv.messages || []).slice(-1)[0];
+      return {
+        key: `chat-${conv.id}`,
+        type: 'chat',
+        id: conv.id,
+        title: getConversationTitle(conv),
+        subtitle: lastMsg ? summarizeMessageText(lastMsg.text) : (conv.type === 'group' ? '群聊' : '暂无消息'),
+        avatar: getConversationAvatar(conv),
+        badge: conv.type === 'group' ? '群组' : '聊天'
+      };
+    });
+}
+
+function renderGlobalSearchResults() {
+  const box = document.getElementById('globalSearchResults');
+  const input = document.getElementById('globalSearchInput');
+  if (!box) return;
+  const rows = buildGlobalSearchResults(getGlobalSearchActiveTab(), input?.value || '');
+  if (!rows.length) {
+    box.innerHTML = '<div class="search-panel-empty">没有找到结果</div>';
+    return;
+  }
+  box.innerHTML = rows.map((row) => {
+    if (row.type === 'photo') {
+      return `
+        <button class="search-result-item search-result-photo" type="button" data-result-type="${row.type}" data-result-id="${row.id}" data-photo-url="${escapeHtml(row.photoUrl)}" data-photo-meta="${escapeHtml(row.meta || '')}">
+          <img src="${escapeHtml(row.avatar)}" class="search-result-photo-thumb" alt="photo" />
+          <span class="search-result-main">
+            <span class="search-result-title">${escapeHtml(row.title)}</span>
+            <span class="search-result-sub">${escapeHtml(row.subtitle)}</span>
+          </span>
+        </button>
+      `;
+    }
+    return `
+      <button class="search-result-item" type="button" data-result-type="${row.type}" data-result-id="${row.id}">
+        <img src="${escapeHtml(row.avatar)}" class="search-result-avatar" alt="avatar" />
+        <span class="search-result-main">
+          <span class="search-result-title">${escapeHtml(row.title)}</span>
+          <span class="search-result-sub">${escapeHtml(row.subtitle || '')}</span>
+        </span>
+        ${row.badge ? `<span class="search-result-badge">${escapeHtml(row.badge)}</span>` : ''}
+      </button>
+    `;
+  }).join('');
+}
+
+function openGlobalSearchModal() {
+  const modalEl = document.getElementById('globalSearchModal');
+  if (!modalEl) return;
+  setGlobalSearchTab('chats');
+  const input = document.getElementById('globalSearchInput');
+  if (input) input.value = '';
+  renderGlobalSearchResults();
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  setTimeout(() => {
+    if (input) input.focus();
+  }, 120);
+}
+
+function bindGlobalSearchModal() {
+  const modalEl = document.getElementById('globalSearchModal');
+  const input = document.getElementById('globalSearchInput');
+  const box = document.getElementById('globalSearchResults');
+  if (!modalEl || !input || !box) return;
+
+  document.querySelectorAll('.search-panel-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setGlobalSearchTab(btn.dataset.searchTab || 'chats');
+      renderGlobalSearchResults();
+    });
+  });
+
+  input.addEventListener('input', () => {
+    renderGlobalSearchResults();
+  });
+
+  modalEl.addEventListener('shown.bs.modal', () => {
+    renderGlobalSearchResults();
+    input.focus();
+  });
+
+  box.addEventListener('click', (event) => {
+    const trigger = event.target.closest('.search-result-item');
+    if (!trigger) return;
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    const type = trigger.dataset.resultType;
+    const id = Number(trigger.dataset.resultId || 0);
+    if (modal) modal.hide();
+    if (type === 'contact' && id) {
+      switchView('friendsView');
+      setTimeout(() => openFriendProfileModal(id), 120);
+      return;
+    }
+    if ((type === 'chat' || type === 'group') && id) {
+      switchView('messagesView', { keepRoom: true });
+      activateConversation(id, { autoScroll: true });
+      return;
+    }
+    if (type === 'photo') {
+      openPhotoPreview(trigger.dataset.photoUrl || '', trigger.dataset.photoMeta || '');
+    }
+  });
 }
 
 function bindProfileEvents() {
@@ -7471,6 +7655,7 @@ async function init() {
   bindFriendEvents();
   bindGroupEvents();
   bindChatEvents();
+  bindGlobalSearchModal();
   bindChatSplitResize();
   document.addEventListener('click', () => ensureAudioContext(), { once: true });
   document.addEventListener('touchstart', () => ensureAudioContext(), { once: true, passive: true });

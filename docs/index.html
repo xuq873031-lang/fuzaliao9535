@@ -143,8 +143,7 @@
                 <div class="row g-0 h-100 flex-grow-1 chat-layout-row">
                   <div class="col-12 col-lg-4 border-end conversation-pane tg-conversation-pane">
                     <div class="p-3 border-bottom tg-conversation-header">
-                      <div class="chat-home-topbar mb-3">
-                        <span class="chat-home-topbar-side"></span>
+                      <div class="chat-home-topbar">
                         <h5 class="mb-0 chat-home-title">聊天</h5>
                         <div class="chat-home-actions">
                           <button id="conversationSearchFocusBtn" class="btn btn-sm tg-create-btn chat-home-action" type="button" aria-label="搜索">
@@ -160,10 +159,6 @@
                             </ul>
                           </div>
                         </div>
-                      </div>
-                      <div class="input-group input-group-sm flex-grow-1 tg-search-wrap">
-                        <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
-                        <input id="conversationSearchInput" class="form-control border-0 shadow-none" placeholder="搜索会话" />
                       </div>
                     </div>
                     <div id="conversationList" class="list-group list-group-flush conversation-list"></div>
@@ -1121,6 +1116,29 @@
             <div class="modal-footer">
               <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
               <button id="confirmForwardBtn" class="btn btn-success">一键转发</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="globalSearchModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg search-panel-dialog">
+          <div class="modal-content rounded-4 search-panel-content">
+            <div class="modal-header search-panel-header">
+              <div class="search-panel-input-wrap">
+                <i class="bi bi-search search-panel-input-icon"></i>
+                <input id="globalSearchInput" class="form-control search-panel-input" placeholder="搜索聊天、联系人、群组或照片" />
+              </div>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body search-panel-body">
+              <div class="search-panel-tabs" role="tablist" aria-label="搜索分类">
+                <button class="search-panel-tab active" type="button" data-search-tab="chats">聊天</button>
+                <button class="search-panel-tab" type="button" data-search-tab="contacts">联系人</button>
+                <button class="search-panel-tab" type="button" data-search-tab="groups">群组</button>
+                <button class="search-panel-tab" type="button" data-search-tab="photos">照片</button>
+              </div>
+              <div id="globalSearchResults" class="search-panel-results"></div>
             </div>
           </div>
         </div>
