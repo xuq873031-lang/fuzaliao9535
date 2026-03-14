@@ -4544,3 +4544,139 @@ body {
 #loadMoreBtn:disabled {
   display: none !important;
 }
+
+/* ============================
+   七次收口：输入框/聊天背景/滚动修复
+============================ */
+
+#chatComposer,
+#chatComposer .input-group,
+#chatComposer .input-group-text,
+#chatHeader,
+#messagesView .chat-pane,
+#messagesView .conversation-pane,
+#messagesView .chat-empty-state,
+#messagesView #messageList,
+#messagesView .message-list {
+  background: var(--bg-panel) !important;
+}
+
+#messagesView #messageList,
+#messagesView .message-list,
+#messagesView .chat-empty-state {
+  background:
+    radial-gradient(circle at top right, rgba(var(--tg-primary-rgb), 0.07), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(var(--tg-primary-rgb), 0.05), transparent 32%),
+    var(--bg-soft) !important;
+}
+
+#messageInput {
+  background: var(--input-bg) !important;
+  color: var(--input-text) !important;
+  caret-color: var(--accent-color) !important;
+  -webkit-text-fill-color: var(--input-text);
+  border-color: var(--border-soft) !important;
+}
+
+#messageInput::placeholder {
+  color: var(--input-placeholder) !important;
+  opacity: 1 !important;
+}
+
+#messageInput:focus,
+#messageInput:active {
+  background: var(--input-bg) !important;
+  color: var(--input-text) !important;
+  caret-color: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 0 0.18rem rgba(var(--tg-primary-rgb), 0.16) !important;
+}
+
+#messageInput:disabled {
+  color: var(--text-secondary) !important;
+  -webkit-text-fill-color: var(--text-secondary);
+  background: var(--bg-soft) !important;
+}
+
+body.main-open .main-card > .card-body {
+  min-height: 0;
+}
+
+.contacts-view:not(.d-none),
+.profile-view:not(.d-none),
+#groupsView:not(.d-none) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+
+#friendsView .contacts-shell,
+#friendsView .contacts-shell .card-body,
+#profileView .row,
+#groupsView {
+  min-height: 0;
+}
+
+#friendsView .contacts-shell .card-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.main-open .conversation-list,
+body.main-open #messageList,
+.conversation-list,
+.message-list,
+#incomingRequestList,
+#outgoingRequestList,
+#friendSearchResults,
+#groupList {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 991.98px) {
+  body.main-open {
+    overflow-y: auto;
+  }
+
+  body.main-open #appRoot,
+  body.main-open #mainContainer,
+  body.main-open .app-shell,
+  body.main-open .main-card,
+  body.main-open .main-card > .card-body {
+    height: auto !important;
+    min-height: 0;
+    overflow: visible !important;
+  }
+
+  #messagesView:not(.d-none) {
+    min-height: calc(var(--app-dvh) - 68px);
+  }
+
+  #messagesView .conversation-pane,
+  #messagesView .chat-pane {
+    min-height: 0;
+  }
+
+  #friendsView:not(.d-none),
+  #profileView:not(.d-none),
+  #groupsView:not(.d-none) {
+    min-height: calc(var(--app-dvh) - 82px);
+  }
+
+  #friendsView .contacts-shell .card-body,
+  #profileView,
+  #groupsView {
+    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .conversation-list,
+  #friendListWrap,
+  #groupList,
+  #messageList {
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
