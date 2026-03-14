@@ -6124,60 +6124,6 @@ body.chat-split-resizing {
   flex: 0 0 auto;
 }
 
-#authContainer {
-  display: flex;
-  align-items: center;
-}
-
-.auth-card {
-  background: color-mix(in srgb, var(--panel-bg) 92%, var(--bg-secondary)) !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 28px !important;
-  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.22);
-}
-
-#authContainer .card-body {
-  padding: 32px !important;
-}
-
-#authContainer .card-body h2,
-#authContainer .form-label,
-#authContainer .form-check-label,
-#authContainer .text-secondary,
-#authContainer .small {
-  color: var(--text-primary) !important;
-}
-
-#authContainer .form-check-label.small.text-secondary,
-#authContainer .text-secondary.small {
-  color: var(--text-secondary) !important;
-}
-
-#authContainer .form-control {
-  background: var(--input-bg) !important;
-  color: var(--input-text) !important;
-  border-color: var(--border-color) !important;
-}
-
-#authContainer .form-control::placeholder {
-  color: var(--placeholder-color) !important;
-}
-
-#authContainer .form-check-input {
-  background-color: var(--input-bg);
-  border-color: var(--border-color);
-}
-
-#authContainer .btn-primary,
-#authContainer .btn-success {
-  color: var(--text-on-accent);
-}
-
-#authContainer a,
-#authContainer .btn-link {
-  color: var(--accent-color);
-}
-
 @media (max-width: 991.98px) {
   :root {
     --chat-split-width: 320px;
@@ -6215,35 +6161,6 @@ body.chat-split-resizing {
   .search-panel-results {
     max-height: calc(100dvh - 170px);
   }
-}
-
-/* Auth layout restore */
-#authContainer:not(.d-none) {
-  display: block !important;
-  width: 100%;
-  max-width: 100%;
-}
-
-#authContainer.d-none {
-  display: none !important;
-}
-
-#authContainer > .row {
-  width: 100%;
-  margin: 0;
-}
-
-#authContainer > .row > [class*="col-"] {
-  width: 100%;
-  max-width: 560px;
-  flex: 0 0 100%;
-}
-
-.auth-card {
-  width: 100%;
-  max-width: 560px;
-  min-width: 0;
-  margin: 0 auto;
 }
 
 /* Layout spacing tune */
@@ -6296,77 +6213,45 @@ body.chat-split-resizing {
   }
 }
 
-#authContainer .card-body,
-#loginPage,
-#registerPage,
-#loginForm,
-#registerForm {
-  width: 100%;
-  min-width: 0;
+/* Chat-only surface and spacing fix */
+body.main-open #messagesView .conversation-pane,
+body.main-open #messagesView .chat-pane,
+body.main-open #messagesView .conversation-list,
+body.main-open #messagesView .message-list,
+body.main-open #messagesView .chat-empty-state {
+  background: var(--bg-primary) !important;
 }
 
-#authContainer h2,
-#authContainer h5,
-#authContainer .form-label,
-#authContainer .btn-link,
-#authContainer .form-check-label {
-  word-break: normal;
-  overflow-wrap: normal;
-  white-space: normal;
+body.main-open #messagesView .tg-conversation-header,
+body.main-open #messagesView #chatHeader,
+body.main-open #messagesView #chatComposer {
+  background: var(--panel-bg) !important;
+  border-color: color-mix(in srgb, var(--border-color) 70%, transparent) !important;
+  box-shadow: none !important;
 }
 
-#authContainer .form-control,
-#authContainer .btn-primary,
-#authContainer .btn-success,
-#authContainer .btn-link {
-  width: 100%;
+body.main-open #messagesView .tg-conversation-header {
+  padding: 10px 12px 6px !important;
 }
 
-#authContainer .btn-link {
-  display: inline-flex;
-  width: auto;
-  max-width: 100%;
-  justify-content: center;
-  white-space: nowrap;
+body.main-open #messagesView #chatHeader {
+  padding: 12px 14px !important;
 }
 
-#authContainer .text-center {
-  text-align: center !important;
+body.main-open #messagesView #chatComposer {
+  padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
 }
 
-#authContainer .form-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
+body.main-open #messagesView .conversation-list {
+  padding: 0 4px 8px;
 }
 
-#authContainer .form-check-input {
-  flex: 0 0 auto;
-  margin-top: 0.2rem;
+body.main-open #messagesView .conversation-item-btn {
+  padding: 13px 12px !important;
 }
 
-#authContainer .form-check-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  line-height: 1.45;
-}
-
-@media (max-width: 767.98px) {
-  #authContainer {
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  #authContainer > .row > [class*="col-"] {
-    max-width: 100%;
-  }
-
-  .auth-card {
-    max-width: none;
-  }
-
-  #authContainer .card-body {
-    padding: 24px !important;
-  }
+body.main-open .mobile-topbar,
+body.main-open .mobile-tabbar {
+  background: color-mix(in srgb, var(--panel-bg) 94%, var(--bg-primary)) !important;
+  border-color: color-mix(in srgb, var(--border-color) 70%, transparent) !important;
 }
