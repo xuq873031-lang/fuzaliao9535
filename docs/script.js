@@ -86,6 +86,7 @@ let appState = {
   roomMyMemberMetaByRoom: {},
   messageRenderLimitByRoom: {},
   pinnedRoomOrder: [],
+  pinnedMessageByRoom: {},
   mutedRoomIds: new Set(),
   emojiPanelOpen: false,
   conversationFilter: 'all',
@@ -223,6 +224,11 @@ function getMuteStorageKey() {
   return `chat_muted_rooms_${uid}`;
 }
 
+function getPinnedMessageStorageKey() {
+  const uid = appState.currentUser?.id || 'guest';
+  return `chat_pinned_messages_${uid}`;
+}
+
 function loadPinnedRoomOrder() {
   try {
     const raw = localStorage.getItem(getPinnedStorageKey());
@@ -238,6 +244,24 @@ function loadPinnedRoomOrder() {
 function savePinnedRoomOrder() {
   try {
     localStorage.setItem(getPinnedStorageKey(), JSON.stringify(appState.pinnedRoomOrder));
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+
+function loadPinnedMessageState() {
+  try {
+    const raw = localStorage.getItem(getPinnedMessageStorageKey());
+    const parsed = JSON.parse(raw || '{}');
+    appState.pinnedMessageByRoom = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    appState.pinnedMessageByRoom = {};
+  }
+}
+
+function savePinnedMessageState() {
+  try {
+    localStorage.setItem(getPinnedMessageStorageKey(), JSON.stringify(appState.pinnedMessageByRoom || {}));
   } catch (_) {
     // ignore storage errors
   }
@@ -263,6 +287,31 @@ function saveConversationMuteState() {
   } catch (_) {
     // ignore storage errors
   }
+}
+
+function getPinnedMessageRecord(roomId) {
+  if (!roomId) return null;
+  return appState.pinnedMessageByRoom?.[String(roomId)] || null;
+}
+
+function setPinnedMessageRecord(roomId, msg) {
+  if (!roomId || !msg) return;
+  if (!appState.pinnedMessageByRoom || typeof appState.pinnedMessageByRoom !== 'object') {
+    appState.pinnedMessageByRoom = {};
+  }
+  appState.pinnedMessageByRoom[String(roomId)] = {
+    id: Number(msg.id),
+    senderId: Number(msg.senderId),
+    text: String(msg.text || ''),
+    createdAt: msg.createdAt || Date.now()
+  };
+  savePinnedMessageState();
+}
+
+function clearPinnedMessageRecord(roomId) {
+  if (!roomId || !appState.pinnedMessageByRoom) return;
+  delete appState.pinnedMessageByRoom[String(roomId)];
+  savePinnedMessageState();
 }
 
 function isConversationPinned(conv) {
@@ -3220,6 +3269,7 @@ function logout() {
   appState.activeConversationId = null;
   appState.messageRenderLimitByRoom = {};
   appState.pinnedRoomOrder = [];
+  appState.pinnedMessageByRoom = {};
 
   if (appState.ws) {
     appState.ws.onclose = null;
@@ -5569,19 +5619,120 @@ function startEditOwnMessage(msg) {
 
 function openMessageActionMenu(msg) {
   appState.actionTargetMessage = msg;
-  const editBtn = document.getElementById('msgActionEditBtn');
-  const recallBtn = document.getElementById('msgActionRecallBtn');
-  const multiBtn = document.getElementById('msgActionMultiBtn');
-  const deleteBtn = document.getElementById('msgActionDeleteBtn');
-  if (editBtn) editBtn.classList.toggle('d-none', !canEditOwnMessage(msg));
-  if (recallBtn) recallBtn.classList.toggle('d-none', !canRecallMessage(msg));
-  if (multiBtn) multiBtn.classList.toggle('d-none', !appState.activeConversationId);
-  if (deleteBtn) {
-    deleteBtn.classList.toggle('d-none', !canDeleteOwnMessage(msg));
-    deleteBtn.textContent = canUseSuperDelete() ? '删除/超级删除' : '删除';
+  hideConversationContextMenu();
+  hideGroupMemberContextMenu();
+  const menu = ensureMessageActionMenu();
+  const roomId = Number(appState.activeConversationId || 0);
+  const pinned = roomId ? getPinnedMessageRecord(roomId) : null;
+  const isPinnedTarget = !!(pinned && Number(pinned.id) === Number(msg.id));
+  const canCopy = !!String(msg.text || '').trim() && !isImageMessageText(msg.text);
+  const canDelete = canDeleteOwnMessage(msg);
+  const canEdit = canEditOwnMessage(msg);
+  const canRecall = canRecallMessage(msg);
+  const canMulti = !!appState.activeConversationId;
+  menu.innerHTML = `
+    <button class="dropdown-item" type="button" data-action="reply"><i class="bi bi-reply me-2"></i>回复</button>
+    ${canCopy ? '<button class="dropdown-item" type="button" data-action="copy"><i class="bi bi-copy me-2"></i>复制</button>' : ''}
+    <button class="dropdown-item" type="button" data-action="forward"><i class="bi bi-send me-2"></i>转发</button>
+    ${canMulti ? '<button class="dropdown-item" type="button" data-action="multi"><i class="bi bi-check2-square me-2"></i>选择</button>' : ''}
+    <button class="dropdown-item" type="button" data-action="pin"><i class="bi bi-pin-angle me-2"></i>${isPinnedTarget ? '取消置顶消息' : '置顶消息'}</button>
+    ${canEdit ? '<button class="dropdown-item" type="button" data-action="edit"><i class="bi bi-pencil-square me-2"></i>编辑</button>' : ''}
+    ${canRecall ? '<button class="dropdown-item" type="button" data-action="recall"><i class="bi bi-arrow-counterclockwise me-2"></i>撤回</button>' : ''}
+    ${canDelete ? `<button class="dropdown-item text-danger" type="button" data-action="delete"><i class="bi bi-trash me-2"></i>${canUseSuperDelete() ? '删除/超级删除' : '删除'}</button>` : ''}
+  `;
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  menu.style.display = 'block';
+  menu.classList.add('show');
+  const anchor = appState.messageActionAnchor || {};
+  const x = Number.isFinite(anchor.x) ? anchor.x : Math.max(12, window.innerWidth / 2 - 90);
+  const y = Number.isFinite(anchor.y) ? anchor.y : Math.max(12, window.innerHeight / 2 - 120);
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+}
+
+function ensureMessageActionMenu() {
+  let menu = document.getElementById('messageActionMenu');
+  if (menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'messageActionMenu';
+  menu.className = 'dropdown-menu message-action-menu';
+  menu.style.position = 'fixed';
+  menu.style.zIndex = '2105';
+  menu.style.display = 'none';
+  document.body.appendChild(menu);
+  return menu;
+}
+
+function hideMessageActionMenu() {
+  const menu = document.getElementById('messageActionMenu');
+  if (!menu || menu.style.display === 'none') return false;
+  menu.style.display = 'none';
+  menu.classList.remove('show');
+  return true;
+}
+
+function closeMessageActionUi() {
+  hideMessageActionMenu();
+  const modalEl = document.getElementById('messageActionModal');
+  if (!modalEl) return;
+  const modal = bootstrap.Modal.getInstance(modalEl);
+  if (modal) modal.hide();
+}
+
+async function copyMessageText(msg) {
+  const raw = String(msg?.text || '').trim();
+  if (!raw || isImageMessageText(raw)) return;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(raw);
+    alert('已复制');
+    return;
   }
-  const modal = new bootstrap.Modal(document.getElementById('messageActionModal'));
-  modal.show();
+  const area = document.createElement('textarea');
+  area.value = raw;
+  area.setAttribute('readonly', 'readonly');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand('copy');
+  area.remove();
+  alert('已复制');
+}
+
+async function jumpToPinnedMessage(roomId, messageId) {
+  const conv = findConversationById(roomId);
+  if (!conv) return;
+  if (!conv.messages.some((m) => Number(m.id) === Number(messageId))) {
+    try {
+      await ensureConversationHistoryLoaded(conv, { maxPages: 6 });
+      renderMessages({ autoScroll: false });
+    } catch (err) {
+      console.warn('加载置顶消息历史失败', err.message);
+    }
+  }
+  jumpToMessageById(messageId);
+}
+
+function renderPinnedMessageBar() {
+  const bar = document.getElementById('pinnedMessageBar');
+  const sender = document.getElementById('pinnedMessageSender');
+  const text = document.getElementById('pinnedMessageText');
+  if (!bar || !sender || !text) return;
+  const roomId = Number(appState.activeConversationId || 0);
+  const conv = findConversationById(roomId);
+  const pinned = roomId ? getPinnedMessageRecord(roomId) : null;
+  if (!conv || !pinned) {
+    bar.classList.add('d-none');
+    return;
+  }
+  const current = conv.messages.find((m) => Number(m.id) === Number(pinned.id));
+  const preview = current || pinned;
+  sender.textContent = getDisplayNameByUserId(preview.senderId) || '消息';
+  text.textContent = summarizeMessageText(preview.text || '');
+  bar.dataset.messageId = String(pinned.id);
+  bar.classList.remove('d-none');
 }
 
 function enterMultiSelectMode(initialMessageId = null) {
@@ -6339,6 +6490,8 @@ function bindChatEvents() {
   const imageComposeSendBtn = document.getElementById('imageComposeSendBtn');
   const imageComposeReplaceBtn = document.getElementById('imageComposeReplaceBtn');
   const imageComposeCaptionInput = document.getElementById('imageComposeCaptionInput');
+  const pinnedMessageBar = document.getElementById('pinnedMessageBar');
+  const clearPinnedMessageBtn = document.getElementById('clearPinnedMessageBtn');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -6414,20 +6567,17 @@ function bindChatEvents() {
   if (actionReplyBtn) actionReplyBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     startReplyMessage(appState.actionTargetMessage);
-    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
-    if (modal) modal.hide();
+    closeMessageActionUi();
   });
   if (actionEditBtn) actionEditBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     startEditOwnMessage(appState.actionTargetMessage);
-    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
-    if (modal) modal.hide();
+    closeMessageActionUi();
   });
   if (actionRecallBtn) actionRecallBtn.addEventListener('click', async () => {
     const msg = appState.actionTargetMessage;
     if (!msg) return;
-    const actionModal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
-    if (actionModal) actionModal.hide();
+    closeMessageActionUi();
     if (!canRecallMessage(msg)) {
       alert('该消息不可撤回');
       return;
@@ -6451,8 +6601,7 @@ function bindChatEvents() {
   if (actionForwardBtn) actionForwardBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
     const msg = appState.actionTargetMessage;
-    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
-    if (modal) modal.hide();
+    closeMessageActionUi();
     openForwardModal(msg);
   });
   if (actionDeleteBtn) actionDeleteBtn.addEventListener('click', () => {
@@ -6472,17 +6621,35 @@ function bindChatEvents() {
       deleteForPeerCheck.checked = false;
       deleteForPeerCheck.disabled = !canSuperDelete;
     }
-    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
-    if (modal) modal.hide();
+    closeMessageActionUi();
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteMessageModal'));
     deleteModal.show();
   });
   if (actionMultiBtn) actionMultiBtn.addEventListener('click', () => {
     if (!appState.actionTargetMessage) return;
-    const modal = bootstrap.Modal.getInstance(document.getElementById('messageActionModal'));
-    if (modal) modal.hide();
+    closeMessageActionUi();
     enterMultiSelectMode(appState.actionTargetMessage.id);
   });
+  if (pinnedMessageBar) {
+    pinnedMessageBar.addEventListener('click', () => {
+      const roomId = Number(appState.activeConversationId || 0);
+      const messageId = Number(pinnedMessageBar.dataset.messageId || 0);
+      if (!roomId || !messageId) return;
+      jumpToPinnedMessage(roomId, messageId).catch((err) => {
+        console.warn('定位置顶消息失败', err.message);
+      });
+    });
+  }
+  if (clearPinnedMessageBtn) {
+    clearPinnedMessageBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const roomId = Number(appState.activeConversationId || 0);
+      if (!roomId) return;
+      clearPinnedMessageRecord(roomId);
+      renderPinnedMessageBar();
+    });
+  }
   if (multiSelectToggleBtn) {
     multiSelectToggleBtn.addEventListener('click', () => {
       if (!appState.activeConversationId) return;
@@ -6620,8 +6787,15 @@ function bindChatEvents() {
     if (menu.contains(e.target)) return;
     hideGroupMemberContextMenu();
   });
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('messageActionMenu');
+    if (!menu || menu.style.display === 'none') return;
+    if (menu.contains(e.target)) return;
+    hideMessageActionMenu();
+  });
   document.addEventListener('scroll', hideConversationContextMenu, true);
   document.addEventListener('scroll', hideGroupMemberContextMenu, true);
+  document.addEventListener('scroll', hideMessageActionMenu, true);
   const contextMenu = ensureConversationContextMenu();
   contextMenu.addEventListener('click', (e) => {
     const item = e.target.closest('[data-action]');
@@ -6679,6 +6853,88 @@ function bindChatEvents() {
       renderGroupList();
       if (appState.activeConversationId === state.roomId) {
         renderMessages({ autoScroll: false });
+      }
+    } catch (err) {
+      alert(`操作失败：${err.message}`);
+    }
+  });
+  const messageActionMenu = ensureMessageActionMenu();
+  messageActionMenu.addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-action]');
+    if (!item) return;
+    const msg = appState.actionTargetMessage;
+    if (!msg) {
+      hideMessageActionMenu();
+      return;
+    }
+    const action = item.getAttribute('data-action');
+    hideMessageActionMenu();
+    try {
+      if (action === 'reply') {
+        startReplyMessage(msg);
+        return;
+      }
+      if (action === 'copy') {
+        await copyMessageText(msg);
+        return;
+      }
+      if (action === 'forward') {
+        openForwardModal(msg);
+        return;
+      }
+      if (action === 'multi') {
+        enterMultiSelectMode(msg.id);
+        return;
+      }
+      if (action === 'pin') {
+        const roomId = Number(appState.activeConversationId || 0);
+        if (!roomId) return;
+        const pinned = getPinnedMessageRecord(roomId);
+        if (pinned && Number(pinned.id) === Number(msg.id)) clearPinnedMessageRecord(roomId);
+        else setPinnedMessageRecord(roomId, msg);
+        renderPinnedMessageBar();
+        return;
+      }
+      if (action === 'edit') {
+        startEditOwnMessage(msg);
+        return;
+      }
+      if (action === 'recall') {
+        if (!canRecallMessage(msg)) {
+          alert('该消息不可撤回');
+          return;
+        }
+        const updated = await recallMessageWithFallback(msg, appState.activeConversationId);
+        const conv = findConversationById(updated.room_id);
+        if (conv) {
+          const target = conv.messages.find((m) => Number(m.id) === Number(updated.id));
+          if (target) {
+            target.text = updated.content;
+            target.updatedAt = updated.updated_at ? new Date(updated.updated_at).getTime() : target.updatedAt;
+          }
+        }
+        renderMessages({ autoScroll: false });
+        scheduleConversationListRender();
+        return;
+      }
+      if (action === 'delete') {
+        if (!canDeleteOwnMessage(msg)) {
+          alert('仅可删除自己发送的消息');
+          return;
+        }
+        const conv = findConversationById(appState.activeConversationId);
+        const canSuperDelete = !!(
+          conv
+          && isDmConversation(conv)
+          && canUseSuperDelete()
+          && Number(msg.senderId) === Number(appState.currentUser?.id)
+        );
+        if (deleteForPeerCheck) {
+          deleteForPeerCheck.checked = false;
+          deleteForPeerCheck.disabled = !canSuperDelete;
+        }
+        const deleteModal = new bootstrap.Modal(document.getElementById('deleteMessageModal'));
+        deleteModal.show();
       }
     } catch (err) {
       alert(`操作失败：${err.message}`);
@@ -6744,6 +7000,10 @@ function bindChatEvents() {
       return;
     }
     if (hideGroupMemberContextMenu()) {
+      e.preventDefault();
+      return;
+    }
+    if (hideMessageActionMenu()) {
       e.preventDefault();
       return;
     }
@@ -7181,6 +7441,7 @@ function buildMessageRow(msg, conv) {
 
   bubble.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+    appState.messageActionAnchor = { x: e.clientX, y: e.clientY };
     openMessageActionMenu(msg);
   });
   let longPressTimer = null;
@@ -7195,6 +7456,7 @@ function buildMessageRow(msg, conv) {
     longPressTriggered = false;
     longPressTimer = setTimeout(() => {
       longPressTriggered = true;
+      appState.messageActionAnchor = { x: touchStartX, y: touchStartY };
       openMessageActionMenu(msg);
     }, 550);
   }, { passive: true });
@@ -7308,6 +7570,7 @@ function renderMessages(options = {}) {
   const loadMoreBtn = document.getElementById('loadMoreBtn');
   const groupMembersBtn = document.getElementById('groupMembersBtn');
   const composer = document.getElementById('chatComposer');
+  const pinnedBar = document.getElementById('pinnedMessageBar');
   const chatHeader = document.getElementById('chatHeader');
   const chatHeaderMain = document.getElementById('chatHeaderMain');
   const chatGroupMenuWrap = document.getElementById('chatGroupMenuWrap');
@@ -7318,6 +7581,7 @@ function renderMessages(options = {}) {
 
   listEl.innerHTML = '';
   hideGroupMemberContextMenu();
+  hideMessageActionMenu();
 
   const conv = findConversationById(appState.activeConversationId);
   if (!conv) {
@@ -7331,6 +7595,7 @@ function renderMessages(options = {}) {
     subEl.textContent = '请选择会话';
     if (avatarEl) avatarEl.src = DEFAULT_AVATAR;
     if (chatHeader) chatHeader.classList.add('d-none');
+    if (pinnedBar) pinnedBar.classList.add('d-none');
     if (emptyStateEl) emptyStateEl.classList.remove('d-none');
     listEl.classList.add('d-none');
     if (chatGroupMenuWrap) chatGroupMenuWrap.classList.add('d-none');
@@ -7353,6 +7618,7 @@ function renderMessages(options = {}) {
   updateMultiSelectBar();
   loadMoreBtn.classList.remove('d-none');
   composer.classList.remove('d-none');
+  renderPinnedMessageBar();
   applyMuteComposerState(conv);
   const hiddenCount = getHiddenMessageCount(conv);
   const canLoadServerMore = conv.hasMore !== false;
@@ -7590,6 +7856,7 @@ async function bootstrapAfterLogin(userFromAuth = null) {
 
   mergeUserToMap(me);
   loadPinnedRoomOrder();
+  loadPinnedMessageState();
   loadConversationMuteState();
   enterApp({ skipDataRefresh: true });
   connectWebSocket();

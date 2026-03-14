@@ -193,12 +193,23 @@
                       </div>
                     </div>
 
-                    <div id="chatEmptyState" class="chat-empty-state d-none">
-                      <div class="chat-empty-icon"><i class="bi bi-chat-dots"></i></div>
-                      <div class="chat-empty-sub">选择一个会话开始聊天</div>
-                    </div>
+	                    <div id="chatEmptyState" class="chat-empty-state d-none">
+	                      <div class="chat-empty-icon"><i class="bi bi-chat-dots"></i></div>
+	                      <div class="chat-empty-sub">选择一个会话开始聊天</div>
+	                    </div>
 
-                    <div id="messageList" class="flex-grow-1 p-3 message-list"></div>
+	                    <div id="pinnedMessageBar" class="pinned-message-bar d-none" role="button" tabindex="0">
+	                      <span class="pinned-message-accent"><i class="bi bi-pin-angle-fill"></i></span>
+	                      <span class="pinned-message-main">
+	                        <span id="pinnedMessageSender" class="pinned-message-sender"></span>
+	                        <span id="pinnedMessageText" class="pinned-message-text"></span>
+	                      </span>
+	                      <button id="clearPinnedMessageBtn" class="pinned-message-clear" type="button" aria-label="取消置顶">
+	                        <i class="bi bi-x-lg"></i>
+	                      </button>
+	                    </div>
+
+	                    <div id="messageList" class="flex-grow-1 p-3 message-list"></div>
 
                     <div id="chatComposer" class="border-top p-2 p-md-3 tg-composer">
                       <div id="muteHintBar" class="alert alert-warning py-2 px-3 mb-2 d-none">你已被群主禁言，当前无法发送消息</div>
@@ -1069,6 +1080,8 @@
           </div>
         </div>
       </div>
+
+      <div id="messageActionMenu" class="dropdown-menu message-action-menu" style="display:none;"></div>
 
       <div class="modal fade" id="deleteMessageModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
