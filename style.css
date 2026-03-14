@@ -844,6 +844,125 @@ body.main-open #messageList {
   cursor: zoom-in;
 }
 
+.msg-image-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-image-caption {
+  font-size: 13px;
+  line-height: 1.5;
+  color: inherit;
+  white-space: pre-wrap;
+}
+
+.image-compose-modal .modal-body {
+  padding: 16px;
+}
+
+.image-compose-stage {
+  min-height: 420px;
+  border-radius: 18px;
+  background: #f6f8fb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.image-compose-preview-box {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 70vh;
+}
+
+.image-compose-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 16px;
+}
+
+.image-compose-overlay-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.image-compose-text-item {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.image-compose-text-item.dragging {
+  cursor: grabbing;
+}
+
+.image-compose-tools {
+  display: grid;
+  gap: 14px;
+}
+
+.chat-image-drop-hint {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(17, 24, 39, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.chat-image-drop-card {
+  min-width: 220px;
+  padding: 20px 24px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.chat-image-drop-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.chat-image-drop-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #7b8794;
+}
+
+@media (max-width: 767.98px) {
+  .image-compose-stage {
+    min-height: 280px;
+    padding: 10px;
+  }
+
+  .image-compose-preview,
+  .image-compose-preview-box {
+    max-height: 46vh;
+  }
+
+  .image-compose-text-item {
+    font-size: 20px;
+  }
+}
+
 #chatSubTitle.typing-active {
   color: #2aabee !important;
   font-weight: 600;

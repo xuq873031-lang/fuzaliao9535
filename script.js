@@ -95,6 +95,13 @@ let appState = {
   groupMemberSearchKeyword: '',
   multiSelectMode: false,
   multiSelectedMessageIds: new Set(),
+  imageComposer: {
+    file: null,
+    previewUrl: '',
+    caption: '',
+    overlays: [],
+    dragState: null
+  },
   localTypingTimer: null,
   localTypingActive: false,
   call: {
@@ -725,19 +732,30 @@ function escapeHtml(str) {
     .replaceAll("'", '&#39;');
 }
 
-function renderMessageContent(text) {
+function parseImageMessageContent(text) {
   const raw = String(text || '');
-  const match = raw.match(/^!\[img\]\(([^)]+)\)$/);
-  if (match) {
-    const url = match[1].trim();
-    const safeUrl = escapeHtml(url);
-    return `<img src="${safeUrl}" class="msg-image" data-preview-src="${safeUrl}" alt="image" loading="lazy" decoding="async" />`;
+  const match = raw.match(/^!\[img\]\(([^)]+)\)(?:\n([\s\S]*))?$/);
+  if (!match) return null;
+  return {
+    url: match[1].trim(),
+    caption: String(match[2] || '').trim()
+  };
+}
+
+function renderMessageContent(text) {
+  const parsedImage = parseImageMessageContent(text);
+  if (parsedImage) {
+    const safeUrl = escapeHtml(parsedImage.url);
+    const safeCaption = parsedImage.caption
+      ? `<div class="msg-image-caption">${applyAtMentionHighlight(parsedImage.caption).replaceAll('\n', '<br>')}</div>`
+      : '';
+    return `<div class="msg-image-wrap"><img src="${safeUrl}" class="msg-image" data-preview-src="${safeUrl}" alt="image" loading="lazy" decoding="async" />${safeCaption}</div>`;
   }
-  return applyAtMentionHighlight(raw).replaceAll('\n', '<br>');
+  return applyAtMentionHighlight(String(text || '')).replaceAll('\n', '<br>');
 }
 
 function isImageMessageText(text) {
-  return /^!\[img\]\(([^)]+)\)$/.test(String(text || ''));
+  return !!parseImageMessageContent(text);
 }
 
 function summarizeMessageText(text) {
@@ -5189,9 +5207,8 @@ function renderForwardTargetList() {
 }
 
 function getImageUrlFromMessageText(text) {
-  const raw = String(text || '');
-  const match = raw.match(/^!\[img\]\(([^)]+)\)$/);
-  return match ? match[1].trim() : '';
+  const parsed = parseImageMessageContent(text);
+  return parsed ? parsed.url : '';
 }
 
 function openPhotoPreview(url, metaText = '') {
@@ -5203,6 +5220,266 @@ function openPhotoPreview(url, metaText = '') {
   if (previewMeta) previewMeta.textContent = metaText;
   const previewModal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
   previewModal.show();
+}
+
+function getImageComposerState() {
+  return appState.imageComposer;
+}
+
+function resetImageComposerState() {
+  const state = getImageComposerState();
+  state.file = null;
+  state.previewUrl = '';
+  state.caption = '';
+  state.overlays = [];
+  state.dragState = null;
+  const preview = document.getElementById('imageComposePreview');
+  const captionInput = document.getElementById('imageComposeCaptionInput');
+  const textInput = document.getElementById('imageComposeTextInput');
+  const layer = document.getElementById('imageComposeOverlayLayer');
+  if (preview) preview.src = '';
+  if (captionInput) captionInput.value = '';
+  if (textInput) textInput.value = '';
+  if (layer) layer.innerHTML = '';
+}
+
+function updateImageComposeOverlay() {
+  const layer = document.getElementById('imageComposeOverlayLayer');
+  const state = getImageComposerState();
+  if (!layer) return;
+  layer.innerHTML = '';
+  state.overlays.forEach((item) => {
+    const node = document.createElement('div');
+    node.className = 'image-compose-text-item';
+    node.dataset.overlayId = item.id;
+    node.style.left = `${item.x * 100}%`;
+    node.style.top = `${item.y * 100}%`;
+    node.textContent = item.text;
+    layer.appendChild(node);
+  });
+}
+
+function bindImageComposeOverlayPointer() {
+  const layer = document.getElementById('imageComposeOverlayLayer');
+  if (!layer || layer.dataset.bound === '1') return;
+  layer.dataset.bound = '1';
+
+  layer.addEventListener('pointerdown', (e) => {
+    const item = e.target.closest('.image-compose-text-item');
+    if (!item) return;
+    e.preventDefault();
+    getImageComposerState().dragState = { id: item.dataset.overlayId };
+    item.classList.add('dragging');
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    const state = getImageComposerState();
+    if (!state.dragState) return;
+    const rect = layer.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const overlay = state.overlays.find((item) => item.id === state.dragState.id);
+    if (!overlay) return;
+    overlay.x = Math.min(0.96, Math.max(0.04, (e.clientX - rect.left) / rect.width));
+    overlay.y = Math.min(0.94, Math.max(0.06, (e.clientY - rect.top) / rect.height));
+    updateImageComposeOverlay();
+    const activeEl = layer.querySelector(`[data-overlay-id="${overlay.id}"]`);
+    if (activeEl) activeEl.classList.add('dragging');
+  });
+
+  window.addEventListener('pointerup', () => {
+    getImageComposerState().dragState = null;
+    layer.querySelectorAll('.image-compose-text-item').forEach((item) => item.classList.remove('dragging'));
+  });
+}
+
+async function openImageComposeFromFile(file) {
+  if (!file || !String(file.type || '').startsWith('image/')) return;
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv) {
+    alert('请先选择一个会话');
+    return;
+  }
+  if (appState.editingOwnMessageId) {
+    alert('编辑状态下不支持发送图片，请先完成或取消编辑');
+    return;
+  }
+  if (conv.type === 'group' && appState.roomMuteStateByRoom[conv.id]) {
+    alert('你已被群主禁言，暂时不能发送消息');
+    return;
+  }
+  if (conv.type === 'group') {
+    const meta = appState.roomMyMemberMetaByRoom[conv.id];
+    const bypassGlobalMute = !!(meta && (meta.role === 'owner' || meta.canKick || meta.canMute));
+    if (conv.globalMute && !bypassGlobalMute) {
+      alert('该群已开启全员禁言');
+      return;
+    }
+  }
+  const localRateState = checkLocalGroupRateLimit(conv);
+  if (localRateState.blocked) {
+    alert(localRateState.message);
+    return;
+  }
+
+  resetImageComposerState();
+  const state = getImageComposerState();
+  state.file = file;
+  state.previewUrl = await readFileAsDataURL(file);
+  const preview = document.getElementById('imageComposePreview');
+  if (preview) preview.src = state.previewUrl;
+  bindImageComposeOverlayPointer();
+  updateImageComposeOverlay();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('imageComposeModal')).show();
+}
+
+function addImageComposeTextOverlay() {
+  const input = document.getElementById('imageComposeTextInput');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  const state = getImageComposerState();
+  state.overlays.push({
+    id: `overlay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    text,
+    x: 0.5,
+    y: 0.2 + Math.min(0.5, state.overlays.length * 0.12)
+  });
+  input.value = '';
+  updateImageComposeOverlay();
+}
+
+async function buildImageComposeUploadFile() {
+  const state = getImageComposerState();
+  if (!state.file) throw new Error('未选择图片');
+  if (!state.overlays.length) return state.file;
+
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('图片读取失败'));
+    image.src = state.previewUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('浏览器不支持图片处理');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  state.overlays.forEach((item) => {
+    const fontSize = Math.max(24, Math.round(canvas.width * 0.045));
+    ctx.font = `700 ${fontSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.lineWidth = Math.max(4, Math.round(fontSize * 0.16));
+    const x = item.x * canvas.width;
+    const y = item.y * canvas.height;
+    ctx.strokeText(item.text, x, y);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(item.text, x, y);
+  });
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, state.file.type || 'image/png', 0.92));
+  if (!blob) throw new Error('图片生成失败');
+  return new File([blob], state.file.name || `annotated-${Date.now()}.png`, {
+    type: blob.type || state.file.type || 'image/png'
+  });
+}
+
+function hideChatImageDropHint() {
+  const hint = document.getElementById('chatImageDropHint');
+  if (hint) hint.classList.add('d-none');
+}
+
+function canAcceptChatImageDrop() {
+  return appState.currentView === 'messagesView' && !!appState.activeConversationId;
+}
+
+function bindChatImageDropEvents() {
+  if (document.body.dataset.imageDropBound === '1') return;
+  document.body.dataset.imageDropBound = '1';
+  let dragDepth = 0;
+
+  const hasImageFile = (dataTransfer) => Array.from(dataTransfer?.files || []).some((file) => String(file.type || '').startsWith('image/'));
+  const showHint = () => {
+    const hint = document.getElementById('chatImageDropHint');
+    if (hint && canAcceptChatImageDrop()) hint.classList.remove('d-none');
+  };
+
+  document.addEventListener('dragenter', (e) => {
+    if (!hasImageFile(e.dataTransfer)) return;
+    dragDepth += 1;
+    if (!canAcceptChatImageDrop()) return;
+    e.preventDefault();
+    showHint();
+  });
+  document.addEventListener('dragover', (e) => {
+    if (!hasImageFile(e.dataTransfer) || !canAcceptChatImageDrop()) return;
+    e.preventDefault();
+    showHint();
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (!hasImageFile(e.dataTransfer)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) hideChatImageDropHint();
+  });
+  document.addEventListener('drop', async (e) => {
+    if (!hasImageFile(e.dataTransfer)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    hideChatImageDropHint();
+    if (!canAcceptChatImageDrop()) return;
+    const file = Array.from(e.dataTransfer.files || []).find((item) => String(item.type || '').startsWith('image/'));
+    if (file) await openImageComposeFromFile(file);
+  });
+}
+
+async function sendImageComposeMessage() {
+  const state = getImageComposerState();
+  if (!state.file) return;
+  const conv = findConversationById(appState.activeConversationId);
+  if (!conv) {
+    alert('请先选择一个会话');
+    return;
+  }
+  const sendBtn = document.getElementById('imageComposeSendBtn');
+  const captionInput = document.getElementById('imageComposeCaptionInput');
+  const caption = String(captionInput?.value || '').trim();
+  state.caption = caption;
+
+  try {
+    if (sendBtn) sendBtn.disabled = true;
+    const uploadFile = await buildImageComposeUploadFile();
+    const uploaded = await apiUploadImage(uploadFile);
+    if (!uploaded || !uploaded.url) throw new Error('上传返回无效');
+    const content = caption ? `![img](${uploaded.url})\n${caption}` : `![img](${uploaded.url})`;
+    const sent = await apiSendMessage(conv.id, content, {
+      replyToMessageId: appState.replyingToMessage?.id || null
+    });
+    appState.lastSentAtByRoom[conv.id] = Date.now();
+    if (sent.via === 'http' && sent.message) {
+      const msg = normalizeMessage(sent.message);
+      const exists = conv.messages.some((m) => m.id === msg.id);
+      if (!exists) conv.messages.push(msg);
+      appendMessagesToView(conv, [msg], { autoScroll: true });
+      scheduleConversationListRender();
+      updateUnreadBadges();
+      await markCurrentRoomRead();
+    }
+    const modal = bootstrap.Modal.getInstance(document.getElementById('imageComposeModal'));
+    if (modal) modal.hide();
+    clearReplyAndEditState();
+    toggleEmojiPanel(false);
+    resetImageComposerState();
+  } catch (err) {
+    if ((err.message || '').includes('Not Found')) {
+      alert('上传接口未部署/路径不一致，请检查后端 /api/uploads/images');
+      return;
+    }
+    alert(`发送图片失败(${err.status || 'ERR'}): ${err.message}`);
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+  }
 }
 
 async function ensureConversationHistoryLoaded(conv, options = {}) {
@@ -5497,6 +5774,11 @@ function bindChatEvents() {
   const emojiToggleBtn = document.getElementById('emojiToggleBtn');
   const directDetailsHistorySearchBtn = document.getElementById('directDetailsHistorySearchBtn');
   const directDetailsHistoryPhotosBtn = document.getElementById('directDetailsHistoryPhotosBtn');
+  const imageComposeAddTextBtn = document.getElementById('imageComposeAddTextBtn');
+  const imageComposeSendBtn = document.getElementById('imageComposeSendBtn');
+  const imageComposeReplaceBtn = document.getElementById('imageComposeReplaceBtn');
+  const imageComposeTextInput = document.getElementById('imageComposeTextInput');
+  const imageComposeModalEl = document.getElementById('imageComposeModal');
 
   if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (msgInput) msgInput.addEventListener('keydown', (e) => {
@@ -5550,6 +5832,23 @@ function bindChatEvents() {
   if (uploadImageBtn && imageInput) {
     uploadImageBtn.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', handleImageUpload);
+  }
+  if (imageComposeAddTextBtn) imageComposeAddTextBtn.addEventListener('click', addImageComposeTextOverlay);
+  if (imageComposeTextInput) {
+    imageComposeTextInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addImageComposeTextOverlay();
+      }
+    });
+  }
+  if (imageComposeSendBtn) imageComposeSendBtn.addEventListener('click', sendImageComposeMessage);
+  if (imageComposeReplaceBtn && imageInput) imageComposeReplaceBtn.addEventListener('click', () => imageInput.click());
+  if (imageComposeModalEl) {
+    imageComposeModalEl.addEventListener('hidden.bs.modal', () => {
+      resetImageComposerState();
+      hideChatImageDropHint();
+    });
   }
   if (clearReplyBtn) clearReplyBtn.addEventListener('click', () => clearReplyAndEditState({ resetInput: true }));
   if (actionReplyBtn) actionReplyBtn.addEventListener('click', () => {
@@ -5955,65 +6254,14 @@ function bindChatEvents() {
     if (toggleBtn && toggleBtn.contains(e.target)) return;
     toggleEmojiPanel(false);
   });
+  bindChatImageDropEvents();
 }
 
 async function handleImageUpload(e) {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!file) return;
-
-  const conv = findConversationById(appState.activeConversationId);
-  if (!conv) {
-    alert('请先选择一个会话');
-    return;
-  }
-  if (appState.editingOwnMessageId) {
-    alert('编辑状态下不支持发送图片，请先完成或取消编辑');
-    return;
-  }
-  if (conv.type === 'group' && appState.roomMuteStateByRoom[conv.id]) {
-    alert('你已被群主禁言，暂时不能发送消息');
-    return;
-  }
-  if (conv.type === 'group') {
-    const meta = appState.roomMyMemberMetaByRoom[conv.id];
-    const bypassGlobalMute = !!(meta && (meta.role === 'owner' || meta.canKick || meta.canMute));
-    if (conv.globalMute && !bypassGlobalMute) {
-      alert('该群已开启全员禁言');
-      return;
-    }
-  }
-  const localRateState = checkLocalGroupRateLimit(conv);
-  if (localRateState.blocked) {
-    alert(localRateState.message);
-    return;
-  }
-
-  try {
-    const uploaded = await apiUploadImage(file);
-    if (!uploaded || !uploaded.url) throw new Error('上传返回无效');
-    const sent = await apiSendMessage(conv.id, `![img](${uploaded.url})`, {
-      replyToMessageId: appState.replyingToMessage?.id || null
-    });
-    appState.lastSentAtByRoom[conv.id] = Date.now();
-    if (sent.via === 'http' && sent.message) {
-      const msg = normalizeMessage(sent.message);
-      const exists = conv.messages.some((m) => m.id === msg.id);
-      if (!exists) conv.messages.push(msg);
-      appendMessagesToView(conv, [msg], { autoScroll: true });
-      scheduleConversationListRender();
-      updateUnreadBadges();
-      await markCurrentRoomRead();
-    }
-    clearReplyAndEditState();
-    toggleEmojiPanel(false);
-  } catch (err) {
-    if ((err.message || '').includes('Not Found')) {
-      alert('上传接口未部署/路径不一致，请检查后端 /api/uploads/images');
-      return;
-    }
-    alert(`上传失败(${err.status || 'ERR'}): ${err.message}`);
-  }
+  await openImageComposeFromFile(file);
 }
 
 async function loadMoreMessages() {
@@ -6140,7 +6388,7 @@ function renderConversationList() {
       return ct >= lt ? curr : latest;
     }, null);
     const lastPreview = lastMsg
-      ? (/^!\[img\]\(([^)]+)\)$/.test(lastMsg.text) ? '[图片]' : lastMsg.text.slice(0, 18))
+      ? (isImageMessageText(lastMsg.text) ? '[图片]' : lastMsg.text.slice(0, 18))
       : '';
     const lastTime = lastMsg ? formatConversationTime(lastMsg.createdAt) : '';
     const avatar = getConversationAvatar(conv);

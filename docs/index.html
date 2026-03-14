@@ -832,6 +832,58 @@
         </div>
       </div>
 
+      <!-- 发图预览与标注 -->
+      <div class="modal fade" id="imageComposeModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+          <div class="modal-content rounded-4 image-compose-modal">
+            <div class="modal-header">
+              <h5 class="modal-title">发送图片</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-3">
+                <div class="col-12 col-lg-8">
+                  <div class="image-compose-stage">
+                    <div id="imageComposePreviewBox" class="image-compose-preview-box">
+                      <img id="imageComposePreview" class="image-compose-preview" alt="preview" />
+                      <div id="imageComposeOverlayLayer" class="image-compose-overlay-layer"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-4">
+                  <div class="image-compose-tools">
+                    <div>
+                      <label for="imageComposeTextInput" class="form-label small text-secondary">图片文字标注</label>
+                      <div class="input-group">
+                        <input id="imageComposeTextInput" class="form-control" placeholder="输入要加在图片上的文字" />
+                        <button id="imageComposeAddTextBtn" class="btn btn-outline-secondary" type="button">加字</button>
+                      </div>
+                      <div class="form-text">添加后可直接拖动文字位置</div>
+                    </div>
+                    <div>
+                      <label for="imageComposeCaptionInput" class="form-label small text-secondary">图片配文</label>
+                      <textarea id="imageComposeCaptionInput" class="form-control" rows="4" placeholder="可选：给这张图片配一段文字说明"></textarea>
+                    </div>
+                    <div class="d-grid gap-2">
+                      <button id="imageComposeReplaceBtn" class="btn btn-outline-secondary" type="button">重新选择图片</button>
+                      <button id="imageComposeCancelBtn" class="btn btn-light" type="button" data-bs-dismiss="modal">取消</button>
+                      <button id="imageComposeSendBtn" class="btn btn-primary" type="button">发送图片</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="chatImageDropHint" class="chat-image-drop-hint d-none">
+        <div class="chat-image-drop-card">
+          <div class="chat-image-drop-title">松开发送图片</div>
+          <div class="chat-image-drop-sub">先预览，再加字和配文</div>
+        </div>
+      </div>
+
       <div class="modal fade" id="adminResetPasswordModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content rounded-4">
