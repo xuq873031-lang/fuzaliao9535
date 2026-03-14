@@ -151,6 +151,8 @@ def get_room_members_with_meta(db: Session, room_id: int):
             room_members.c.role,
             room_members.c.can_kick,
             room_members.c.can_mute,
+            room_members.c.can_recall_others,
+            room_members.c.can_super_delete,
             room_members.c.joined_at,
         ).where(room_members.c.room_id == room_id)
     ).all()
@@ -201,16 +203,33 @@ def get_room_member_role(db: Session, room_id: int, user_id: int) -> str | None:
     return row[0] if row else None
 
 
-def get_room_member_permissions(db: Session, room_id: int, user_id: int) -> tuple[bool, bool]:
+def get_room_member_permissions(db: Session, room_id: int, user_id: int) -> tuple[bool, bool, bool, bool]:
     row = db.execute(
-        select(room_members.c.can_kick, room_members.c.can_mute).where(
+        select(
+            room_members.c.can_kick,
+            room_members.c.can_mute,
+            room_members.c.can_recall_others,
+            room_members.c.can_super_delete,
+        ).where(
             room_members.c.room_id == room_id,
             room_members.c.user_id == user_id,
         )
     ).first()
     if not row:
-        return False, False
-    return bool(row[0]), bool(row[1])
+        return False, False, False, False
+    return bool(row[0]), bool(row[1]), bool(row[2]), bool(row[3])
+
+
+def get_room_member_permission_meta(db: Session, room_id: int, user_id: int) -> dict:
+    role = get_room_member_role(db, room_id, user_id)
+    can_kick, can_mute, can_recall_others, can_super_delete = get_room_member_permissions(db, room_id, user_id)
+    return {
+        "role": role or "member",
+        "can_kick": can_kick,
+        "can_mute": can_mute,
+        "can_recall_others": can_recall_others,
+        "can_super_delete": can_super_delete,
+    }
 
 
 def can_actor_manage_member(db: Session, room_id: int, actor_id: int, target_id: int, action: str) -> bool:
@@ -227,8 +246,8 @@ def can_actor_manage_member(db: Session, room_id: int, actor_id: int, target_id:
         return False
     if actor_role == "owner":
         return target_role != "owner" and actor_id != target_id
-    can_kick, can_mute = get_room_member_permissions(db, room_id, actor_id)
-    target_can_kick, target_can_mute = get_room_member_permissions(db, room_id, target_id)
+    can_kick, can_mute, _, _ = get_room_member_permissions(db, room_id, actor_id)
+    target_can_kick, target_can_mute, _, _ = get_room_member_permissions(db, room_id, target_id)
     target_is_delegated_admin = target_can_kick or target_can_mute
     if action == "kick":
         return can_kick and target_role != "owner" and actor_id != target_id and not target_is_delegated_admin
@@ -241,7 +260,7 @@ def can_bypass_group_global_mute(db: Session, room_id: int, user_id: int) -> boo
     role = get_room_member_role(db, room_id, user_id)
     if role == "owner":
         return True
-    can_kick, can_mute = get_room_member_permissions(db, room_id, user_id)
+    can_kick, can_mute, _, _ = get_room_member_permissions(db, room_id, user_id)
     return bool(can_kick or can_mute)
 
 
@@ -249,8 +268,38 @@ def should_bypass_group_rate_limit(db: Session, room_id: int, user_id: int) -> b
     role = get_room_member_role(db, room_id, user_id)
     if role == "owner":
         return True
-    can_kick, can_mute = get_room_member_permissions(db, room_id, user_id)
+    can_kick, can_mute, _, _ = get_room_member_permissions(db, room_id, user_id)
     return bool(can_kick or can_mute)
+
+
+def can_recall_message_in_room(db: Session, current_user: User, msg: Message) -> bool:
+    if not current_user or not msg:
+        return False
+    if msg.sender_id == current_user.id:
+        return bool(current_user.role == "admin" or has_permission(current_user, "can_recall_own_messages"))
+    room = db.get(ChatRoom, msg.room_id)
+    if not room:
+        return False
+    if current_user.role == "admin" or has_permission(current_user, "can_recall_others_messages"):
+        return True
+    if room_effective_type(room) != "group":
+        return False
+    meta = get_room_member_permission_meta(db, msg.room_id, current_user.id)
+    return meta["role"] == "owner" or bool(meta["can_recall_others"])
+
+
+def can_super_delete_message_in_room(db: Session, current_user: User, msg: Message) -> bool:
+    if not current_user or not msg:
+        return False
+    room = db.get(ChatRoom, msg.room_id)
+    if not room:
+        return False
+    if current_user.role == "admin" or has_permission(current_user, "can_super_delete_messages"):
+        return True
+    if room_effective_type(room) != "group":
+        return False
+    meta = get_room_member_permission_meta(db, msg.room_id, current_user.id)
+    return meta["role"] == "owner" or bool(meta["can_super_delete"])
 
 
 def check_group_rate_limit_or_raise(db: Session, room: ChatRoom, user_id: int):
@@ -477,6 +526,12 @@ def ensure_compatible_schema():
                 conn.execute(text("ALTER TABLE users ADD COLUMN can_use_edit_feature BOOLEAN"))
             if "can_use_super_delete" not in user_columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN can_use_super_delete BOOLEAN"))
+            if "can_recall_own_messages" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN can_recall_own_messages BOOLEAN"))
+            if "can_recall_others_messages" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN can_recall_others_messages BOOLEAN"))
+            if "can_super_delete_messages" not in user_columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN can_super_delete_messages BOOLEAN"))
             if "is_active" not in user_columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN"))
             if "is_banned" not in user_columns:
@@ -485,13 +540,18 @@ def ensure_compatible_schema():
             conn.execute(text("UPDATE users SET can_mute_members=false WHERE can_mute_members IS NULL"))
             conn.execute(text("UPDATE users SET can_use_edit_feature=false WHERE can_use_edit_feature IS NULL"))
             conn.execute(text("UPDATE users SET can_use_super_delete=false WHERE can_use_super_delete IS NULL"))
+            conn.execute(text("UPDATE users SET can_recall_own_messages=true WHERE can_recall_own_messages IS NULL"))
+            conn.execute(text("UPDATE users SET can_recall_others_messages=false WHERE can_recall_others_messages IS NULL"))
+            conn.execute(text("UPDATE users SET can_super_delete_messages=false WHERE can_super_delete_messages IS NULL"))
             conn.execute(text("UPDATE users SET is_active=true WHERE is_active IS NULL"))
             conn.execute(text("UPDATE users SET is_banned=false WHERE is_banned IS NULL"))
             # 管理员账号默认具备三项全局能力，便于后台初始化后立即可用
             conn.execute(
                 text(
                     "UPDATE users SET can_kick_members=true, can_mute_members=true, "
-                    "can_use_edit_feature=true, can_use_super_delete=true WHERE role='admin'"
+                    "can_recall_own_messages=true, can_recall_others_messages=true, "
+                    "can_super_delete_messages=true, can_use_edit_feature=true, "
+                    "can_use_super_delete=true WHERE role='admin'"
                 )
             )
 
@@ -547,6 +607,10 @@ def ensure_compatible_schema():
                 conn.execute(text("ALTER TABLE room_members ADD COLUMN can_kick BOOLEAN"))
             if "can_mute" not in member_columns:
                 conn.execute(text("ALTER TABLE room_members ADD COLUMN can_mute BOOLEAN"))
+            if "can_recall_others" not in member_columns:
+                conn.execute(text("ALTER TABLE room_members ADD COLUMN can_recall_others BOOLEAN"))
+            if "can_super_delete" not in member_columns:
+                conn.execute(text("ALTER TABLE room_members ADD COLUMN can_super_delete BOOLEAN"))
             if "joined_at" not in member_columns:
                 if engine.dialect.name == "sqlite":
                     conn.execute(text("ALTER TABLE room_members ADD COLUMN joined_at DATETIME"))
@@ -556,6 +620,8 @@ def ensure_compatible_schema():
             conn.execute(text("UPDATE room_members SET role='member' WHERE role IS NULL"))
             conn.execute(text("UPDATE room_members SET can_kick=false WHERE can_kick IS NULL"))
             conn.execute(text("UPDATE room_members SET can_mute=false WHERE can_mute IS NULL"))
+            conn.execute(text("UPDATE room_members SET can_recall_others=false WHERE can_recall_others IS NULL"))
+            conn.execute(text("UPDATE room_members SET can_super_delete=false WHERE can_super_delete IS NULL"))
             conn.execute(text("UPDATE room_members SET joined_at=CURRENT_TIMESTAMP WHERE joined_at IS NULL"))
 
         if "messages" in table_names:
@@ -613,6 +679,9 @@ def on_startup():
                 is_banned=False,
                 can_kick_members=True,
                 can_mute_members=True,
+                can_recall_own_messages=True,
+                can_recall_others_messages=True,
+                can_super_delete_messages=True,
                 can_use_edit_feature=True,
                 can_use_super_delete=True,
             )
@@ -623,6 +692,9 @@ def on_startup():
             admin.is_banned = False
             admin.can_kick_members = True
             admin.can_mute_members = True
+            admin.can_recall_own_messages = True
+            admin.can_recall_others_messages = True
+            admin.can_super_delete_messages = True
             admin.can_use_edit_feature = True
             admin.can_use_super_delete = True
             db.commit()
@@ -737,6 +809,9 @@ def list_admin_users(
             last_seen_at=u.last_seen_at,
             can_kick_members=bool(u.can_kick_members),
             can_mute_members=bool(u.can_mute_members),
+            can_recall_own_messages=bool(u.can_recall_own_messages),
+            can_recall_others_messages=bool(u.can_recall_others_messages),
+            can_super_delete_messages=bool(u.can_super_delete_messages),
             can_use_edit_feature=bool(u.can_use_edit_feature),
             can_use_super_delete=bool(u.can_use_super_delete),
         )
@@ -791,6 +866,9 @@ def _admin_update_user_permissions(
 
     user.can_kick_members = bool(payload.can_kick_members)
     user.can_mute_members = bool(payload.can_mute_members)
+    user.can_recall_own_messages = bool(payload.can_recall_own_messages)
+    user.can_recall_others_messages = bool(payload.can_recall_others_messages)
+    user.can_super_delete_messages = bool(payload.can_super_delete_messages)
     user.can_use_edit_feature = bool(payload.can_use_edit_feature)
     user.can_use_super_delete = bool(payload.can_use_super_delete)
     db.commit()
@@ -1555,10 +1633,12 @@ def list_room_members(
             role=role or "member",
             can_kick=bool(can_kick),
             can_mute=bool(can_mute),
+            can_recall_others=bool(can_recall_others),
+            can_super_delete=bool(can_super_delete),
             muted=uid in muted_set,
             joined_at=joined_at,
         )
-        for uid, role, can_kick, can_mute, joined_at in rows
+        for uid, role, can_kick, can_mute, can_recall_others, can_super_delete, joined_at in rows
     ]
 
 
@@ -1600,6 +1680,8 @@ async def add_room_member(
             role="member",
             can_kick=False,
             can_mute=False,
+            can_recall_others=False,
+            can_super_delete=False,
             joined_at=datetime.utcnow(),
         )
     )
@@ -1737,12 +1819,15 @@ async def update_room_member_permissions(
 
     db.execute(
         text(
-            "UPDATE room_members SET can_kick=:can_kick, can_mute=:can_mute "
+            "UPDATE room_members SET can_kick=:can_kick, can_mute=:can_mute, "
+            "can_recall_others=:can_recall_others, can_super_delete=:can_super_delete "
             "WHERE room_id=:room_id AND user_id=:user_id"
         ),
         {
             "can_kick": bool(payload.can_kick),
             "can_mute": bool(payload.can_mute),
+            "can_recall_others": bool(payload.can_recall_others),
+            "can_super_delete": bool(payload.can_super_delete),
             "room_id": room_id,
             "user_id": user_id,
         },
@@ -1752,13 +1837,26 @@ async def update_room_member_permissions(
     actor = current_user.nickname or current_user.username
     target_user = db.get(User, user_id)
     target_name = target_user.nickname or target_user.username if target_user else str(user_id)
-    grant_text = f"踢人:{'开' if payload.can_kick else '关'} / 禁言:{'开' if payload.can_mute else '关'}"
+    grant_text = (
+        f"踢人:{'开' if payload.can_kick else '关'} / "
+        f"禁言:{'开' if payload.can_mute else '关'} / "
+        f"撤回他人:{'开' if payload.can_recall_others else '关'} / "
+        f"超级删除:{'开' if payload.can_super_delete else '关'}"
+    )
     system_msg = Message(room_id=room_id, sender_id=current_user.id, content=f"[system] {actor} 调整了 {target_name} 的管理权限（{grant_text}）")
     db.add(system_msg)
     db.commit()
     db.refresh(system_msg)
     await manager.broadcast_to_room(room_id, {"type": "new_message", "payload": serialize_message(db, system_msg)})
-    return {"ok": True, "room_id": room_id, "user_id": user_id, "can_kick": bool(payload.can_kick), "can_mute": bool(payload.can_mute)}
+    return {
+        "ok": True,
+        "room_id": room_id,
+        "user_id": user_id,
+        "can_kick": bool(payload.can_kick),
+        "can_mute": bool(payload.can_mute),
+        "can_recall_others": bool(payload.can_recall_others),
+        "can_super_delete": bool(payload.can_super_delete),
+    }
 
 
 @app.post("/api/rooms/{room_id}/members/{user_id}/mute", response_model=RoomMuteOut)
@@ -2049,18 +2147,19 @@ async def edit_message(
 
     is_admin = current_user.role == "admin"
     is_owner = msg.sender_id == current_user.id
-    if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="No permission")
 
     new_content = payload.content.strip()
     if not new_content:
         raise HTTPException(status_code=422, detail="Empty content")
     is_recall = new_content == "[已撤回]"
 
+    if not is_recall and not is_admin and not is_owner:
+        raise HTTPException(status_code=403, detail="No permission")
+
     if not is_recall:
         ensure_permission(current_user, "can_use_edit_feature", "后台未授予编辑权限")
-    elif not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="No permission to recall message")
+    elif not can_recall_message_in_room(db, current_user, msg):
+        raise HTTPException(status_code=403, detail="你没有权限撤回该消息")
 
     # 文本编辑限制：普通用户只能编辑自己的文本消息且在时间窗内
     if is_owner and not is_admin:
@@ -2103,9 +2202,8 @@ async def recall_message(
     ensure_user_in_room(db, current_user.id, msg.room_id)
 
     is_sender = msg.sender_id == current_user.id
-    has_recall_permission = bool(current_user.role == "admin" or has_permission(current_user, "can_use_edit_feature"))
-    if not is_sender and not has_recall_permission:
-        raise HTTPException(status_code=403, detail="No permission to recall message")
+    if not can_recall_message_in_room(db, current_user, msg):
+        raise HTTPException(status_code=403, detail="你没有权限撤回该消息")
 
     if msg.content == "[已撤回]":
         return build_message_out(db, msg)
@@ -2184,10 +2282,8 @@ async def super_delete_message(
         raise HTTPException(status_code=404, detail="Message not found")
     ensure_user_in_room(db, current_user.id, msg.room_id)
 
-    if not (current_user.role == "admin" or has_permission(current_user, "can_use_super_delete")):
-        raise HTTPException(status_code=403, detail="后台未授予超级删除权限")
-    if msg.sender_id != current_user.id:
-        raise HTTPException(status_code=403, detail="仅可超级删除自己发送的消息")
+    if not can_super_delete_message_in_room(db, current_user, msg):
+        raise HTTPException(status_code=403, detail="你没有权限执行超级删除")
 
     room_id = msg.room_id
     db.delete(msg)

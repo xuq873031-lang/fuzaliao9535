@@ -851,16 +851,34 @@ function canRecallMessage(msg) {
   if (msg.localPending || msg.localFailed) return false;
   const msgId = Number(msg.id);
   if (!Number.isFinite(msgId) || msgId <= 0) return false;
-  if (Number(msg.senderId) === Number(appState.currentUser.id)) return true;
+  if (Number(msg.senderId) === Number(appState.currentUser.id)) {
+    return !!appState.currentUser.canRecallOwnMessages || appState.currentUser.role === 'admin';
+  }
   const conv = findConversationById(msg.room_id || msg.roomId || appState.activeConversationId);
-  if (!conv || conv.type !== 'group') return false;
-  return appState.currentUser.role === 'admin' || !!appState.currentUser.canUseEditFeature;
+  if (!conv) return false;
+  if (appState.currentUser.role === 'admin' || !!appState.currentUser.canRecallOthersMessages) return true;
+  if (conv.type !== 'group') return false;
+  const meta = appState.roomMyMemberMetaByRoom[conv.id];
+  return !!(meta && (meta.role === 'owner' || meta.canRecallOthers));
 }
 
 function canUseSuperDelete() {
   const me = appState.currentUser;
   if (!me) return false;
-  return me.role === 'admin' || !!me.canUseSuperDelete;
+  return me.role === 'admin' || !!me.canSuperDeleteMessages;
+}
+
+function canSuperDeleteMessage(msg) {
+  if (!msg || !appState.currentUser) return false;
+  if (msg.localPending || msg.localFailed) return false;
+  const msgId = Number(msg.id);
+  if (!Number.isFinite(msgId) || msgId <= 0) return false;
+  const conv = findConversationById(msg.room_id || msg.roomId || appState.activeConversationId);
+  if (!conv) return false;
+  if (appState.currentUser.role === 'admin' || !!appState.currentUser.canSuperDeleteMessages) return true;
+  if (conv.type !== 'group') return false;
+  const meta = appState.roomMyMemberMetaByRoom[conv.id];
+  return !!(meta && (meta.role === 'owner' || meta.canSuperDelete));
 }
 
 function toggleEmojiPanel(open) {
@@ -1462,12 +1480,14 @@ async function apiUnmuteRoomMember(roomId, userId) {
   return apiFetch(`/api/rooms/${roomId}/members/${userId}/mute`, { method: 'DELETE' });
 }
 
-async function apiSetRoomMemberPermissions(roomId, userId, canKick, canMute) {
+async function apiSetRoomMemberPermissions(roomId, userId, canKick, canMute, canRecallOthers, canSuperDelete) {
   return apiFetch(`/api/rooms/${roomId}/members/${userId}/permissions`, {
     method: 'PUT',
     body: JSON.stringify({
       can_kick: !!canKick,
-      can_mute: !!canMute
+      can_mute: !!canMute,
+      can_recall_others: !!canRecallOthers,
+      can_super_delete: !!canSuperDelete
     })
   });
 }
@@ -1922,6 +1942,8 @@ async function refreshCurrentUserMuteState(roomId) {
       role: me?.role || 'member',
       canKick: !!me?.can_kick,
       canMute: !!me?.can_mute,
+      canRecallOthers: !!me?.can_recall_others,
+      canSuperDelete: !!me?.can_super_delete,
       muted
     };
     return muted;
@@ -5224,12 +5246,16 @@ async function refreshGroupManageModal(groupId) {
     isOwner: me?.role === 'owner',
     canEditProfile: !!(me && (me.role === 'owner' || isAdminUser())),
     canKick: !!appState.currentUser?.canKickMembers && !!(me?.role === 'owner' || me?.can_kick),
-    canMute: !!appState.currentUser?.canMuteMembers && !!(me?.role === 'owner' || me?.can_mute)
+    canMute: !!appState.currentUser?.canMuteMembers && !!(me?.role === 'owner' || me?.can_mute),
+    canGrantRecallOthers: !!(me?.role === 'owner'),
+    canGrantSuperDelete: !!(me?.role === 'owner')
   };
   appState.roomMyMemberMetaByRoom[groupId] = {
     role: me?.role || 'member',
     canKick: !!me?.can_kick,
     canMute: !!me?.can_mute,
+    canRecallOthers: !!me?.can_recall_others,
+    canSuperDelete: !!me?.can_super_delete,
     muted: !!me?.muted
   };
   const owner = (members || []).find((m) => m.role === 'owner');
@@ -5363,11 +5389,16 @@ function renderGroupManageMembers(members, actor) {
   }
   filtered.forEach((m) => {
     const isSelf = Number(m.user_id) === Number(appState.currentUser?.id);
-    const targetDelegated = !!(m.can_kick || m.can_mute);
+    const targetDelegated = !!(m.can_kick || m.can_mute || m.can_recall_others || m.can_super_delete);
     const roleBadge = m.role === 'owner' ? '<span class="badge text-bg-warning ms-1">群主</span>' : '';
+    const delegatedLabels = [];
+    if (m.can_kick) delegatedLabels.push('踢人');
+    if (m.can_mute) delegatedLabels.push('禁言');
+    if (m.can_recall_others) delegatedLabels.push('撤回');
+    if (m.can_super_delete) delegatedLabels.push('超删');
     const roleText = m.role === 'owner'
       ? '群主'
-      : (m.can_kick && m.can_mute ? '管理员' : (m.can_kick ? '可踢人' : (m.can_mute ? '可禁言' : '成员')));
+      : (delegatedLabels.length ? delegatedLabels.join(' / ') : '成员');
     const delegatedBadge = m.role !== 'owner' && (m.can_kick || m.can_mute)
       ? `<span class="badge text-bg-info ms-1">${roleText}</span>`
       : '';
@@ -5388,6 +5419,12 @@ function renderGroupManageMembers(members, actor) {
     const grantMuteBtn = actor.isOwner && !isSelf && m.role !== 'owner'
       ? `<button class="btn btn-sm btn-outline-primary member-grant-mute-btn">${m.can_mute ? '取消禁言权' : '赋予禁言权'}</button>`
       : '';
+    const grantRecallBtn = actor.canGrantRecallOthers && !isSelf && m.role !== 'owner'
+      ? `<button class="btn btn-sm btn-outline-primary member-grant-recall-btn">${m.can_recall_others ? '取消撤回他人权' : '赋予撤回他人权'}</button>`
+      : '';
+    const grantSuperDeleteBtn = actor.canGrantSuperDelete && !isSelf && m.role !== 'owner'
+      ? `<button class="btn btn-sm btn-outline-primary member-grant-super-delete-btn">${m.can_super_delete ? '取消超级删除权' : '赋予超级删除权'}</button>`
+      : '';
     const deleteMessagesBtn = canDeleteHistory
       ? '<button class="btn btn-sm btn-outline-warning member-delete-messages-btn">删发言</button>'
       : '';
@@ -5405,6 +5442,8 @@ function renderGroupManageMembers(members, actor) {
       <div class="d-flex gap-2">
         ${grantKickBtn}
         ${grantMuteBtn}
+        ${grantRecallBtn}
+        ${grantSuperDeleteBtn}
         ${deleteMessagesBtn}
         ${muteBtn}
         ${removeBtn}
@@ -5468,7 +5507,14 @@ function renderGroupManageMembers(members, actor) {
     if (grantKickEl) {
       grantKickEl.addEventListener('click', async () => {
         try {
-          await apiSetRoomMemberPermissions(appState.managingGroupId, m.user_id, !m.can_kick, !!m.can_mute);
+          await apiSetRoomMemberPermissions(
+            appState.managingGroupId,
+            m.user_id,
+            !m.can_kick,
+            !!m.can_mute,
+            !!m.can_recall_others,
+            !!m.can_super_delete
+          );
           await refreshGroupManageModal(appState.managingGroupId);
         } catch (err) {
           alert(`设置权限失败：${err.message}`);
@@ -5479,7 +5525,50 @@ function renderGroupManageMembers(members, actor) {
     if (grantMuteEl) {
       grantMuteEl.addEventListener('click', async () => {
         try {
-          await apiSetRoomMemberPermissions(appState.managingGroupId, m.user_id, !!m.can_kick, !m.can_mute);
+          await apiSetRoomMemberPermissions(
+            appState.managingGroupId,
+            m.user_id,
+            !!m.can_kick,
+            !m.can_mute,
+            !!m.can_recall_others,
+            !!m.can_super_delete
+          );
+          await refreshGroupManageModal(appState.managingGroupId);
+        } catch (err) {
+          alert(`设置权限失败：${err.message}`);
+        }
+      });
+    }
+    const grantRecallEl = row.querySelector('.member-grant-recall-btn');
+    if (grantRecallEl) {
+      grantRecallEl.addEventListener('click', async () => {
+        try {
+          await apiSetRoomMemberPermissions(
+            appState.managingGroupId,
+            m.user_id,
+            !!m.can_kick,
+            !!m.can_mute,
+            !m.can_recall_others,
+            !!m.can_super_delete
+          );
+          await refreshGroupManageModal(appState.managingGroupId);
+        } catch (err) {
+          alert(`设置权限失败：${err.message}`);
+        }
+      });
+    }
+    const grantSuperDeleteEl = row.querySelector('.member-grant-super-delete-btn');
+    if (grantSuperDeleteEl) {
+      grantSuperDeleteEl.addEventListener('click', async () => {
+        try {
+          await apiSetRoomMemberPermissions(
+            appState.managingGroupId,
+            m.user_id,
+            !!m.can_kick,
+            !!m.can_mute,
+            !!m.can_recall_others,
+            !m.can_super_delete
+          );
           await refreshGroupManageModal(appState.managingGroupId);
         } catch (err) {
           alert(`设置权限失败：${err.message}`);
@@ -5646,6 +5735,7 @@ function openMessageActionMenu(msg) {
   const canDelete = canDeleteOwnMessage(msg);
   const canEdit = canEditOwnMessage(msg);
   const canRecall = canRecallMessage(msg);
+  const canSuperDelete = canSuperDeleteMessage(msg);
   const canMulti = !!appState.activeConversationId;
   menu.innerHTML = `
     <button class="dropdown-item" type="button" data-action="reply"><i class="bi bi-reply me-2"></i>回复</button>
@@ -5655,7 +5745,8 @@ function openMessageActionMenu(msg) {
     <button class="dropdown-item" type="button" data-action="pin"><i class="bi bi-pin-angle me-2"></i>${isPinnedTarget ? '取消置顶消息' : '置顶消息'}</button>
     ${canEdit ? '<button class="dropdown-item" type="button" data-action="edit"><i class="bi bi-pencil-square me-2"></i>编辑</button>' : ''}
     ${canRecall ? '<button class="dropdown-item" type="button" data-action="recall"><i class="bi bi-arrow-counterclockwise me-2"></i>撤回</button>' : ''}
-    ${canDelete ? `<button class="dropdown-item text-danger" type="button" data-action="delete"><i class="bi bi-trash me-2"></i>${canUseSuperDelete() ? '删除/超级删除' : '删除'}</button>` : ''}
+    ${canDelete ? '<button class="dropdown-item text-danger" type="button" data-action="delete"><i class="bi bi-trash me-2"></i>删除</button>' : ''}
+    ${canSuperDelete ? '<button class="dropdown-item text-danger" type="button" data-action="super-delete"><i class="bi bi-trash3 me-2"></i>超级删除</button>' : ''}
   `;
   menu.style.left = '0px';
   menu.style.top = '0px';
@@ -6631,15 +6722,9 @@ function bindChatEvents() {
       alert('仅可删除自己发送的消息');
       return;
     }
-    const conv = findConversationById(appState.activeConversationId);
-    const canSuperDelete = !!(
-      conv
-      && canUseSuperDelete()
-      && Number(appState.actionTargetMessage.senderId) === Number(appState.currentUser?.id)
-    );
     if (deleteForPeerCheck) {
       deleteForPeerCheck.checked = false;
-      deleteForPeerCheck.disabled = !canSuperDelete;
+      deleteForPeerCheck.disabled = true;
     }
     closeMessageActionUi();
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteMessageModal'));
@@ -6704,19 +6789,9 @@ function bindChatEvents() {
       }
       const conv = findConversationById(appState.activeConversationId);
       if (!conv) return;
-      const canSuperDelete = !!(
-        conv
-        && canUseSuperDelete()
-        && Number(msg.senderId) === Number(appState.currentUser?.id)
-      );
-      const deleteForPeer = !!(canSuperDelete && deleteForPeerCheck && deleteForPeerCheck.checked);
       const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteMessageModal'));
       try {
-        if (deleteForPeer) {
-          await apiSuperDeleteMessage(msg.id);
-        } else {
-          await apiDeleteMessage(msg.id);
-        }
+        await apiDeleteMessage(msg.id);
         conv.messages = conv.messages.filter((m) => Number(m.id) !== Number(msg.id));
         renderMessages({ autoScroll: false });
         scheduleConversationListRender();
@@ -6945,18 +7020,27 @@ function bindChatEvents() {
           alert('仅可删除自己发送的消息');
           return;
         }
-        const conv = findConversationById(appState.activeConversationId);
-        const canSuperDelete = !!(
-          conv
-          && canUseSuperDelete()
-          && Number(msg.senderId) === Number(appState.currentUser?.id)
-        );
         if (deleteForPeerCheck) {
           deleteForPeerCheck.checked = false;
-          deleteForPeerCheck.disabled = !canSuperDelete;
+          deleteForPeerCheck.disabled = true;
         }
         const deleteModal = new bootstrap.Modal(document.getElementById('deleteMessageModal'));
         deleteModal.show();
+        return;
+      }
+      if (action === 'super-delete') {
+        if (!canSuperDeleteMessage(msg)) {
+          alert('你没有权限执行超级删除');
+          return;
+        }
+        if (!confirm('确定超级删除该消息？该操作会对当前会话其他成员生效。')) return;
+        await apiSuperDeleteMessage(msg.id);
+        const conv = findConversationById(appState.activeConversationId);
+        if (conv) {
+          conv.messages = conv.messages.filter((m) => Number(m.id) !== Number(msg.id));
+          renderMessages({ autoScroll: false });
+          scheduleConversationListRender();
+        }
       }
     } catch (err) {
       alert(`操作失败：${err.message}`);
@@ -7873,6 +7957,9 @@ async function bootstrapAfterLogin(userFromAuth = null) {
     online: !!me.is_online,
     canKickMembers: !!me.can_kick_members,
     canMuteMembers: !!me.can_mute_members,
+    canRecallOwnMessages: me.can_recall_own_messages !== false,
+    canRecallOthersMessages: !!me.can_recall_others_messages,
+    canSuperDeleteMessages: !!me.can_super_delete_messages,
     canUseEditFeature: !!me.can_use_edit_feature,
     canUseSuperDelete: !!me.can_use_super_delete
   };

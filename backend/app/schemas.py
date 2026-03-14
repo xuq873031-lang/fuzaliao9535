@@ -34,6 +34,9 @@ class UserOut(BaseModel):
     last_seen_at: datetime | None = None
     can_kick_members: bool = False
     can_mute_members: bool = False
+    can_recall_own_messages: bool = True
+    can_recall_others_messages: bool = False
+    can_super_delete_messages: bool = False
     can_use_edit_feature: bool = False
     can_use_super_delete: bool = False
 
@@ -101,6 +104,8 @@ class RoomMemberOut(BaseModel):
     role: str
     can_kick: bool = False
     can_mute: bool = False
+    can_recall_others: bool = False
+    can_super_delete: bool = False
     muted: bool = False
     joined_at: datetime | None = None
 
@@ -108,6 +113,8 @@ class RoomMemberOut(BaseModel):
 class RoomMemberPermissionIn(BaseModel):
     can_kick: bool = False
     can_mute: bool = False
+    can_recall_others: bool = False
+    can_super_delete: bool = False
 
 
 class RoomMuteOut(BaseModel):
@@ -204,6 +211,9 @@ class AdminUserOut(BaseModel):
     last_seen_at: datetime | None = None
     can_kick_members: bool = False
     can_mute_members: bool = False
+    can_recall_own_messages: bool = True
+    can_recall_others_messages: bool = False
+    can_super_delete_messages: bool = False
     can_use_edit_feature: bool = False
     can_use_super_delete: bool = False
 
@@ -216,6 +226,9 @@ class AdminResetPasswordIn(BaseModel):
 class AdminUserPermissionsIn(BaseModel):
     can_kick_members: bool = False
     can_mute_members: bool = False
+    can_recall_own_messages: bool = True
+    can_recall_others_messages: bool = False
+    can_super_delete_messages: bool = False
     can_use_edit_feature: bool = False
     can_use_super_delete: bool = False
 

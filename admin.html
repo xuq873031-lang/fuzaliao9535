@@ -8,7 +8,6 @@
   <script>
     window.__CHAT_CONFIG = {
       API_BASE: "https://web-production-be9f.up.railway.app"
-      // 可选：WS_BASE: "wss://web-production-afb64.up.railway.app"
     };
   </script>
   <style>
@@ -226,6 +225,8 @@
                 <th>踢人权限</th>
                 <th>禁言权限</th>
                 <th>编辑权限</th>
+                <th>撤回自己</th>
+                <th>撤回他人</th>
                 <th>超级删除</th>
                 <th>操作</th>
               </tr>
@@ -268,21 +269,11 @@
     const STORAGE_KEYS = {
       token: 'chatwave_admin_token',
       tokenLegacy: 'admin_access_token',
-      apiBase: 'chat_api_base'
+      apiBase: 'chatwave_admin_api_base'
     };
     const DEFAULT_API_BASE = String(
-      (window.__CHAT_CONFIG && window.__CHAT_CONFIG.API_BASE) || 'https://web-production-afb64.up.railway.app'
+      (window.__CHAT_CONFIG && window.__CHAT_CONFIG.API_BASE) || 'https://web-production-be9f.up.railway.app'
     ).trim().replace(/\/$/, '');
-    const API_BASE_CANDIDATES = Array.from(new Set(
-      [
-        DEFAULT_API_BASE,
-        'https://web-production-be9f.up.railway.app',
-        'https://web-production-afb64.up.railway.app',
-        'https://web-production-f9619e.up.railway.app'
-      ]
-        .map((x) => String(x || '').trim().replace(/\/$/, ''))
-        .filter((x) => /^https?:\/\//i.test(x))
-    ));
 
     const state = {
       users: [],
@@ -316,16 +307,9 @@
 
     async function ensureReachableApiBase() {
       const current = getApiBase();
-      const candidates = [current, ...API_BASE_CANDIDATES.filter((x) => x !== current)];
-      for (const base of candidates) {
-        try {
-          const res = await fetchWithTimeout(`${base}/health`, { method: 'GET', cache: 'no-store' }, 7000);
-          if (res && res.ok) {
-            if (base !== current) setApiBase(base);
-            return base;
-          }
-        } catch (_) {}
-      }
+      try {
+        await fetchWithTimeout(`${current}/health`, { method: 'GET', cache: 'no-store' }, 7000);
+      } catch (_) {}
       return current;
     }
 
@@ -408,38 +392,13 @@
         throw err;
       }
       const current = getApiBase();
-      const candidates = [current, ...API_BASE_CANDIDATES.filter((x) => x !== current)];
       let res = null;
-      let lastNetworkErr = null;
-      let successBase = current;
-      let lastHttpRes = null;
-      const shouldRetryOn404 = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path === '/api/users/me';
-      for (const base of candidates) {
-        try {
-          const currentRes = await fetchWithTimeout(`${base}${path}`, { ...options, headers }, 12000);
-          lastHttpRes = currentRes;
-          if (currentRes.status === 404 && shouldRetryOn404) {
-            continue;
-          }
-          res = currentRes;
-          successBase = base;
-          break;
-        } catch (err) {
-          lastNetworkErr = err;
-        }
-      }
-      if (!res) {
-        if (lastHttpRes) {
-          res = lastHttpRes;
-          successBase = current;
-        } else {
-          const err = new Error(`网络请求失败：${lastNetworkErr?.message || 'Load failed'}`);
-          err.status = 0;
-          throw err;
-        }
-      }
-      if (successBase !== current) {
-        setApiBase(successBase);
+      try {
+        res = await fetchWithTimeout(`${current}${path}`, { ...options, headers }, 12000);
+      } catch (err) {
+        const networkErr = new Error(`网络请求失败：${err?.message || 'Load failed'}`);
+        networkErr.status = 0;
+        throw networkErr;
       }
 
       if (!res.ok) {
@@ -534,7 +493,7 @@
         : modeFiltered;
 
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="11" class="text-secondary">暂无匹配用户</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14" class="text-secondary">暂无匹配用户</td></tr>';
         return;
       }
 
@@ -565,7 +524,9 @@
           <td><input type="checkbox" class="form-check-input perm-kick" ${u.can_kick_members ? 'checked' : ''} /></td>
           <td><input type="checkbox" class="form-check-input perm-mute" ${u.can_mute_members ? 'checked' : ''} /></td>
           <td><input type="checkbox" class="form-check-input perm-edit" ${u.can_use_edit_feature ? 'checked' : ''} /></td>
-          <td><input type="checkbox" class="form-check-input perm-super-delete" ${u.can_use_super_delete ? 'checked' : ''} /></td>
+          <td><input type="checkbox" class="form-check-input perm-recall-own" ${u.can_recall_own_messages !== false ? 'checked' : ''} /></td>
+          <td><input type="checkbox" class="form-check-input perm-recall-others" ${u.can_recall_others_messages ? 'checked' : ''} /></td>
+          <td><input type="checkbox" class="form-check-input perm-super-delete" ${u.can_super_delete_messages ? 'checked' : ''} /></td>
           <td class="d-flex gap-2">
             <button class="btn btn-sm btn-outline-primary" data-save-perm="${u.id}">保存权限</button>
             <button class="btn btn-sm btn-outline-danger" data-reset="${u.id}">重置密码</button>
@@ -579,6 +540,8 @@
           const canKick = !!tr.querySelector('.perm-kick')?.checked;
           const canMute = !!tr.querySelector('.perm-mute')?.checked;
           const canEdit = !!tr.querySelector('.perm-edit')?.checked;
+          const canRecallOwn = !!tr.querySelector('.perm-recall-own')?.checked;
+          const canRecallOthers = !!tr.querySelector('.perm-recall-others')?.checked;
           const canSuperDelete = !!tr.querySelector('.perm-super-delete')?.checked;
           try {
             saveBtn.disabled = true;
@@ -586,11 +549,17 @@
             await updatePermissions(u.id, {
               can_kick_members: canKick,
               can_mute_members: canMute,
+              can_recall_own_messages: canRecallOwn,
+              can_recall_others_messages: canRecallOthers,
+              can_super_delete_messages: canSuperDelete,
               can_use_edit_feature: canEdit,
               can_use_super_delete: canSuperDelete
             });
             u.can_kick_members = canKick;
             u.can_mute_members = canMute;
+            u.can_recall_own_messages = canRecallOwn;
+            u.can_recall_others_messages = canRecallOthers;
+            u.can_super_delete_messages = canSuperDelete;
             u.can_use_edit_feature = canEdit;
             u.can_use_super_delete = canSuperDelete;
             setHint(`已更新 ${u.username} 的权限`);

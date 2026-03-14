@@ -14,6 +14,8 @@ room_members = Table(
     Column("role", String(20), nullable=False, default="member"),
     Column("can_kick", Boolean, nullable=False, default=False),
     Column("can_mute", Boolean, nullable=False, default=False),
+    Column("can_recall_others", Boolean, nullable=False, default=False),
+    Column("can_super_delete", Boolean, nullable=False, default=False),
     Column("joined_at", DateTime, default=datetime.utcnow, nullable=False),
 )
 
@@ -44,6 +46,9 @@ class User(Base):
     last_seen_at = Column(DateTime, nullable=True)
     can_kick_members = Column(Boolean, default=False, nullable=False)
     can_mute_members = Column(Boolean, default=False, nullable=False)
+    can_recall_own_messages = Column(Boolean, default=True, nullable=False)
+    can_recall_others_messages = Column(Boolean, default=False, nullable=False)
+    can_super_delete_messages = Column(Boolean, default=False, nullable=False)
     can_use_edit_feature = Column(Boolean, default=False, nullable=False)
     can_use_super_delete = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
