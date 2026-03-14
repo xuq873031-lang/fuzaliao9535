@@ -2430,3 +2430,362 @@ body {
     padding: 24px 18px;
   }
 }
+
+/* ============================
+   二次收紧：更接近原生手机界面
+============================ */
+.main-card,
+.contacts-shell,
+.profile-hero-card,
+.profile-form-card {
+  border-radius: 20px !important;
+}
+
+.tg-conversation-header {
+  padding: 18px 18px 12px !important;
+}
+
+.tg-conversation-header h6 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tg-search-wrap {
+  min-height: 40px;
+  border-radius: 14px;
+  background: #f5f6f8;
+}
+
+.tg-search-wrap .form-control::placeholder,
+.contacts-search-group .form-control::placeholder,
+#messageInput::placeholder,
+#nicknameInput::placeholder,
+#signatureInput::placeholder {
+  color: #b4bcc8;
+}
+
+.tg-create-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
+.tg-filter-tabs {
+  gap: 4px;
+  padding: 2px;
+  background: transparent;
+}
+
+.tg-filter-tab {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tg-filter-tab.active {
+  background: #f3f5f8;
+  color: var(--tg-text);
+}
+
+.conversation-list {
+  padding-top: 2px;
+}
+
+.conversation-item-btn {
+  padding: 14px 18px !important;
+}
+
+.conversation-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+}
+
+.conversation-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.conversation-preview {
+  font-size: 13px;
+}
+
+.conversation-time {
+  font-size: 12px;
+}
+
+.unread-dot,
+#totalUnreadText.badge,
+#newFriendPendingCount.badge,
+#friendReqBadgeMobileTab.badge,
+#friendReqBadgeDrawer.badge,
+#totalUnreadMobile.badge {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+
+#totalUnreadText.badge {
+  border-radius: 999px;
+  padding: 4px 6px;
+}
+
+.contacts-shell {
+  border-color: #f0f1f3 !important;
+}
+
+.contacts-topbar {
+  margin-bottom: 14px !important;
+}
+
+.contacts-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.contacts-local-search-btn,
+.contacts-plus-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border-color: transparent;
+  background: #f6f7f9;
+}
+
+.contacts-layout {
+  gap: 10px;
+}
+
+.contacts-fixed-zone,
+.contacts-friend-groups {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.contacts-fixed-item,
+.contacts-friend-item {
+  min-height: 60px;
+  padding-left: 2px;
+  padding-right: 2px;
+  border-bottom-color: #f2f3f5;
+}
+
+.contacts-fixed-item {
+  gap: 12px;
+}
+
+.contacts-fixed-item:hover,
+.contacts-friend-item:hover {
+  background: transparent;
+}
+
+.contacts-fixed-icon,
+.contacts-friend-avatar {
+  border-radius: 14px;
+}
+
+.contacts-fixed-label {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.contacts-friend-name {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.contacts-friend-sub {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.contacts-group-title {
+  padding: 14px 2px 6px;
+  border-top: 0;
+  background: transparent;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.contacts-az-index {
+  padding-top: 12px;
+}
+
+.contacts-az-index-btn {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.profile-view {
+  background: #fafafa;
+}
+
+.profile-view .row {
+  max-width: 720px;
+}
+
+.profile-hero-card,
+.profile-form-card {
+  border-color: #f0f1f3 !important;
+  background: #fff;
+}
+
+.profile-hero-body {
+  padding: 44px 24px 28px;
+}
+
+.profile-form-body {
+  padding: 24px 22px 28px;
+}
+
+.profile-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
+}
+
+.avatar-edit-hint {
+  font-size: 11px;
+}
+
+.profile-section-title {
+  margin-bottom: 18px !important;
+  font-size: 16px;
+}
+
+.profile-form-body .form-label {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #7f8899;
+}
+
+#nicknameInput,
+#signatureInput {
+  background: #f7f8fa;
+  border: 0 !important;
+}
+
+#toggleThemeBtn {
+  border-color: transparent;
+  background: #f5f6f8;
+  color: #5e6776;
+}
+
+#saveProfileBtn {
+  width: 100%;
+  border-radius: 16px;
+  border: 0;
+}
+
+.mobile-tabbar {
+  left: 10px;
+  right: 10px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  padding: 6px 4px;
+  border-color: #eff1f4;
+  border-radius: 20px;
+}
+
+.mobile-tab {
+  gap: 3px;
+  min-height: 48px;
+  border-radius: 14px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.mobile-tab i {
+  font-size: 17px;
+  opacity: 0.92;
+}
+
+.mobile-tab.active {
+  background: transparent;
+  color: var(--tg-primary);
+}
+
+.mobile-tab.active span {
+  font-weight: 600;
+}
+
+.mobile-tab .badge {
+  top: 4px;
+  right: 16px;
+}
+
+@media (max-width: 767.98px) {
+  .mobile-topbar {
+    min-height: 56px;
+    padding: 10px 16px !important;
+  }
+
+  .tg-conversation-header {
+    padding: 16px 16px 10px !important;
+  }
+
+  .conversation-item-btn {
+    padding: 13px 16px !important;
+  }
+
+  .contacts-shell,
+  .profile-hero-card,
+  .profile-form-card {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .contacts-view,
+  .profile-view,
+  #groupsView {
+    padding: 0 !important;
+    background: #fff;
+  }
+
+  .contacts-shell .card-body,
+  .profile-hero-body,
+  .profile-form-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .contacts-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin-bottom: 8px !important;
+    padding: 12px 0 10px;
+    background: rgba(255, 255, 255, 0.96);
+  }
+
+  .contacts-group-title {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .contacts-fixed-item,
+  .contacts-friend-item {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .profile-view {
+    background: #fff;
+  }
+
+  .profile-view .row {
+    gap: 0 !important;
+  }
+
+  .profile-hero-body {
+    padding-top: 28px;
+    padding-bottom: 18px;
+  }
+
+  .profile-form-body {
+    padding-top: 12px;
+    padding-bottom: 110px;
+  }
+}
