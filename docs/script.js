@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   themePreset: 'chatwave_theme_preset',
   themeAccent: 'chatwave_theme_accent',
   themeBubble: 'chatwave_theme_bubble',
+  chatSplitWidth: 'chat_split_width',
   apiBase: 'chat_api_base',
   wsBase: 'chat_ws_base'
 };
@@ -3319,6 +3320,66 @@ function bindNavigationEvents() {
       }
     });
   }
+}
+
+function bindChatSplitResize() {
+  const layout = document.querySelector('#messagesView .chat-layout-row');
+  const leftPane = document.querySelector('#messagesView .conversation-pane');
+  const rightPane = document.querySelector('#messagesView .chat-pane');
+  const handle = document.getElementById('chatSplitHandle');
+  if (!layout || !leftPane || !rightPane || !handle) return;
+
+  const getBounds = () => {
+    const total = layout.clientWidth || window.innerWidth || 1200;
+    const min = 280;
+    const max = Math.max(min, total - 360);
+    return { min, max };
+  };
+
+  const applyWidth = (rawWidth) => {
+    const { min, max } = getBounds();
+    const width = Math.max(min, Math.min(max, Number(rawWidth) || min));
+    document.documentElement.style.setProperty('--chat-split-width', `${width}px`);
+    try {
+      localStorage.setItem(STORAGE_KEYS.chatSplitWidth, String(width));
+    } catch (_) {
+      // ignore storage errors
+    }
+  };
+
+  const saved = Number(localStorage.getItem(STORAGE_KEYS.chatSplitWidth) || 0);
+  if (saved > 0) applyWidth(saved);
+
+  let dragging = false;
+  let pointerId = null;
+
+  const onMove = (event) => {
+    if (!dragging) return;
+    const rect = layout.getBoundingClientRect();
+    applyWidth(event.clientX - rect.left);
+  };
+
+  const stopDrag = () => {
+    dragging = false;
+    pointerId = null;
+    document.body.classList.remove('chat-split-resizing');
+  };
+
+  handle.addEventListener('pointerdown', (event) => {
+    dragging = true;
+    pointerId = event.pointerId;
+    handle.setPointerCapture(pointerId);
+    document.body.classList.add('chat-split-resizing');
+    onMove(event);
+  });
+
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', stopDrag);
+  handle.addEventListener('pointercancel', stopDrag);
+  window.addEventListener('resize', () => {
+    const current = Number(getComputedStyle(document.documentElement).getPropertyValue('--chat-split-width').replace('px', '')) || saved || 360;
+    applyWidth(current);
+  }, { passive: true });
 }
 
 function bindProfileEvents() {
@@ -7365,6 +7426,7 @@ async function init() {
   bindFriendEvents();
   bindGroupEvents();
   bindChatEvents();
+  bindChatSplitResize();
   document.addEventListener('click', () => ensureAudioContext(), { once: true });
   document.addEventListener('touchstart', () => ensureAudioContext(), { once: true, passive: true });
 
