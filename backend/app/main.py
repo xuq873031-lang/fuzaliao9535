@@ -372,6 +372,39 @@ def build_message_out(db: Session, m: Message) -> MessageOut:
     )
 
 
+def cascade_recall_messages(
+    db: Session,
+    root_message: Message,
+    edited_by_admin: bool,
+) -> list[Message]:
+    recalled: list[Message] = []
+    queue: list[Message] = [root_message]
+    seen: set[int] = set()
+    now = datetime.utcnow()
+
+    while queue:
+        current = queue.pop(0)
+        if not current or current.id in seen:
+            continue
+        seen.add(current.id)
+
+        if current.content != "[已撤回]":
+            current.content = "[已撤回]"
+        current.updated_at = now
+        current.edited_by_admin = edited_by_admin
+        recalled.append(current)
+
+        children = db.query(Message).filter(Message.reply_to_message_id == current.id).all()
+        for child in children:
+            if child.id not in seen:
+                queue.append(child)
+
+    db.commit()
+    for msg in recalled:
+        db.refresh(msg)
+    return recalled
+
+
 def serialize_message(db: Session, m: Message) -> dict:
     out = build_message_out(db, m)
     return {
@@ -2039,6 +2072,13 @@ async def edit_message(
     if is_recall and msg.content == "[已撤回]":
         return build_message_out(db, msg)
 
+    if is_recall:
+        recalled_messages = cascade_recall_messages(db, msg, bool(is_admin))
+        for recalled in recalled_messages:
+            payload_ws = {"type": "message_edited", "payload": serialize_message(db, recalled)}
+            await manager.broadcast_to_room(recalled.room_id, payload_ws)
+        return build_message_out(db, msg)
+
     msg.content = new_content
     msg.edited_by_admin = bool(is_admin)
     msg.updated_at = datetime.utcnow()
@@ -2070,13 +2110,12 @@ async def recall_message(
     if msg.content == "[已撤回]":
         return build_message_out(db, msg)
 
-    msg.content = "[已撤回]"
-    msg.updated_at = datetime.utcnow()
-    msg.edited_by_admin = bool(not is_sender)
-    db.commit()
-    db.refresh(msg)
-
-    await manager.broadcast_to_room(msg.room_id, {"type": "message_edited", "payload": serialize_message(db, msg)})
+    recalled_messages = cascade_recall_messages(db, msg, bool(not is_sender))
+    for recalled in recalled_messages:
+        await manager.broadcast_to_room(
+            recalled.room_id,
+            {"type": "message_edited", "payload": serialize_message(db, recalled)},
+        )
     return build_message_out(db, msg)
 
 

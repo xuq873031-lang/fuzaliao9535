@@ -2551,8 +2551,12 @@ function handleWsEvent(evt) {
       target.updatedAt = msg.updatedAt;
       target.editedAt = msg.editedAt;
       target.editedByAdmin = msg.editedByAdmin;
+      target.replyToMessageId = msg.replyToMessageId;
+      target.replyToSenderId = msg.replyToSenderId;
+      target.replyToContent = msg.replyToContent;
     }
 
+    if (String(msg.text || '').startsWith('[已撤回]')) handleRecalledMessageUiState(msg);
     scheduleConversationListRender();
     if (appState.activeConversationId === conv.id && target) updateMessageRowInView(conv, target);
     return;
@@ -5602,6 +5606,16 @@ function startReplyMessage(msg) {
   if (input) input.focus();
 }
 
+function handleRecalledMessageUiState(msg) {
+  if (!msg) return;
+  if (appState.replyingToMessage && Number(appState.replyingToMessage.id) === Number(msg.id)) {
+    clearReplyAndEditState();
+  }
+  if (Number(appState.activeConversationId || 0) === Number(msg.room_id || msg.roomId || 0)) {
+    renderPinnedMessageBar();
+  }
+}
+
 function startEditOwnMessage(msg) {
   if (!canEditOwnMessage(msg)) {
     alert('该消息不可编辑（仅自己发送的文本消息）');
@@ -6590,8 +6604,12 @@ function bindChatEvents() {
         if (target) {
           target.text = updated.content;
           target.updatedAt = updated.updated_at ? new Date(updated.updated_at).getTime() : target.updatedAt;
+          target.replyToMessageId = updated.reply_to_message_id || target.replyToMessageId;
+          target.replyToSenderId = updated.reply_to_sender_id || target.replyToSenderId;
+          target.replyToContent = updated.reply_to_content || target.replyToContent;
         }
       }
+      if (String(updated.content || '').startsWith('[已撤回]')) handleRecalledMessageUiState(updated);
       renderMessages({ autoScroll: false });
       scheduleConversationListRender();
     } catch (err) {
@@ -6911,8 +6929,12 @@ function bindChatEvents() {
           if (target) {
             target.text = updated.content;
             target.updatedAt = updated.updated_at ? new Date(updated.updated_at).getTime() : target.updatedAt;
+            target.replyToMessageId = updated.reply_to_message_id || target.replyToMessageId;
+            target.replyToSenderId = updated.reply_to_sender_id || target.replyToSenderId;
+            target.replyToContent = updated.reply_to_content || target.replyToContent;
           }
         }
+        if (String(updated.content || '').startsWith('[已撤回]')) handleRecalledMessageUiState(updated);
         renderMessages({ autoScroll: false });
         scheduleConversationListRender();
         return;
@@ -7398,13 +7420,14 @@ function buildMessageRow(msg, conv) {
   const bubble = document.createElement('div');
   bubble.className = `msg-bubble ${appState.multiSelectMode ? 'selecting' : ''} ${msg.localPending ? 'pending' : ''} ${msg.localFailed ? 'failed' : ''}`;
 
+  const isRecalled = String(msg.text || '').startsWith('[已撤回]');
   const senderName = !me && conv.type === 'group'
     ? `<div class="small fw-bold mb-1">${escapeHtml(getGroupPublicDisplayNameByUserId(msg.senderId))}</div>`
     : '';
   const messageContent = renderMessageContent(msg.text);
   const replySenderName = msg.replyToSenderId ? getDisplayNameByUserId(msg.replyToSenderId) : '';
   const replyText = msg.replyToContent ? summarizeMessageText(msg.replyToContent) : '';
-  const replyBlock = msg.replyToMessageId
+  const replyBlock = !isRecalled && msg.replyToMessageId
     ? `<div class="msg-reply-preview" data-reply-to-id="${msg.replyToMessageId}"><div class="fw-semibold">${escapeHtml(replySenderName || '消息')}</div><div>${escapeHtml(replyText || '引用消息')}</div></div>`
     : '';
 
