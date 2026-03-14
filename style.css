@@ -4025,6 +4025,522 @@ body {
   color: #7590c5;
 }
 
+/* ============================
+   六次收口：全局主题联动与可读性
+============================ */
+:root {
+  --bg-primary: #f4f6fa;
+  --bg-panel: #ffffff;
+  --bg-soft: #f8fafc;
+  --bg-hover: #f2f5f9;
+  --bg-selected: rgba(var(--tg-primary-rgb), 0.12);
+  --bg-overlay: rgba(15, 23, 42, 0.14);
+  --text-primary: #182434;
+  --text-secondary: #667487;
+  --text-muted: #95a1b1;
+  --accent-color: var(--tg-primary);
+  --accent-strong: var(--tg-primary-strong);
+  --accent-text: var(--tg-primary-strong);
+  --accent-soft: rgba(var(--tg-primary-rgb), 0.14);
+  --accent-ghost: rgba(var(--tg-primary-rgb), 0.22);
+  --accent-contrast: #ffffff;
+  --bubble-self-bg: rgba(var(--tg-primary-rgb), 0.15);
+  --bubble-self-text: #18314f;
+  --bubble-other-bg: #ffffff;
+  --bubble-other-text: #182434;
+  --bubble-system-bg: #f2f5f8;
+  --bubble-system-text: #758293;
+  --input-bg: #f8fafc;
+  --input-text: #182434;
+  --input-placeholder: #9aa6b5;
+  --border-soft: #e8edf3;
+  --border-strong: #dbe3ec;
+  --nav-icon: #8f9bad;
+  --nav-icon-active: var(--accent-color);
+  --badge-bg: var(--accent-color);
+  --badge-text: var(--accent-contrast);
+  --badge-border: #ffffff;
+  --panel-shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.05);
+}
+
+[data-bs-theme="dark"] {
+  --bg-primary: #0b1219;
+  --bg-panel: #111a24;
+  --bg-soft: #162230;
+  --bg-hover: #1a2838;
+  --bg-selected: rgba(var(--tg-primary-rgb), 0.16);
+  --bg-overlay: rgba(2, 6, 23, 0.42);
+  --text-primary: #e7eef7;
+  --text-secondary: #a5b2c3;
+  --text-muted: #7d8ca0;
+  --bubble-self-bg: rgba(var(--tg-primary-rgb), 0.22);
+  --bubble-self-text: #f5f9ff;
+  --bubble-other-bg: #162230;
+  --bubble-other-text: #e7eef7;
+  --bubble-system-bg: #1a2838;
+  --bubble-system-text: #a8b5c7;
+  --input-bg: #162230;
+  --input-text: #e7eef7;
+  --input-placeholder: #8291a5;
+  --border-soft: #273444;
+  --border-strong: #344256;
+  --nav-icon: #93a2b6;
+  --badge-border: #111a24;
+  --panel-shadow-soft: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme-preset="classic"] {
+  --bg-primary: #f4f6fa;
+  --bg-panel: #ffffff;
+  --bg-soft: #f8fafc;
+  --text-primary: #182434;
+  --text-secondary: #667487;
+  --text-muted: #95a1b1;
+}
+
+:root[data-theme-preset="bright"] {
+  --bg-primary: #eef4fb;
+  --bg-panel: #ffffff;
+  --bg-soft: #fbfdff;
+  --bg-hover: #f5f9fd;
+  --text-primary: #162230;
+  --text-secondary: #647286;
+  --text-muted: #93a0b0;
+  --border-soft: #e3ebf4;
+}
+
+:root[data-theme-preset="clean"] {
+  --bg-primary: #f1f3f6;
+  --bg-panel: #ffffff;
+  --bg-soft: #f7f8fa;
+  --bg-hover: #f3f5f7;
+  --text-primary: #1d2733;
+  --text-secondary: #6d7988;
+  --text-muted: #9aa5b2;
+  --border-soft: #e6ebf0;
+  --panel-shadow-soft: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+[data-bs-theme="dark"][data-theme-preset="night"] {
+  --bg-primary: #091018;
+  --bg-panel: #0f1823;
+  --bg-soft: #16212d;
+  --bg-hover: #1a2736;
+  --text-primary: #eef4fb;
+  --text-secondary: #afbccd;
+  --text-muted: #8190a5;
+  --border-soft: #223142;
+  --border-strong: #304154;
+}
+
+:root[data-accent="yellow"],
+:root[data-accent="green"],
+:root[data-accent="cyan"] {
+  --accent-contrast: #182434;
+}
+
+:root[data-accent="yellow"] {
+  --accent-text: #7a6416;
+}
+
+:root[data-accent="orange"] {
+  --accent-text: #935124;
+}
+
+:root[data-accent="green"] {
+  --accent-text: #2b6a45;
+}
+
+:root[data-accent="cyan"] {
+  --accent-text: #2d6e72;
+}
+
+[data-bs-theme="dark"][data-accent="yellow"],
+[data-bs-theme="dark"][data-accent="green"],
+[data-bs-theme="dark"][data-accent="cyan"] {
+  --accent-contrast: #0f1823;
+  --accent-text: var(--accent-color);
+}
+
+[data-bubble-mode="on"] {
+  --bubble-self-bg: rgba(var(--tg-primary-rgb), 0.19);
+  --bubble-other-bg: var(--bg-panel);
+}
+
+[data-bs-theme="dark"][data-bubble-mode="on"] {
+  --bubble-self-bg: rgba(var(--tg-primary-rgb), 0.28);
+  --bubble-other-bg: #14202d;
+}
+
+html,
+body,
+#mainContainer,
+.app-gradient,
+.app-shell,
+.main-card,
+.main-card > .card-body,
+.sidebar-card,
+.contacts-shell,
+.profile-view,
+.contacts-view,
+#groupsView,
+.chat-pane,
+.conversation-pane,
+.chat-empty-state,
+.mobile-drawer,
+.mobile-topbar,
+.offcanvas-header,
+.offcanvas-body,
+.modal-content,
+.card,
+.card-body {
+  background-color: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.app-gradient {
+  background:
+    radial-gradient(circle at top right, rgba(var(--tg-primary-rgb), 0.12), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(var(--tg-primary-rgb), 0.08), transparent 32%),
+    var(--bg-primary);
+}
+
+.auth-card,
+.sidebar-card,
+.main-card,
+.contacts-shell,
+.profile-hero-card,
+.profile-form-card,
+.friend-profile-info,
+.friend-request-item,
+.contacts-fixed-zone,
+.contacts-friend-groups,
+.theme-settings-panel,
+.theme-preset-card,
+.image-compose-card,
+.chat-image-drop-card {
+  background: var(--bg-panel);
+  border-color: var(--border-soft) !important;
+  box-shadow: var(--panel-shadow-soft);
+}
+
+.text-secondary,
+.text-muted,
+.form-text,
+.conversation-preview,
+.conversation-time,
+.msg-meta,
+.avatar-edit-hint,
+.theme-panel-sub,
+.theme-toggle-sub,
+.friend-request-meta,
+.contacts-friend-sub,
+.contacts-group-title,
+.chat-empty-sub,
+.chat-image-drop-sub,
+.tg-chat-header #chatSubTitle,
+#chatSubTitle,
+.profile-form-body .form-label,
+.tg-search-wrap .input-group-text,
+.contacts-search-group .input-group-text,
+.theme-panel-label {
+  color: var(--text-secondary) !important;
+}
+
+.chat-empty-title,
+.conversation-name,
+.contacts-friend-name,
+.contacts-fixed-label,
+.profile-section-title,
+.theme-panel-title,
+.theme-toggle-title,
+#chatTitle,
+#sidebarUsername,
+.mobile-topbar-title,
+.offcanvas-title,
+.friend-profile-info-title,
+.modal-title {
+  color: var(--text-primary) !important;
+}
+
+.form-control,
+.form-select,
+.input-group-text,
+#messageInput,
+#nicknameInput,
+#signatureInput,
+.contacts-search-group,
+.tg-search-wrap,
+.image-compose-caption-input,
+.theme-preset-card,
+.theme-entry-btn,
+.theme-toggle-item {
+  background: var(--input-bg);
+  color: var(--input-text);
+  border-color: var(--border-soft) !important;
+}
+
+.form-control::placeholder,
+.form-select::placeholder,
+#messageInput::placeholder,
+#nicknameInput::placeholder,
+#signatureInput::placeholder,
+.contacts-search-group .form-control::placeholder,
+.tg-search-wrap .form-control::placeholder,
+.image-compose-caption-input::placeholder {
+  color: var(--input-placeholder) !important;
+  opacity: 1;
+}
+
+.btn-primary,
+#sendMessageBtn,
+#saveProfileBtn,
+#friendSearchBtn,
+#groupSettingsSaveBtn,
+.friend-request-item .req-accept-btn {
+  background: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
+  color: var(--accent-contrast) !important;
+}
+
+.btn-primary:hover,
+#sendMessageBtn:hover,
+#saveProfileBtn:hover,
+#friendSearchBtn:hover,
+#groupSettingsSaveBtn:hover,
+.friend-request-item .req-accept-btn:hover {
+  background: var(--accent-strong) !important;
+  border-color: var(--accent-strong) !important;
+  color: var(--accent-contrast) !important;
+}
+
+.btn-outline-secondary,
+.btn-light,
+.mobile-topbar-btn,
+.tg-create-btn,
+.contacts-local-search-btn,
+.contacts-plus-btn,
+.chat-tools-row .btn,
+#uploadImageBtn,
+#clearReplyBtn,
+#imageComposeReplaceBtn,
+.friend-request-item .req-reject-btn {
+  background: var(--bg-soft) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-soft) !important;
+}
+
+.btn-outline-secondary:hover,
+.btn-light:hover,
+.mobile-topbar-btn:hover,
+.tg-create-btn:hover,
+.contacts-local-search-btn:hover,
+.contacts-plus-btn:hover,
+.chat-tools-row .btn:hover,
+#uploadImageBtn:hover,
+#clearReplyBtn:hover,
+#imageComposeReplaceBtn:hover,
+.friend-request-item .req-reject-btn:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-strong) !important;
+}
+
+.tg-rail-btn,
+.tg-rail-btn-logout,
+.mobile-tab,
+.mobile-drawer-link,
+.contacts-az-index-btn,
+.contacts-request-tab,
+.tg-filter-tab {
+  color: var(--nav-icon) !important;
+}
+
+.tg-rail-btn.active,
+.mobile-tab.active,
+.mobile-drawer-link.active,
+.contacts-request-tab.active,
+.tg-filter-tab.active,
+.conversation-item-btn.active,
+.conversation-item-btn.active.tg-pinned {
+  background: var(--bg-selected) !important;
+  color: var(--accent-text) !important;
+}
+
+.tg-rail-btn.active,
+.mobile-tab.active,
+.mobile-drawer-link.active,
+.contacts-request-tab.active,
+.tg-filter-tab.active,
+.conversation-item-btn.active .conversation-name,
+.conversation-item-btn.active .conversation-preview,
+.conversation-item-btn.active .conversation-time,
+.theme-preset-card.active .theme-preset-name {
+  color: var(--accent-text) !important;
+}
+
+.conversation-item-btn,
+.contacts-fixed-item,
+.contacts-friend-item,
+.mobile-drawer-link,
+.theme-entry-btn,
+.theme-toggle-item {
+  background: transparent;
+}
+
+.conversation-item-btn:hover,
+.contacts-fixed-item:hover,
+.contacts-friend-item:hover,
+.mobile-drawer-link:hover,
+.theme-entry-btn:hover,
+.theme-toggle-item:hover,
+.theme-preset-card:hover {
+  background: var(--bg-hover) !important;
+}
+
+.conversation-item-btn,
+.contacts-fixed-item,
+.contacts-friend-item,
+#chatHeader,
+#chatComposer,
+#multiSelectBar,
+.mobile-topbar,
+.mobile-tabbar,
+.contacts-topbar,
+.mobile-drawer .offcanvas-header,
+.contacts-fixed-zone,
+.contacts-friend-groups,
+.contacts-search-group,
+.tg-search-wrap {
+  border-color: var(--border-soft) !important;
+}
+
+.conversation-item-btn.active::before,
+.theme-preset-card.active,
+.theme-accent-dot.active {
+  border-color: var(--accent-ghost) !important;
+}
+
+.conversation-item-btn.active::before,
+#chatSubTitle.typing-active {
+  background: var(--accent-color) !important;
+  color: var(--accent-color) !important;
+}
+
+.msg-bubble {
+  color: var(--bubble-other-text);
+  border-color: var(--border-soft);
+}
+
+.msg-row.me .msg-bubble {
+  background: var(--bubble-self-bg) !important;
+  color: var(--bubble-self-text) !important;
+}
+
+.msg-row.other .msg-bubble {
+  background: var(--bubble-other-bg) !important;
+  color: var(--bubble-other-text) !important;
+  border-color: var(--border-soft) !important;
+}
+
+.msg-row.system .msg-bubble {
+  background: var(--bubble-system-bg) !important;
+  color: var(--bubble-system-text) !important;
+}
+
+.msg-meta,
+.msg-row.me .msg-meta,
+.msg-row.other .msg-meta {
+  color: var(--text-muted) !important;
+}
+
+.unread-dot,
+#totalUnreadText.badge,
+#newFriendPendingCount.badge,
+#friendReqBadgeMobileTab.badge,
+#friendReqBadgeDrawer.badge,
+#friendReqBadgeDesktop.tg-rail-badge,
+#totalUnreadMobile.badge,
+.tg-rail-badge {
+  background: var(--badge-bg) !important;
+  color: var(--badge-text) !important;
+  border-color: var(--badge-border) !important;
+  box-shadow: none;
+}
+
+.pin-badge,
+.contacts-fixed-item .text-bg-primary,
+.contacts-fixed-item .text-bg-success {
+  background: var(--accent-soft) !important;
+  color: var(--accent-text) !important;
+  border-color: transparent !important;
+}
+
+.theme-preset-card {
+  background: var(--bg-panel);
+}
+
+.theme-preset-name,
+.theme-entry-btn i,
+.image-compose-card-title,
+.chat-image-drop-title {
+  color: var(--text-primary);
+}
+
+.theme-accent-dot {
+  box-shadow: 0 0 0 1px var(--border-soft);
+}
+
+.theme-accent-dot.active {
+  box-shadow:
+    0 0 0 1px var(--accent-color),
+    0 0 0 4px var(--accent-soft);
+}
+
+.online-dot.on {
+  background: #32b36b;
+}
+
+.online-dot.off {
+  background: var(--text-muted);
+}
+
+.chat-image-drop-hint {
+  background: var(--bg-overlay);
+}
+
+.chat-image-drop-card,
+.image-compose-card,
+.theme-settings-panel,
+.theme-preset-card,
+.theme-entry-btn,
+.theme-toggle-item,
+.profile-hero-card,
+.profile-form-card,
+.contacts-shell,
+.friend-request-item {
+  color: var(--text-primary);
+}
+
+@media (max-width: 767.98px) {
+  #mainContainer,
+  .contacts-view,
+  .profile-view,
+  #groupsView {
+    background: var(--bg-primary) !important;
+  }
+
+  .contacts-topbar,
+  .mobile-tabbar {
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent) !important;
+  }
+}
+
 #loadMoreBtn:disabled {
   display: none !important;
 }
