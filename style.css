@@ -857,31 +857,72 @@ body.main-open #messageList {
   white-space: pre-wrap;
 }
 
-.image-compose-modal .modal-body {
-  padding: 16px;
+.image-compose-card {
+  margin: 0 0 10px;
+  padding: 10px;
+  border: 1px solid #edf1f5;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
-.image-compose-stage {
-  min-height: 420px;
-  border-radius: 18px;
-  background: #f6f8fb;
+.image-compose-card-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.image-compose-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5c6675;
+}
+
+.image-compose-close-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #f7f8fa;
+  color: #97a0ad;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  padding: 16px;
+}
+
+.image-compose-close-btn:hover {
+  background: #f1f4f7;
+  color: #6d7684;
+}
+
+.image-compose-card-body {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.image-compose-card-media {
+  min-width: 0;
 }
 
 .image-compose-preview-box {
   position: relative;
-  display: inline-block;
-  max-width: 100%;
-  max-height: 70vh;
+  width: 168px;
+  height: 168px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #f5f7fa;
 }
 
 .image-compose-preview {
   display: block;
-  max-width: 100%;
-  max-height: 70vh;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   border-radius: 16px;
 }
 
@@ -892,6 +933,51 @@ body.main-open #messageList {
   border-radius: 16px;
 }
 
+.image-compose-card-main {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.image-compose-textbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.image-compose-textbar .form-control,
+.image-compose-caption-input {
+  border-color: #eef2f6;
+  border-radius: 12px;
+  background: #fafbfd;
+  box-shadow: none;
+}
+
+.image-compose-textbar .form-control {
+  min-height: 38px;
+}
+
+.image-compose-textbar .btn,
+.image-compose-actions .btn {
+  border-radius: 11px;
+}
+
+.image-compose-caption-input {
+  min-height: 76px;
+  resize: none;
+}
+
+.image-compose-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.image-compose-hint {
+  font-size: 12px;
+  color: #97a0ad;
+}
+
 .image-compose-text-item {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -899,7 +985,7 @@ body.main-open #messageList {
   font-size: 24px;
   font-weight: 700;
   line-height: 1.1;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
   cursor: grab;
   user-select: none;
   white-space: nowrap;
@@ -907,11 +993,6 @@ body.main-open #messageList {
 
 .image-compose-text-item.dragging {
   cursor: grabbing;
-}
-
-.image-compose-tools {
-  display: grid;
-  gap: 14px;
 }
 
 .chat-image-drop-hint {
@@ -948,14 +1029,18 @@ body.main-open #messageList {
 }
 
 @media (max-width: 767.98px) {
-  .image-compose-stage {
-    min-height: 280px;
-    padding: 10px;
+  .image-compose-card {
+    padding: 9px;
   }
 
-  .image-compose-preview,
+  .image-compose-card-body {
+    grid-template-columns: 1fr;
+  }
+
   .image-compose-preview-box {
-    max-height: 46vh;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
   }
 
   .image-compose-text-item {

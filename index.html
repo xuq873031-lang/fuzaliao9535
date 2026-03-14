@@ -213,6 +213,35 @@
                           <button id="clearReplyBtn" class="btn btn-sm btn-outline-secondary" type="button">取消</button>
                         </div>
                       </div>
+                      <div id="imageComposeCard" class="image-compose-card d-none">
+                        <div class="image-compose-card-head">
+                          <div class="image-compose-card-title">待发送媒体</div>
+                          <button id="imageComposeCloseBtn" class="btn image-compose-close-btn" type="button" aria-label="取消待发送媒体">
+                            <i class="bi bi-x-lg"></i>
+                          </button>
+                        </div>
+                        <div class="image-compose-card-body">
+                          <div class="image-compose-card-media">
+                            <div id="imageComposePreviewBox" class="image-compose-preview-box">
+                              <img id="imageComposePreview" class="image-compose-preview d-none" alt="preview" />
+                              <video id="imageComposeVideoPreview" class="image-compose-preview d-none" playsinline controls preload="metadata"></video>
+                              <div id="imageComposeOverlayLayer" class="image-compose-overlay-layer"></div>
+                            </div>
+                          </div>
+                          <div class="image-compose-card-main">
+                            <div class="image-compose-textbar">
+                              <input id="imageComposeTextInput" class="form-control" placeholder="给图片加字" />
+                              <button id="imageComposeAddTextBtn" class="btn btn-outline-secondary" type="button">加字</button>
+                            </div>
+                            <textarea id="imageComposeCaptionInput" class="form-control image-compose-caption-input" rows="2" placeholder="添加说明..."></textarea>
+                            <div id="imageComposeUnsupportedHint" class="image-compose-hint d-none">当前发送链路仅支持图片上传，视频可预览但暂不发送。</div>
+                            <div class="image-compose-actions">
+                              <button id="imageComposeReplaceBtn" class="btn btn-light" type="button">重新选择</button>
+                              <button id="imageComposeSendBtn" class="btn btn-primary" type="button">发送</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div class="d-flex flex-wrap gap-1 mb-2 d-none" id="emojiBar"></div>
                       <div class="chat-tools-row mb-2">
                         <button id="emojiToggleBtn" class="btn btn-outline-secondary btn-sm" type="button" title="表情">😊</button>
@@ -833,54 +862,10 @@
       </div>
 
       <!-- 发图预览与标注 -->
-      <div class="modal fade" id="imageComposeModal" tabindex="-1">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
-          <div class="modal-content rounded-4 image-compose-modal">
-            <div class="modal-header">
-              <h5 class="modal-title">发送图片</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-              <div class="row g-3">
-                <div class="col-12 col-lg-8">
-                  <div class="image-compose-stage">
-                    <div id="imageComposePreviewBox" class="image-compose-preview-box">
-                      <img id="imageComposePreview" class="image-compose-preview" alt="preview" />
-                      <div id="imageComposeOverlayLayer" class="image-compose-overlay-layer"></div>
-                    </div>
-                  </div>
-                </div>
-                <div class="col-12 col-lg-4">
-                  <div class="image-compose-tools">
-                    <div>
-                      <label for="imageComposeTextInput" class="form-label small text-secondary">图片文字标注</label>
-                      <div class="input-group">
-                        <input id="imageComposeTextInput" class="form-control" placeholder="输入要加在图片上的文字" />
-                        <button id="imageComposeAddTextBtn" class="btn btn-outline-secondary" type="button">加字</button>
-                      </div>
-                      <div class="form-text">添加后可直接拖动文字位置</div>
-                    </div>
-                    <div>
-                      <label for="imageComposeCaptionInput" class="form-label small text-secondary">图片配文</label>
-                      <textarea id="imageComposeCaptionInput" class="form-control" rows="4" placeholder="可选：给这张图片配一段文字说明"></textarea>
-                    </div>
-                    <div class="d-grid gap-2">
-                      <button id="imageComposeReplaceBtn" class="btn btn-outline-secondary" type="button">重新选择图片</button>
-                      <button id="imageComposeCancelBtn" class="btn btn-light" type="button" data-bs-dismiss="modal">取消</button>
-                      <button id="imageComposeSendBtn" class="btn btn-primary" type="button">发送图片</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div id="chatImageDropHint" class="chat-image-drop-hint d-none">
         <div class="chat-image-drop-card">
-          <div class="chat-image-drop-title">松开发送图片</div>
-          <div class="chat-image-drop-sub">先预览，再加字和配文</div>
+          <div class="chat-image-drop-title">松手预览媒体</div>
+          <div class="chat-image-drop-sub">会先进入发送前卡片，不会直接发出</div>
         </div>
       </div>
 
