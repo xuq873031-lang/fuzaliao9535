@@ -6906,10 +6906,14 @@ function focusMessageInputForDesktop() {
   if (!input || !appState.activeConversationId || appState.currentView !== 'messagesView') return;
   const isMobileLike = window.matchMedia('(max-width: 991.98px), (pointer: coarse)').matches;
   if (isMobileLike) return;
-  requestAnimationFrame(() => {
+  const focusInput = () => {
+    if (!appState.activeConversationId || appState.currentView !== 'messagesView') return;
+    if (!document.body.contains(input) || input.disabled || input.offsetParent === null) return;
     if (document.activeElement === input) return;
     input.focus({ preventScroll: true });
-  });
+  };
+  requestAnimationFrame(focusInput);
+  setTimeout(focusInput, 60);
 }
 
 function renderMessages(options = {}) {
