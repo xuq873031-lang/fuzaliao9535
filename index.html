@@ -363,58 +363,88 @@
                     <div class="card border-0 shadow-sm rounded-4 h-100 profile-form-card">
                       <div class="card-body profile-form-body">
                         <div id="settingsHomeView" class="settings-subview">
-                          <div class="settings-header-block">
-                            <h6 class="mb-1 profile-section-title">设置</h6>
-                            <div class="settings-header-sub">管理资料、通知与外观偏好</div>
+                          <div id="settingsHomeShell" class="settings-home-shell">
+                            <div class="settings-header-block">
+                              <h6 class="mb-1 profile-section-title">设置</h6>
+                              <div class="settings-header-sub">管理资料、通知与外观偏好</div>
+                            </div>
+
+                            <div class="settings-menu-panel">
+                              <button class="settings-menu-item" type="button" data-settings-section="profile">
+                                <span class="settings-menu-leading">
+                                  <span class="settings-menu-icon"><i class="bi bi-person-circle"></i></span>
+                                  <span class="settings-menu-copy">
+                                    <span class="settings-menu-title">个人资料</span>
+                                    <span class="settings-menu-sub">编辑昵称、签名和头像</span>
+                                  </span>
+                                </span>
+                                <span class="settings-menu-trailing"><i class="bi bi-chevron-right"></i></span>
+                              </button>
+                              <button class="settings-menu-item" type="button" data-settings-section="security">
+                                <span class="settings-menu-leading">
+                                  <span class="settings-menu-icon"><i class="bi bi-shield-check"></i></span>
+                                  <span class="settings-menu-copy">
+                                    <span class="settings-menu-title">账号与安全</span>
+                                    <span class="settings-menu-sub">登录设备、账号信息与安全提示</span>
+                                  </span>
+                                </span>
+                                <span class="settings-menu-trailing"><i class="bi bi-chevron-right"></i></span>
+                              </button>
+                              <button class="settings-menu-item" type="button" data-settings-section="notifications">
+                                <span class="settings-menu-leading">
+                                  <span class="settings-menu-icon"><i class="bi bi-bell"></i></span>
+                                  <span class="settings-menu-copy">
+                                    <span class="settings-menu-title">通知</span>
+                                    <span class="settings-menu-sub">消息提醒、未读与提示方式</span>
+                                  </span>
+                                </span>
+                                <span class="settings-menu-trailing"><i class="bi bi-chevron-right"></i></span>
+                              </button>
+                              <button class="settings-menu-item settings-menu-item-primary" type="button" data-settings-section="appearance">
+                                <span class="settings-menu-leading">
+                                  <span class="settings-menu-icon"><i class="bi bi-palette2"></i></span>
+                                  <span class="settings-menu-copy">
+                                    <span class="settings-menu-title">外观</span>
+                                    <span class="settings-menu-sub">主题、主色、夜间模式与聊天气泡</span>
+                                  </span>
+                                </span>
+                                <span class="settings-menu-trailing"><i class="bi bi-chevron-right"></i></span>
+                              </button>
+                              <button class="settings-menu-item" type="button" data-settings-section="privacy">
+                                <span class="settings-menu-leading">
+                                  <span class="settings-menu-icon"><i class="bi bi-eye"></i></span>
+                                  <span class="settings-menu-copy">
+                                    <span class="settings-menu-title">隐私</span>
+                                    <span class="settings-menu-sub">资料可见范围与交互权限</span>
+                                  </span>
+                                </span>
+                                <span class="settings-menu-trailing"><i class="bi bi-chevron-right"></i></span>
+                              </button>
+                              <button class="settings-menu-item" type="button" data-settings-section="about">
+                                <span class="settings-menu-leading">
+                                  <span class="settings-menu-icon"><i class="bi bi-info-circle"></i></span>
+                                  <span class="settings-menu-copy">
+                                    <span class="settings-menu-title">关于</span>
+                                    <span class="settings-menu-sub">版本信息与使用说明</span>
+                                  </span>
+                                </span>
+                                <span class="settings-menu-trailing"><i class="bi bi-chevron-right"></i></span>
+                              </button>
+                            </div>
                           </div>
 
-                          <div class="settings-menu-panel mb-3">
-                            <button class="settings-menu-item" type="button">
-                              <span>
-                                <span class="settings-menu-title">个人资料</span>
-                                <span class="settings-menu-sub">编辑昵称、签名和头像</span>
-                              </span>
-                              <i class="bi bi-person-circle"></i>
-                            </button>
-                            <button class="settings-menu-item" type="button">
-                              <span>
-                                <span class="settings-menu-title">账号与安全</span>
-                                <span class="settings-menu-sub">登录设备、账号信息与安全提示</span>
-                              </span>
-                              <i class="bi bi-shield-check"></i>
-                            </button>
-                            <button class="settings-menu-item" type="button">
-                              <span>
-                                <span class="settings-menu-title">通知</span>
-                                <span class="settings-menu-sub">消息提醒、未读与提示方式</span>
-                              </span>
-                              <i class="bi bi-bell"></i>
-                            </button>
-                            <button id="openAppearanceSettingsBtn" class="settings-menu-item settings-menu-item-primary" type="button">
-                              <span>
-                                <span class="settings-menu-title">外观</span>
-                                <span class="settings-menu-sub">主题、主色、夜间模式与聊天气泡</span>
-                              </span>
-                              <i class="bi bi-palette2"></i>
-                            </button>
-                            <button class="settings-menu-item" type="button">
-                              <span>
-                                <span class="settings-menu-title">隐私</span>
-                                <span class="settings-menu-sub">资料可见范围与交互权限</span>
-                              </span>
-                              <i class="bi bi-eye"></i>
-                            </button>
-                            <button class="settings-menu-item" type="button">
-                              <span>
-                                <span class="settings-menu-title">关于</span>
-                                <span class="settings-menu-sub">版本信息与使用说明</span>
-                              </span>
-                              <i class="bi bi-info-circle"></i>
-                            </button>
-                          </div>
-
-                          <div class="settings-profile-panel">
-                            <div class="settings-panel-title">个人资料</div>
+                          <div id="settingsProfilePanel" class="settings-profile-panel d-none">
+                            <div class="settings-detail-head">
+                              <button class="settings-detail-back" type="button" data-settings-back="1">
+                                <i class="bi bi-chevron-left"></i>
+                                <span>设置</span>
+                              </button>
+                              <div>
+                                <div class="theme-panel-title">个人资料</div>
+                                <div class="theme-panel-sub">编辑昵称、签名和头像展示信息</div>
+                              </div>
+                            </div>
+                            <div class="settings-detail-card">
                             <div class="mb-3">
                               <label for="nicknameInput" class="form-label">昵称</label>
                               <input id="nicknameInput" class="form-control" />
@@ -424,12 +454,80 @@
                               <input id="signatureInput" class="form-control" />
                             </div>
                             <button id="saveProfileBtn" class="btn btn-primary">保存资料</button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div id="settingsDetailView" class="settings-subview d-none">
+                          <div class="settings-detail-panel d-none" data-settings-panel="security">
+                            <div class="settings-detail-head">
+                              <button class="settings-detail-back" type="button" data-settings-back="1">
+                                <i class="bi bi-chevron-left"></i>
+                                <span>设置</span>
+                              </button>
+                              <div>
+                                <div class="theme-panel-title">账号与安全</div>
+                                <div class="theme-panel-sub">管理登录设备、账号信息与安全提示</div>
+                              </div>
+                            </div>
+                            <div class="settings-placeholder-card">
+                              <div class="settings-placeholder-title">账号与安全</div>
+                              <div class="settings-placeholder-copy">当前版本保留入口结构，后续可继续扩展设备管理与安全提醒。</div>
+                            </div>
+                          </div>
+                          <div class="settings-detail-panel d-none" data-settings-panel="notifications">
+                            <div class="settings-detail-head">
+                              <button class="settings-detail-back" type="button" data-settings-back="1">
+                                <i class="bi bi-chevron-left"></i>
+                                <span>设置</span>
+                              </button>
+                              <div>
+                                <div class="theme-panel-title">通知</div>
+                                <div class="theme-panel-sub">管理消息提醒、未读与提示方式</div>
+                              </div>
+                            </div>
+                            <div class="settings-placeholder-card">
+                              <div class="settings-placeholder-title">通知设置</div>
+                              <div class="settings-placeholder-copy">当前版本先保留结构与信息层级，后续可继续补充详细通知选项。</div>
+                            </div>
+                          </div>
+                          <div class="settings-detail-panel d-none" data-settings-panel="privacy">
+                            <div class="settings-detail-head">
+                              <button class="settings-detail-back" type="button" data-settings-back="1">
+                                <i class="bi bi-chevron-left"></i>
+                                <span>设置</span>
+                              </button>
+                              <div>
+                                <div class="theme-panel-title">隐私</div>
+                                <div class="theme-panel-sub">管理资料可见范围与交互权限</div>
+                              </div>
+                            </div>
+                            <div class="settings-placeholder-card">
+                              <div class="settings-placeholder-title">隐私设置</div>
+                              <div class="settings-placeholder-copy">当前版本先保留入口与详情结构，后续可继续补充隐私控制项。</div>
+                            </div>
+                          </div>
+                          <div class="settings-detail-panel d-none" data-settings-panel="about">
+                            <div class="settings-detail-head">
+                              <button class="settings-detail-back" type="button" data-settings-back="1">
+                                <i class="bi bi-chevron-left"></i>
+                                <span>设置</span>
+                              </button>
+                              <div>
+                                <div class="theme-panel-title">关于</div>
+                                <div class="theme-panel-sub">版本信息与使用说明</div>
+                              </div>
+                            </div>
+                            <div class="settings-placeholder-card">
+                              <div class="settings-placeholder-title">关于当前版本</div>
+                              <div class="settings-placeholder-copy">当前版本聚焦聊天与主题外观能力，设置页结构已为后续扩展预留。</div>
+                            </div>
                           </div>
                         </div>
 
                         <div id="settingsAppearanceView" class="settings-subview d-none">
                           <div class="appearance-page-head">
-                            <button id="appearanceBackBtn" class="appearance-back-btn" type="button">
+                            <button class="appearance-back-btn" type="button" data-settings-back="1">
                               <i class="bi bi-chevron-left"></i>
                               <span>设置</span>
                             </button>
@@ -447,14 +545,14 @@
                                   <span class="theme-preset-status">已启用</span>
                                   <span class="theme-preset-preview theme-preset-preview-classic">
                                     <span class="theme-preview-appbar"></span>
-                                    <span class="theme-preview-content">
-                                      <span class="theme-preview-kicker">消息预览</span>
-                                      <span class="theme-preview-title">经典日间</span>
-                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
-                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
-                                      <span class="theme-preview-chip">发送</span>
-                                      <span class="theme-preview-input">输入消息...</span>
-                                    </span>
+                                      <span class="theme-preview-content">
+                                        <span class="theme-preview-kicker">消息预览</span>
+                                        <span class="theme-preview-title">经典日间</span>
+                                        <span class="theme-preview-body">今晚 8:30 见面吗？</span>
+                                        <span class="theme-preview-meta">2 分钟前在线</span>
+                                        <span class="theme-preview-chip">发送</span>
+                                        <span class="theme-preview-input">输入消息...</span>
+                                      </span>
                                   </span>
                                   <span class="theme-preset-copy">
                                     <span class="theme-preset-name">经典日间</span>
@@ -465,14 +563,14 @@
                                   <span class="theme-preset-status">已启用</span>
                                   <span class="theme-preset-preview theme-preset-preview-bright">
                                     <span class="theme-preview-appbar"></span>
-                                    <span class="theme-preview-content">
-                                      <span class="theme-preview-kicker">消息预览</span>
-                                      <span class="theme-preview-title">标准亮色调</span>
-                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
-                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
-                                      <span class="theme-preview-chip">发送</span>
-                                      <span class="theme-preview-input">输入消息...</span>
-                                    </span>
+                                      <span class="theme-preview-content">
+                                        <span class="theme-preview-kicker">消息预览</span>
+                                        <span class="theme-preview-title">标准亮色调</span>
+                                        <span class="theme-preview-body">今晚 8:30 见面吗？</span>
+                                        <span class="theme-preview-meta">2 分钟前在线</span>
+                                        <span class="theme-preview-chip">发送</span>
+                                        <span class="theme-preview-input">输入消息...</span>
+                                      </span>
                                   </span>
                                   <span class="theme-preset-copy">
                                     <span class="theme-preset-name">标准亮色调</span>
@@ -483,14 +581,14 @@
                                   <span class="theme-preset-status">已启用</span>
                                   <span class="theme-preset-preview theme-preset-preview-night">
                                     <span class="theme-preview-appbar"></span>
-                                    <span class="theme-preview-content">
-                                      <span class="theme-preview-kicker">消息预览</span>
-                                      <span class="theme-preview-title">夜间配色</span>
-                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
-                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
-                                      <span class="theme-preview-chip">发送</span>
-                                      <span class="theme-preview-input">输入消息...</span>
-                                    </span>
+                                      <span class="theme-preview-content">
+                                        <span class="theme-preview-kicker">消息预览</span>
+                                        <span class="theme-preview-title">夜间配色</span>
+                                        <span class="theme-preview-body">今晚 8:30 见面吗？</span>
+                                        <span class="theme-preview-meta">2 分钟前在线</span>
+                                        <span class="theme-preview-chip">发送</span>
+                                        <span class="theme-preview-input">输入消息...</span>
+                                      </span>
                                   </span>
                                   <span class="theme-preset-copy">
                                     <span class="theme-preset-name">夜间配色</span>
@@ -501,14 +599,14 @@
                                   <span class="theme-preset-status">已启用</span>
                                   <span class="theme-preset-preview theme-preset-preview-clean">
                                     <span class="theme-preview-appbar"></span>
-                                    <span class="theme-preview-content">
-                                      <span class="theme-preview-kicker">消息预览</span>
-                                      <span class="theme-preview-title">简洁模式</span>
-                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
-                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
-                                      <span class="theme-preview-chip">发送</span>
-                                      <span class="theme-preview-input">输入消息...</span>
-                                    </span>
+                                      <span class="theme-preview-content">
+                                        <span class="theme-preview-kicker">消息预览</span>
+                                        <span class="theme-preview-title">简洁模式</span>
+                                        <span class="theme-preview-body">今晚 8:30 见面吗？</span>
+                                        <span class="theme-preview-meta">2 分钟前在线</span>
+                                        <span class="theme-preview-chip">发送</span>
+                                        <span class="theme-preview-input">输入消息...</span>
+                                      </span>
                                   </span>
                                   <span class="theme-preset-copy">
                                     <span class="theme-preset-name">简洁模式</span>

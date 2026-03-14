@@ -3887,6 +3887,11 @@ html[data-accent="pink"] {
   gap: 16px;
 }
 
+.settings-home-shell {
+  display: grid;
+  gap: 16px;
+}
+
 .settings-header-block {
   margin-bottom: 2px;
 }
@@ -3927,14 +3932,47 @@ html[data-accent="pink"] {
   transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
+.settings-menu-item.active,
 .settings-menu-item:hover {
   background: var(--bg-secondary);
-  border-color: var(--border-color);
+  border-color: rgba(var(--bs-primary-rgb), 0.18);
   transform: translateY(-1px);
 }
 
-.settings-menu-item i {
+.settings-menu-leading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.settings-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-soft) 56%, var(--card-bg));
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+}
+
+.settings-menu-icon i,
+.settings-menu-trailing i {
   font-size: 17px;
+}
+
+.settings-menu-copy {
+  min-width: 0;
+}
+
+.settings-menu-trailing {
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+}
+
+.settings-menu-item i {
   color: var(--text-secondary);
 }
 
@@ -3967,12 +4005,19 @@ html[data-accent="pink"] {
   margin-bottom: 16px;
 }
 
+.settings-detail-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-detail-head,
 .appearance-page-head {
   display: flex;
   align-items: flex-start;
   gap: 14px;
 }
 
+.settings-detail-back,
 .appearance-back-btn {
   display: inline-flex;
   align-items: center;
@@ -3981,6 +4026,28 @@ html[data-accent="pink"] {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   background: var(--card-bg);
+  color: var(--text-secondary);
+}
+
+.settings-detail-card,
+.settings-placeholder-card {
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  background: linear-gradient(180deg, var(--card-bg), var(--panel-bg));
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.05);
+}
+
+.settings-placeholder-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.settings-placeholder-copy {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.65;
   color: var(--text-secondary);
 }
 

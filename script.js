@@ -47,7 +47,7 @@ let appState = {
   conversations: [],
   activeConversationId: null,
   currentView: 'messagesView',
-  profileSettingsSubview: 'home',
+  activeSettingsSection: 'home',
   editingMessageId: null,
   editingOwnMessageId: null,
   replyingToMessage: null,
@@ -986,14 +986,27 @@ function syncThemeSettingsPanel() {
   if (bubbleSwitch) bubbleSwitch.checked = settings.bubble === 'on';
 }
 
-function setProfileSettingsSubview(view = 'home') {
-  const nextView = view === 'appearance' ? 'appearance' : 'home';
-  appState.profileSettingsSubview = nextView;
+function setActiveSettingsSection(section = 'home') {
+  const allowed = new Set(['home', 'profile', 'security', 'notifications', 'appearance', 'privacy', 'about']);
+  const nextView = allowed.has(section) ? section : 'home';
+  appState.activeSettingsSection = nextView;
   const home = document.getElementById('settingsHomeView');
+  const homeShell = document.getElementById('settingsHomeShell');
+  const profilePanel = document.getElementById('settingsProfilePanel');
+  const detail = document.getElementById('settingsDetailView');
   const appearance = document.getElementById('settingsAppearanceView');
   if (!home || !appearance) return;
-  home.classList.toggle('d-none', nextView !== 'home');
-  appearance.classList.toggle('d-none', nextView !== 'appearance');
+  if (homeShell) homeShell.classList.toggle('d-none', nextView !== 'home');
+  if (profilePanel) profilePanel.classList.toggle('d-none', nextView !== 'profile');
+  if (home) home.classList.toggle('d-none', nextView !== 'home' && nextView !== 'profile');
+  if (detail) detail.classList.toggle('d-none', !['security', 'notifications', 'privacy', 'about'].includes(nextView));
+  if (appearance) appearance.classList.toggle('d-none', nextView !== 'appearance');
+  document.querySelectorAll('[data-settings-section]').forEach((el) => {
+    el.classList.toggle('active', el.dataset.settingsSection === nextView);
+  });
+  document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
+    panel.classList.toggle('d-none', panel.dataset.settingsPanel !== nextView);
+  });
 }
 
 function applyThemeSettings(nextSettings, persist = true) {
@@ -3364,19 +3377,17 @@ function bindProfileEvents() {
     });
   }
 
-  const openAppearanceSettingsBtn = document.getElementById('openAppearanceSettingsBtn');
-  if (openAppearanceSettingsBtn) {
-    openAppearanceSettingsBtn.addEventListener('click', () => {
-      setProfileSettingsSubview('appearance');
+  document.querySelectorAll('[data-settings-section]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setActiveSettingsSection(btn.dataset.settingsSection || 'home');
     });
-  }
+  });
 
-  const appearanceBackBtn = document.getElementById('appearanceBackBtn');
-  if (appearanceBackBtn) {
-    appearanceBackBtn.addEventListener('click', () => {
-      setProfileSettingsSubview('home');
+  document.querySelectorAll('[data-settings-back]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setActiveSettingsSection('home');
     });
-  }
+  });
 }
 
 function renderProfile() {
@@ -3387,7 +3398,7 @@ function renderProfile() {
   if (desktopRailAvatar) desktopRailAvatar.src = avatar;
   document.getElementById('nicknameInput').value = appState.currentUser.nickname || '';
   document.getElementById('signatureInput').value = appState.currentUser.signature || '';
-  setProfileSettingsSubview(appState.profileSettingsSubview || 'home');
+  setActiveSettingsSection(appState.activeSettingsSection || 'home');
   syncThemeSettingsPanel();
 }
 
