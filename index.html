@@ -146,28 +146,24 @@
                       <div class="chat-home-topbar mb-3">
                         <span class="chat-home-topbar-side"></span>
                         <h5 class="mb-0 chat-home-title">聊天</h5>
-                        <div class="dropdown">
-                          <button id="conversationCreateBtn" class="btn btn-sm tg-create-btn chat-home-action" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="新建">
-                            <i class="bi bi-pencil-square"></i>
+                        <div class="chat-home-actions">
+                          <button id="conversationSearchFocusBtn" class="btn btn-sm tg-create-btn chat-home-action" type="button" aria-label="搜索">
+                            <i class="bi bi-search"></i>
                           </button>
-                          <ul class="dropdown-menu dropdown-menu-end chat-home-menu">
-                            <li><button id="chatMenuCreateGroup" class="dropdown-item" type="button"><i class="bi bi-people me-2"></i>创建群聊</button></li>
-                            <li><button id="chatMenuAddFriend" class="dropdown-item" type="button"><i class="bi bi-person-plus me-2"></i>添加好友</button></li>
-                          </ul>
+                          <div class="dropdown">
+                            <button id="conversationCreateBtn" class="btn btn-sm tg-create-btn chat-home-action" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="新建">
+                              <i class="bi bi-plus-lg"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end chat-home-menu">
+                              <li><button id="chatMenuCreateGroup" class="dropdown-item" type="button"><i class="bi bi-people me-2"></i>创建群聊</button></li>
+                              <li><button id="chatMenuAddFriend" class="dropdown-item" type="button"><i class="bi bi-person-plus me-2"></i>添加好友</button></li>
+                            </ul>
+                          </div>
                         </div>
                       </div>
-                      <div class="input-group input-group-sm flex-grow-1 tg-search-wrap mb-3">
+                      <div class="input-group input-group-sm flex-grow-1 tg-search-wrap">
                         <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
                         <input id="conversationSearchInput" class="form-control border-0 shadow-none" placeholder="搜索会话" />
-                      </div>
-                      <div class="tg-filter-tabs" role="tablist">
-                        <button id="conversationTabAll" class="tg-filter-tab active" type="button">所有</button>
-                        <button id="conversationTabUnread" class="tg-filter-tab" type="button">未读</button>
-                        <button id="conversationTabMention" class="tg-filter-tab" type="button">@我</button>
-                      </div>
-                      <div class="d-flex justify-content-between align-items-center mt-2">
-                        <h6 class="mb-0 fw-semibold">会话</h6>
-                        <span id="totalUnreadText" class="badge text-bg-danger">0</span>
                       </div>
                     </div>
                     <div id="conversationList" class="list-group list-group-flush conversation-list"></div>
@@ -206,8 +202,7 @@
 
                     <div id="chatEmptyState" class="chat-empty-state d-none">
                       <div class="chat-empty-icon"><i class="bi bi-chat-dots"></i></div>
-                      <div class="chat-empty-title">即时聊天 Raingad IM</div>
-                      <div class="chat-empty-sub">从左侧选择一个会话开始聊天</div>
+                      <div class="chat-empty-sub">选择一个会话开始聊天</div>
                     </div>
 
                     <div id="messageList" class="flex-grow-1 p-3 message-list"></div>

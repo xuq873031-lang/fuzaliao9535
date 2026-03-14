@@ -3300,6 +3300,14 @@ function bindNavigationEvents() {
       renderConversationList();
     });
   }
+  const conversationSearchFocusBtn = document.getElementById('conversationSearchFocusBtn');
+  if (conversationSearchFocusBtn && conversationSearchInput) {
+    conversationSearchFocusBtn.addEventListener('click', () => {
+      switchView('messagesView');
+      conversationSearchInput.focus();
+      conversationSearchInput.select();
+    });
+  }
 
   const tabAll = document.getElementById('conversationTabAll');
   const tabUnread = document.getElementById('conversationTabUnread');
@@ -6737,7 +6745,7 @@ function renderConversationList() {
   });
 
   if (!list.length) {
-    box.innerHTML = '<div class="conversation-empty-hint"><div class="conversation-empty-title">还没有聊天</div><div class="conversation-empty-copy">去联系人页添加好友，开始第一条消息。</div></div>';
+    box.innerHTML = '<div class="conversation-empty-hint"><div class="conversation-empty-copy">暂无聊天</div></div>';
     renderMessages();
     return;
   }
