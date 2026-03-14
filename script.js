@@ -731,7 +731,7 @@ function renderMessageContent(text) {
   if (match) {
     const url = match[1].trim();
     const safeUrl = escapeHtml(url);
-    return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer"><img src="${safeUrl}" class="msg-image" alt="image" loading="lazy" decoding="async" /></a>`;
+    return `<img src="${safeUrl}" class="msg-image" data-preview-src="${safeUrl}" alt="image" loading="lazy" decoding="async" />`;
   }
   return applyAtMentionHighlight(raw).replaceAll('\n', '<br>');
 }
@@ -5194,6 +5194,17 @@ function getImageUrlFromMessageText(text) {
   return match ? match[1].trim() : '';
 }
 
+function openPhotoPreview(url, metaText = '') {
+  const previewImg = document.getElementById('photoPreviewImg');
+  const previewMeta = document.getElementById('photoPreviewMeta');
+  const previewModalEl = document.getElementById('photoPreviewModal');
+  if (!previewImg || !previewModalEl || !url) return;
+  previewImg.src = url;
+  if (previewMeta) previewMeta.textContent = metaText;
+  const previewModal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
+  previewModal.show();
+}
+
 async function ensureConversationHistoryLoaded(conv, options = {}) {
   const maxPages = Number(options.maxPages || 4);
   let page = 0;
@@ -5525,6 +5536,15 @@ function bindChatEvents() {
   if (msgInput) msgInput.addEventListener('focus', () => {
     setTimeout(() => scrollMessagesToBottom({ force: false }), 120);
   });
+  if (msgList) {
+    msgList.addEventListener('click', (e) => {
+      const img = e.target.closest('.msg-image');
+      if (!img) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openPhotoPreview(img.dataset.previewSrc || img.currentSrc || img.src || '');
+    });
+  }
   if (saveEditBtn) saveEditBtn.addEventListener('click', saveEditedMessage);
   if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMoreMessages);
   if (uploadImageBtn && imageInput) {

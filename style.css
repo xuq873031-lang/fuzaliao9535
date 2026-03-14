@@ -841,6 +841,7 @@ body.main-open #messageList {
   max-width: 260px;
   max-height: 300px;
   border-radius: 10px;
+  cursor: zoom-in;
 }
 
 #chatSubTitle.typing-active {
