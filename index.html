@@ -143,14 +143,22 @@
                 <div class="row g-0 h-100 flex-grow-1">
                   <div class="col-12 col-lg-4 border-end conversation-pane tg-conversation-pane">
                     <div class="p-3 border-bottom tg-conversation-header">
-                      <div class="d-flex align-items-center gap-2 mb-2">
-                        <div class="input-group input-group-sm flex-grow-1 tg-search-wrap">
-                          <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
-                          <input id="conversationSearchInput" class="form-control border-0 shadow-none" placeholder="搜索联系人" />
+                      <div class="chat-home-topbar mb-3">
+                        <span class="chat-home-topbar-side"></span>
+                        <h5 class="mb-0 chat-home-title">聊天</h5>
+                        <div class="dropdown">
+                          <button id="conversationCreateBtn" class="btn btn-sm tg-create-btn chat-home-action" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="新建">
+                            <i class="bi bi-pencil-square"></i>
+                          </button>
+                          <ul class="dropdown-menu dropdown-menu-end chat-home-menu">
+                            <li><button id="chatMenuCreateGroup" class="dropdown-item" type="button"><i class="bi bi-people me-2"></i>创建群聊</button></li>
+                            <li><button id="chatMenuAddFriend" class="dropdown-item" type="button"><i class="bi bi-person-plus me-2"></i>添加好友</button></li>
+                          </ul>
                         </div>
-                        <button id="conversationCreateBtn" class="btn btn-sm tg-create-btn" type="button" data-bs-toggle="modal" data-bs-target="#createGroupModal">
-                          <i class="bi bi-plus-lg"></i>
-                        </button>
+                      </div>
+                      <div class="input-group input-group-sm flex-grow-1 tg-search-wrap mb-3">
+                        <span class="input-group-text bg-transparent border-0"><i class="bi bi-search"></i></span>
+                        <input id="conversationSearchInput" class="form-control border-0 shadow-none" placeholder="搜索会话" />
                       </div>
                       <div class="tg-filter-tabs" role="tablist">
                         <button id="conversationTabAll" class="tg-filter-tab active" type="button">所有</button>
@@ -260,25 +268,27 @@
               <section id="friendsView" class="view-section d-none p-3 contacts-view">
                 <div class="card border-0 shadow-sm rounded-4 contacts-shell">
                   <div class="card-body p-3 p-lg-4">
-                    <div class="contacts-topbar mb-2">
-                      <button id="contactsLocalSearchToggle" class="btn contacts-local-search-btn" type="button" title="搜索好友">
-                        <i class="bi bi-search"></i>
-                      </button>
-                      <h5 class="mb-0 contacts-title">通讯录</h5>
-                      <div class="dropdown ms-auto">
-                        <button id="contactsPlusBtn" class="btn contacts-plus-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                          <i class="bi bi-plus-lg"></i>
+                    <div class="contacts-topbar mb-3">
+                      <div class="dropdown">
+                        <button id="contactsSortBtn" class="btn contacts-sort-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          排序
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end contacts-plus-menu">
-                          <li><button id="menuCreateGroup" class="dropdown-item" type="button">发起群聊</button></li>
-                          <li><button id="menuAddFriend" class="dropdown-item" type="button">添加朋友</button></li>
+                        <ul class="dropdown-menu contacts-sort-menu">
+                          <li><button class="dropdown-item active" type="button" data-contact-sort="default">默认排序</button></li>
+                          <li><button class="dropdown-item" type="button" data-contact-sort="name">按昵称排序</button></li>
+                          <li><button class="dropdown-item" type="button" data-contact-sort="recent">按最近活跃</button></li>
+                          <li><button class="dropdown-item" type="button" data-contact-sort="online">在线优先</button></li>
                         </ul>
                       </div>
+                      <h5 class="mb-0 contacts-title">联系人</h5>
+                      <button id="contactsPlusBtn" class="btn contacts-plus-btn ms-auto" type="button" aria-label="添加好友">
+                        <i class="bi bi-person-plus"></i>
+                      </button>
                     </div>
-                    <div id="contactsLocalSearchWrap" class="contacts-local-search-wrap d-none mb-3">
+                    <div id="contactsLocalSearchWrap" class="contacts-local-search-wrap mb-3">
                       <div class="input-group contacts-search-group">
                         <span class="input-group-text"><i class="bi bi-search"></i></span>
-                        <input id="contactsLocalSearchInput" class="form-control" placeholder="搜索好友名字" />
+                        <input id="contactsLocalSearchInput" class="form-control" placeholder="搜索联系人" />
                       </div>
                     </div>
 

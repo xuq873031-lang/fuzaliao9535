@@ -48,6 +48,7 @@ let appState = {
   activeConversationId: null,
   currentView: 'messagesView',
   activeSettingsSection: 'home',
+  contactSortMode: 'default',
   editingMessageId: null,
   editingOwnMessageId: null,
   replyingToMessage: null,
@@ -1103,6 +1104,23 @@ function resetFriendsMainView() {
   setFriendsSubView('main');
 }
 
+function openAddFriendPanelFromAnywhere() {
+  switchView('friendsView');
+  setFriendsSubView('add-friend');
+  const input = document.getElementById('friendSearchInput');
+  setTimeout(() => {
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }, 40);
+}
+
+function openCreateGroupModalFromAnywhere() {
+  const modalEl = document.getElementById('createGroupModal');
+  if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
 function switchView(viewId, options = {}) {
   if (viewId === 'adminView' && !ENABLE_IN_APP_ADMIN_VIEW) {
     viewId = 'messagesView';
@@ -1757,6 +1775,34 @@ function sortFriendsAtoZ(friends) {
     const bn = getFriendSortName(b);
     return an.localeCompare(bn, ['zh-Hans-CN', 'en'], { sensitivity: 'base', numeric: true });
   });
+}
+
+function getFriendLastActiveTs(friend) {
+  const user = appState.userMap[friend.id] || friend || {};
+  const value = user.last_seen_at || user.updated_at || user.created_at || 0;
+  const ts = Number(new Date(value || 0));
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function getFriendStatusText(friend) {
+  if (friend.online) return '在线';
+  const ts = getFriendLastActiveTs(friend);
+  if (ts > 0) return `最近活跃 ${formatConversationTime(ts)}`;
+  return '最近曾上线';
+}
+
+function getSortedFriends(friends) {
+  const list = [...friends];
+  const mode = appState.contactSortMode || 'default';
+  if (mode === 'name') return sortFriendsAtoZ(list);
+  if (mode === 'recent') return list.sort((a, b) => getFriendLastActiveTs(b) - getFriendLastActiveTs(a));
+  if (mode === 'online') {
+    return list.sort((a, b) => {
+      if (!!a.online !== !!b.online) return a.online ? -1 : 1;
+      return getFriendSortName(a).localeCompare(getFriendSortName(b), ['zh-Hans-CN', 'en'], { sensitivity: 'base', numeric: true });
+    });
+  }
+  return list;
 }
 
 function getFriendGroupKey(friend) {
@@ -3225,6 +3271,19 @@ function bindNavigationEvents() {
   if (tabUnread) tabUnread.addEventListener('click', () => setConversationFilter('unread'));
   if (tabMention) tabMention.addEventListener('click', () => setConversationFilter('mention'));
 
+  const chatMenuCreateGroup = document.getElementById('chatMenuCreateGroup');
+  const chatMenuAddFriend = document.getElementById('chatMenuAddFriend');
+  if (chatMenuCreateGroup) {
+    chatMenuCreateGroup.addEventListener('click', () => {
+      openCreateGroupModalFromAnywhere();
+    });
+  }
+  if (chatMenuAddFriend) {
+    chatMenuAddFriend.addEventListener('click', () => {
+      openAddFriendPanelFromAnywhere();
+    });
+  }
+
   const adminRefreshBtn = document.getElementById('adminRefreshBtn');
   if (adminRefreshBtn) {
     adminRefreshBtn.addEventListener('click', () => {
@@ -3482,11 +3541,8 @@ function bindFriendEvents() {
   const hideAddFriendBtn = document.getElementById('hideAddFriendBtn');
   const entryNewFriend = document.getElementById('contactsEntryNewFriend');
   const entryGroups = document.getElementById('contactsEntryGroups');
-  const menuAddFriend = document.getElementById('menuAddFriend');
-  const menuCreateGroup = document.getElementById('menuCreateGroup');
   const plusBtn = document.getElementById('contactsPlusBtn');
-  const plusMenu = plusBtn ? bootstrap.Dropdown.getOrCreateInstance(plusBtn) : null;
-  const plusMenuEl = plusBtn ? plusBtn.parentElement?.querySelector('.contacts-plus-menu') : null;
+  const sortMenu = document.querySelector('.contacts-sort-menu');
 
   const clearLocalFriendSearch = () => {
     appState.localFriendKeyword = '';
@@ -3502,7 +3558,6 @@ function bindFriendEvents() {
 
   const openTools = () => {
     if (!toolsPanel) return;
-    plusMenu?.hide();
     clearLocalFriendSearch();
     switchNewFriendTab(appState.newFriendTab || 'incoming');
     setFriendsSubView('new-friend');
@@ -3518,7 +3573,6 @@ function bindFriendEvents() {
 
   const openAddPanel = () => {
     if (!addPanel) return;
-    plusMenu?.hide();
     clearLocalFriendSearch();
     setFriendsSubView('add-friend');
     setTimeout(() => {
@@ -3565,33 +3619,17 @@ function bindFriendEvents() {
   if (hideAddFriendBtn) hideAddFriendBtn.addEventListener('click', closeAddPanel);
   if (entryNewFriend) entryNewFriend.addEventListener('click', openTools);
   if (entryGroups) entryGroups.addEventListener('click', () => switchView('groupsView'));
-
-  if (menuAddFriend) {
-    menuAddFriend.addEventListener('click', () => {
-      plusMenu?.hide();
-      openAddPanel();
-      if (searchInput) {
-        searchInput.focus();
-        searchInput.select();
-      }
-    });
-  }
-  if (menuCreateGroup) {
-    menuCreateGroup.addEventListener('click', () => {
-      plusMenu?.hide();
-      const modalEl = document.getElementById('createGroupModal');
-      if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
-    });
-  }
-  if (plusBtn && plusMenuEl) {
-    document.addEventListener('click', (e) => {
-      const target = e.target;
-      if (!(target instanceof Node)) return;
-      if (plusBtn.contains(target) || plusMenuEl.contains(target)) return;
-      plusMenu?.hide();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') plusMenu?.hide();
+  if (plusBtn) plusBtn.addEventListener('click', openAddPanel);
+  if (sortMenu) {
+    sortMenu.querySelectorAll('[data-contact-sort]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const next = btn.getAttribute('data-contact-sort') || 'default';
+        appState.contactSortMode = next;
+        sortMenu.querySelectorAll('[data-contact-sort]').forEach((item) => {
+          item.classList.toggle('active', item === btn);
+        });
+        renderFriendList();
+      });
     });
   }
   setFriendsSubView('main');
@@ -3876,66 +3914,78 @@ function renderFriendList() {
     return;
   }
 
-  const { grouped, keys } = buildFriendGroups(sourceFriends);
-  keys.forEach((key) => {
-    const anchorKey = key === '#' ? 'HASH' : key;
-    const title = document.createElement('div');
-    title.className = 'contacts-group-title';
-    title.id = `friendGroup-${anchorKey}`;
-    title.textContent = key;
-    box.appendChild(title);
+  const sortedFriends = getSortedFriends(sourceFriends);
+  const groupedMode = ['default', 'name'].includes(appState.contactSortMode || 'default');
 
-    grouped[key].forEach((f) => {
-      const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
-      const displayName = getDisplayNameByUserId(f.id);
-      const item = document.createElement('button');
-      item.className = 'contacts-friend-item';
-      item.innerHTML = `
-        <span class="contacts-friend-left">
-          <button class="contacts-friend-avatar-btn" type="button" data-profile-id="${f.id}" aria-label="查看好友资料">
-            <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
-          </button>
-          <span>
-            <span class="contacts-friend-name d-block">${displayName}</span>
-            <span class="contacts-friend-sub">${f.online ? '在线' : '离线'}</span>
-          </span>
+  const renderFriendRow = (f) => {
+    const avatar = appState.userMap[f.id]?.avatar || DEFAULT_AVATAR;
+    const displayName = getDisplayNameByUserId(f.id);
+    const statusText = getFriendStatusText(f);
+    const item = document.createElement('button');
+    item.className = 'contacts-friend-item';
+    item.innerHTML = `
+      <span class="contacts-friend-left">
+        <button class="contacts-friend-avatar-btn" type="button" data-profile-id="${f.id}" aria-label="查看好友资料">
+          <img src="${avatar}" class="contacts-friend-avatar" alt="avatar" />
+        </button>
+        <span>
+          <span class="contacts-friend-name d-block">${displayName}</span>
+          <span class="contacts-friend-sub">${statusText}</span>
         </span>
-        <span class="contacts-friend-right">
-          <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '离线'}</span>
-          <i class="bi bi-chevron-right contacts-friend-chevron" aria-hidden="true"></i>
-        </span>
-      `;
+      </span>
+      <span class="contacts-friend-right">
+        <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '最近'}</span>
+        <i class="bi bi-chevron-right contacts-friend-chevron" aria-hidden="true"></i>
+      </span>
+    `;
 
-      item.addEventListener('click', (e) => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      openContactActionModal(f.id);
+    });
+    const avatarBtn = item.querySelector('.contacts-friend-avatar-btn');
+    if (avatarBtn) {
+      avatarBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        openContactActionModal(f.id);
+        e.stopPropagation();
+        openFriendProfileModal(f.id);
       });
-      const avatarBtn = item.querySelector('.contacts-friend-avatar-btn');
-      if (avatarBtn) {
-        avatarBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          openFriendProfileModal(f.id);
-        });
-      }
-      box.appendChild(item);
-    });
-  });
+    }
+    box.appendChild(item);
+  };
 
-  if (azBox) {
+  if (groupedMode) {
+    const { grouped, keys } = buildFriendGroups(sortedFriends);
     keys.forEach((key) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'contacts-az-index-btn';
-      btn.textContent = key;
-      btn.addEventListener('click', () => {
-        const anchor = key === '#' ? 'HASH' : key;
-        const target = document.getElementById(`friendGroup-${anchor}`);
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-      azBox.appendChild(btn);
+      const anchorKey = key === '#' ? 'HASH' : key;
+      const title = document.createElement('div');
+      title.className = 'contacts-group-title';
+      title.id = `friendGroup-${anchorKey}`;
+      title.textContent = key;
+      box.appendChild(title);
+      grouped[key].forEach(renderFriendRow);
     });
+
+    if (azBox) {
+      azBox.classList.remove('d-none');
+      keys.forEach((key) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'contacts-az-index-btn';
+        btn.textContent = key;
+        btn.addEventListener('click', () => {
+          const anchor = key === '#' ? 'HASH' : key;
+          const target = document.getElementById(`friendGroup-${anchor}`);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        azBox.appendChild(btn);
+      });
+    }
+    return;
   }
+
+  sortedFriends.forEach(renderFriendRow);
+  if (azBox) azBox.classList.add('d-none');
 }
 
 async function editFriendRemark(friendId) {
@@ -6590,7 +6640,7 @@ function renderConversationList() {
   });
 
   if (!list.length) {
-    box.innerHTML = '<div class="p-3 text-secondary">暂无会话，去好友页添加好友开始聊天</div>';
+    box.innerHTML = '<div class="conversation-empty-hint"><div class="conversation-empty-title">还没有聊天</div><div class="conversation-empty-copy">去联系人页添加好友，开始第一条消息。</div></div>';
     renderMessages();
     return;
   }
