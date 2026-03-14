@@ -3304,3 +3304,119 @@ body {
 .mobile-tab.active {
   color: #6a88c3;
 }
+
+/* ============================
+   五次收口：最后一层柔化
+============================ */
+:root {
+  --tg-primary: #7a95cb;
+  --tg-primary-strong: #708bc2;
+  --tg-text-soft: #a4acb8;
+  --tg-line: #f4f6f8;
+  --tg-bubble-out: #f7f9fd;
+}
+
+.sidebar-card.tg-rail-shell {
+  background: #fcfcfd;
+  width: 72px;
+}
+
+.tg-rail-avatar-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.tg-rail-btn,
+.tg-rail-btn-logout {
+  width: 37px;
+  height: 37px;
+  border-radius: 12px;
+  color: #b2b9c4;
+}
+
+.tg-rail-btn.active {
+  background: #f7f9fc;
+}
+
+.tg-rail-badge,
+#friendReqBadgeDesktop.tg-rail-badge,
+.unread-dot,
+#totalUnreadText.badge,
+#newFriendPendingCount.badge,
+#friendReqBadgeMobileTab.badge,
+#friendReqBadgeDrawer.badge,
+#totalUnreadMobile.badge {
+  min-width: 13px;
+  height: 13px;
+  font-size: 7.5px;
+}
+
+.tg-conversation-header {
+  padding: 11px 14px 8px !important;
+}
+
+.tg-search-wrap {
+  min-height: 33px;
+  max-width: 220px;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.tg-create-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+}
+
+.conversation-item-btn.active,
+.conversation-item-btn.active.tg-pinned {
+  background: #fbfcfe !important;
+}
+
+.conversation-item-btn.active::before {
+  background: #e8edf8;
+}
+
+#chatHeader {
+  padding: 9px 13px !important;
+}
+
+#chatHeader .btn,
+#loadMoreBtn,
+#chatGroupMenuBtn {
+  min-height: 26px;
+  border-color: #f6f7f9;
+  background: #fcfcfd;
+}
+
+.msg-bubble {
+  border-radius: 14px;
+  padding: 8px 10px;
+}
+
+.chat-tools-row .btn,
+#uploadImageBtn,
+#sendMessageBtn {
+  min-height: 31px;
+  border-radius: 9px;
+}
+
+#messageInput {
+  min-height: 35px;
+  border-radius: 10px;
+}
+
+#sendMessageBtn {
+  background: #f4f7fc;
+  color: #748ec2;
+}
+
+#sendMessageBtn:hover {
+  background: #eef2f9;
+  color: #6a84b8;
+}
+
+.mobile-tab.active {
+  color: #7590c5;
+}
