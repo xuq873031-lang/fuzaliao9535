@@ -362,130 +362,234 @@
                   <div class="col-12 col-lg-8">
                     <div class="card border-0 shadow-sm rounded-4 h-100 profile-form-card">
                       <div class="card-body profile-form-body">
-                        <h6 class="mb-3 profile-section-title">资料编辑</h6>
-                        <div class="mb-3">
-                          <label for="nicknameInput" class="form-label">昵称</label>
-                          <input id="nicknameInput" class="form-control" />
+                        <div id="settingsHomeView" class="settings-subview">
+                          <div class="settings-header-block">
+                            <h6 class="mb-1 profile-section-title">设置</h6>
+                            <div class="settings-header-sub">管理资料、通知与外观偏好</div>
+                          </div>
+
+                          <div class="settings-menu-panel mb-3">
+                            <button class="settings-menu-item" type="button">
+                              <span>
+                                <span class="settings-menu-title">个人资料</span>
+                                <span class="settings-menu-sub">编辑昵称、签名和头像</span>
+                              </span>
+                              <i class="bi bi-person-circle"></i>
+                            </button>
+                            <button class="settings-menu-item" type="button">
+                              <span>
+                                <span class="settings-menu-title">账号与安全</span>
+                                <span class="settings-menu-sub">登录设备、账号信息与安全提示</span>
+                              </span>
+                              <i class="bi bi-shield-check"></i>
+                            </button>
+                            <button class="settings-menu-item" type="button">
+                              <span>
+                                <span class="settings-menu-title">通知</span>
+                                <span class="settings-menu-sub">消息提醒、未读与提示方式</span>
+                              </span>
+                              <i class="bi bi-bell"></i>
+                            </button>
+                            <button id="openAppearanceSettingsBtn" class="settings-menu-item settings-menu-item-primary" type="button">
+                              <span>
+                                <span class="settings-menu-title">外观</span>
+                                <span class="settings-menu-sub">主题、主色、夜间模式与聊天气泡</span>
+                              </span>
+                              <i class="bi bi-palette2"></i>
+                            </button>
+                            <button class="settings-menu-item" type="button">
+                              <span>
+                                <span class="settings-menu-title">隐私</span>
+                                <span class="settings-menu-sub">资料可见范围与交互权限</span>
+                              </span>
+                              <i class="bi bi-eye"></i>
+                            </button>
+                            <button class="settings-menu-item" type="button">
+                              <span>
+                                <span class="settings-menu-title">关于</span>
+                                <span class="settings-menu-sub">版本信息与使用说明</span>
+                              </span>
+                              <i class="bi bi-info-circle"></i>
+                            </button>
+                          </div>
+
+                          <div class="settings-profile-panel">
+                            <div class="settings-panel-title">个人资料</div>
+                            <div class="mb-3">
+                              <label for="nicknameInput" class="form-label">昵称</label>
+                              <input id="nicknameInput" class="form-control" />
+                            </div>
+                            <div class="mb-3">
+                              <label for="signatureInput" class="form-label">签名</label>
+                              <input id="signatureInput" class="form-control" />
+                            </div>
+                            <button id="saveProfileBtn" class="btn btn-primary">保存资料</button>
+                          </div>
                         </div>
-                        <div class="mb-3">
-                          <label for="signatureInput" class="form-label">签名</label>
-                          <input id="signatureInput" class="form-control" />
-                        </div>
-                        <div class="theme-settings-panel mb-3">
-                          <div class="theme-panel-head">
+
+                        <div id="settingsAppearanceView" class="settings-subview d-none">
+                          <div class="appearance-page-head">
+                            <button id="appearanceBackBtn" class="appearance-back-btn" type="button">
+                              <i class="bi bi-chevron-left"></i>
+                              <span>设置</span>
+                            </button>
                             <div>
-                              <div class="theme-panel-title">主题设置</div>
-                              <div class="theme-panel-sub">即时切换外观，自动保留你的偏好</div>
+                              <div class="theme-panel-title">外观</div>
+                              <div class="theme-panel-sub">自定义应用配色与显示风格</div>
                             </div>
                           </div>
-                          <div class="theme-panel-group">
-                            <div class="theme-panel-label">预设主题</div>
-                            <div class="theme-preset-grid">
-                              <button class="theme-preset-card" type="button" data-theme-preset="classic">
-                                <span class="theme-preset-preview theme-preset-preview-classic">
-                                  <span class="theme-preview-shell">
-                                    <span class="theme-preview-topbar"></span>
-                                    <span class="theme-preview-body">
-                                      <span class="theme-preview-bubble theme-preview-bubble-in"></span>
-                                      <span class="theme-preview-bubble theme-preview-bubble-out"></span>
+
+                          <div class="theme-settings-panel">
+                            <div class="theme-panel-group">
+                              <div class="theme-panel-label">预设主题</div>
+                              <div class="theme-preset-grid">
+                                <button class="theme-preset-card" type="button" data-theme-preset="classic">
+                                  <span class="theme-preset-status">已启用</span>
+                                  <span class="theme-preset-preview theme-preset-preview-classic">
+                                    <span class="theme-preview-appbar"></span>
+                                    <span class="theme-preview-content">
+                                      <span class="theme-preview-kicker">消息预览</span>
+                                      <span class="theme-preview-title">经典日间</span>
+                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
+                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
+                                      <span class="theme-preview-chip">发送</span>
+                                      <span class="theme-preview-input">输入消息...</span>
                                     </span>
-                                    <span class="theme-preview-composer"></span>
                                   </span>
-                                </span>
-                                <span class="theme-preset-name">经典日间</span>
-                              </button>
-                              <button class="theme-preset-card" type="button" data-theme-preset="bright">
-                                <span class="theme-preset-preview theme-preset-preview-bright">
-                                  <span class="theme-preview-shell">
-                                    <span class="theme-preview-topbar"></span>
-                                    <span class="theme-preview-body">
-                                      <span class="theme-preview-bubble theme-preview-bubble-in"></span>
-                                      <span class="theme-preview-bubble theme-preview-bubble-out"></span>
+                                  <span class="theme-preset-copy">
+                                    <span class="theme-preset-name">经典日间</span>
+                                    <span class="theme-preset-desc">适合日常聊天，清爽稳定，层级清晰。</span>
+                                  </span>
+                                </button>
+                                <button class="theme-preset-card" type="button" data-theme-preset="bright">
+                                  <span class="theme-preset-status">已启用</span>
+                                  <span class="theme-preset-preview theme-preset-preview-bright">
+                                    <span class="theme-preview-appbar"></span>
+                                    <span class="theme-preview-content">
+                                      <span class="theme-preview-kicker">消息预览</span>
+                                      <span class="theme-preview-title">标准亮色调</span>
+                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
+                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
+                                      <span class="theme-preview-chip">发送</span>
+                                      <span class="theme-preview-input">输入消息...</span>
                                     </span>
-                                    <span class="theme-preview-composer"></span>
                                   </span>
-                                </span>
-                                <span class="theme-preset-name">标准亮色调</span>
-                              </button>
-                              <button class="theme-preset-card" type="button" data-theme-preset="night">
-                                <span class="theme-preset-preview theme-preset-preview-night">
-                                  <span class="theme-preview-shell">
-                                    <span class="theme-preview-topbar"></span>
-                                    <span class="theme-preview-body">
-                                      <span class="theme-preview-bubble theme-preview-bubble-in"></span>
-                                      <span class="theme-preview-bubble theme-preview-bubble-out"></span>
+                                  <span class="theme-preset-copy">
+                                    <span class="theme-preset-name">标准亮色调</span>
+                                    <span class="theme-preset-desc">柔和亮色，适合长时间浏览和日常沟通。</span>
+                                  </span>
+                                </button>
+                                <button class="theme-preset-card" type="button" data-theme-preset="night">
+                                  <span class="theme-preset-status">已启用</span>
+                                  <span class="theme-preset-preview theme-preset-preview-night">
+                                    <span class="theme-preview-appbar"></span>
+                                    <span class="theme-preview-content">
+                                      <span class="theme-preview-kicker">消息预览</span>
+                                      <span class="theme-preview-title">夜间配色</span>
+                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
+                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
+                                      <span class="theme-preview-chip">发送</span>
+                                      <span class="theme-preview-input">输入消息...</span>
                                     </span>
-                                    <span class="theme-preview-composer"></span>
                                   </span>
-                                </span>
-                                <span class="theme-preset-name">夜间配色</span>
-                              </button>
-                              <button class="theme-preset-card" type="button" data-theme-preset="clean">
-                                <span class="theme-preset-preview theme-preset-preview-clean">
-                                  <span class="theme-preview-shell">
-                                    <span class="theme-preview-topbar"></span>
-                                    <span class="theme-preview-body">
-                                      <span class="theme-preview-bubble theme-preview-bubble-in"></span>
-                                      <span class="theme-preview-bubble theme-preview-bubble-out"></span>
+                                  <span class="theme-preset-copy">
+                                    <span class="theme-preset-name">夜间配色</span>
+                                    <span class="theme-preset-desc">夜间低刺激，对比稳定，适合暗光环境。</span>
+                                  </span>
+                                </button>
+                                <button class="theme-preset-card" type="button" data-theme-preset="clean">
+                                  <span class="theme-preset-status">已启用</span>
+                                  <span class="theme-preset-preview theme-preset-preview-clean">
+                                    <span class="theme-preview-appbar"></span>
+                                    <span class="theme-preview-content">
+                                      <span class="theme-preview-kicker">消息预览</span>
+                                      <span class="theme-preview-title">简洁模式</span>
+                                      <span class="theme-preview-body">今天晚上 8:30 见面吗？</span>
+                                      <span class="theme-preview-meta">最后活跃于 2 分钟前</span>
+                                      <span class="theme-preview-chip">发送</span>
+                                      <span class="theme-preview-input">输入消息...</span>
                                     </span>
-                                    <span class="theme-preview-composer"></span>
                                   </span>
-                                </span>
-                                <span class="theme-preset-name">简洁模式</span>
-                              </button>
+                                  <span class="theme-preset-copy">
+                                    <span class="theme-preset-name">简洁模式</span>
+                                    <span class="theme-preset-desc">极简清爽，边界更轻，保留更强留白。</span>
+                                  </span>
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          <div class="theme-panel-group">
-                            <div class="theme-panel-label">主题主色</div>
-                            <div class="theme-accent-row">
-                              <button class="theme-accent-dot" type="button" data-theme-accent="blue" aria-label="蓝色"></button>
-                              <button class="theme-accent-dot" type="button" data-theme-accent="red" aria-label="红色"></button>
-                              <button class="theme-accent-dot" type="button" data-theme-accent="orange" aria-label="橙色"></button>
-                              <button class="theme-accent-dot" type="button" data-theme-accent="yellow" aria-label="黄色"></button>
-                              <button class="theme-accent-dot" type="button" data-theme-accent="green" aria-label="绿色"></button>
-                              <button class="theme-accent-dot" type="button" data-theme-accent="cyan" aria-label="青色"></button>
-                              <button class="theme-accent-dot" type="button" data-theme-accent="purple" aria-label="紫色"></button>
-                              <button class="theme-accent-dot" type="button" data-theme-accent="pink" aria-label="粉色"></button>
+                            <div class="theme-panel-group">
+                              <div class="theme-panel-label">主题主色</div>
+                              <div class="theme-accent-row">
+                                <button class="theme-accent-dot" type="button" data-theme-accent="blue" aria-label="蓝色"></button>
+                                <button class="theme-accent-dot" type="button" data-theme-accent="red" aria-label="红色"></button>
+                                <button class="theme-accent-dot" type="button" data-theme-accent="orange" aria-label="橙色"></button>
+                                <button class="theme-accent-dot" type="button" data-theme-accent="yellow" aria-label="黄色"></button>
+                                <button class="theme-accent-dot" type="button" data-theme-accent="green" aria-label="绿色"></button>
+                                <button class="theme-accent-dot" type="button" data-theme-accent="cyan" aria-label="青色"></button>
+                                <button class="theme-accent-dot" type="button" data-theme-accent="purple" aria-label="紫色"></button>
+                                <button class="theme-accent-dot" type="button" data-theme-accent="pink" aria-label="粉色"></button>
+                              </div>
                             </div>
-                          </div>
-                          <div class="theme-panel-group">
-                            <div class="theme-toggle-list">
-                              <label class="theme-toggle-item" for="themeNightSwitch">
-                                <span>
-                                  <span class="theme-toggle-title">夜间模式</span>
-                                  <span class="theme-toggle-sub">立即切换整体深浅色</span>
-                                </span>
-                                <span class="form-check form-switch m-0">
-                                  <input id="themeNightSwitch" class="form-check-input" type="checkbox" role="switch" />
-                                </span>
-                              </label>
-                              <label class="theme-toggle-item" for="themeBubbleSwitch">
-                                <span>
-                                  <span class="theme-toggle-title">气泡模式</span>
-                                  <span class="theme-toggle-sub">让聊天气泡层次更明显</span>
-                                </span>
-                                <span class="form-check form-switch m-0">
-                                  <input id="themeBubbleSwitch" class="form-check-input" type="checkbox" role="switch" />
-                                </span>
-                              </label>
-                              <button id="themeBackgroundBtn" class="theme-entry-btn" type="button">
-                                <span>
-                                  <span class="theme-toggle-title">聊天背景</span>
-                                  <span class="theme-toggle-sub">入口已预留，下一版可继续扩展</span>
-                                </span>
-                                <i class="bi bi-chevron-right"></i>
-                              </button>
-                              <button class="theme-entry-btn" type="button">
-                                <span>
-                                  <span class="theme-toggle-title">昵称颜色</span>
-                                  <span class="theme-toggle-sub">昵称强调色将跟随主题主色联动</span>
-                                </span>
-                                <i class="bi bi-chevron-right"></i>
-                              </button>
+                            <div class="theme-panel-group">
+                              <div class="theme-toggle-list">
+                                <label class="theme-toggle-item" for="themeNightSwitch">
+                                  <span>
+                                    <span class="theme-toggle-title">夜间模式</span>
+                                    <span class="theme-toggle-sub">立即切换整体深浅色，并与当前主题兼容。</span>
+                                  </span>
+                                  <span class="form-check form-switch m-0">
+                                    <input id="themeNightSwitch" class="form-check-input" type="checkbox" role="switch" />
+                                  </span>
+                                </label>
+                                <label class="theme-toggle-item" for="themeBubbleSwitch">
+                                  <span>
+                                    <span class="theme-toggle-title">气泡模式</span>
+                                    <span class="theme-toggle-sub">增强聊天气泡层次，不影响消息逻辑。</span>
+                                  </span>
+                                  <span class="form-check form-switch m-0">
+                                    <input id="themeBubbleSwitch" class="form-check-input" type="checkbox" role="switch" />
+                                  </span>
+                                </label>
+                                <button id="themeBackgroundBtn" class="theme-entry-btn" type="button">
+                                  <span>
+                                    <span class="theme-toggle-title">聊天背景</span>
+                                    <span class="theme-toggle-sub">入口已预留，下一版可继续扩展。</span>
+                                  </span>
+                                  <i class="bi bi-chevron-right"></i>
+                                </button>
+                                <button class="theme-entry-btn" type="button">
+                                  <span>
+                                    <span class="theme-toggle-title">昵称颜色</span>
+                                    <span class="theme-toggle-sub">昵称强调色将跟随主题主色联动。</span>
+                                  </span>
+                                  <i class="bi bi-chevron-right"></i>
+                                </button>
+                              </div>
+                            </div>
+                            <div class="theme-panel-group">
+                              <div class="theme-panel-label">实时预览</div>
+                              <div class="appearance-live-preview">
+                                <div class="appearance-live-card">
+                                  <div class="appearance-live-top">
+                                    <div>
+                                      <div class="appearance-live-name">消息预览</div>
+                                      <div class="appearance-live-sub">主题会立即应用到当前界面</div>
+                                    </div>
+                                    <span class="appearance-live-pill">在线</span>
+                                  </div>
+                                  <div class="appearance-live-bubbles">
+                                    <div class="appearance-live-bubble appearance-live-bubble-in">今天晚上 8:30 见面吗？</div>
+                                    <div class="appearance-live-bubble appearance-live-bubble-out">可以，我到时给你发消息。</div>
+                                  </div>
+                                  <div class="appearance-live-composer">
+                                    <span class="appearance-live-input">输入消息...</span>
+                                    <span class="appearance-live-send">发送</span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
-                        <button id="saveProfileBtn" class="btn btn-primary">保存资料</button>
                       </div>
                     </div>
                   </div>

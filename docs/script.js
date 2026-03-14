@@ -47,6 +47,7 @@ let appState = {
   conversations: [],
   activeConversationId: null,
   currentView: 'messagesView',
+  profileSettingsSubview: 'home',
   editingMessageId: null,
   editingOwnMessageId: null,
   replyingToMessage: null,
@@ -983,6 +984,16 @@ function syncThemeSettingsPanel() {
   const bubbleSwitch = document.getElementById('themeBubbleSwitch');
   if (nightSwitch) nightSwitch.checked = settings.theme === 'dark';
   if (bubbleSwitch) bubbleSwitch.checked = settings.bubble === 'on';
+}
+
+function setProfileSettingsSubview(view = 'home') {
+  const nextView = view === 'appearance' ? 'appearance' : 'home';
+  appState.profileSettingsSubview = nextView;
+  const home = document.getElementById('settingsHomeView');
+  const appearance = document.getElementById('settingsAppearanceView');
+  if (!home || !appearance) return;
+  home.classList.toggle('d-none', nextView !== 'home');
+  appearance.classList.toggle('d-none', nextView !== 'appearance');
 }
 
 function applyThemeSettings(nextSettings, persist = true) {
@@ -3352,6 +3363,20 @@ function bindProfileEvents() {
       alert('聊天背景入口已预留，下一版可继续扩展。');
     });
   }
+
+  const openAppearanceSettingsBtn = document.getElementById('openAppearanceSettingsBtn');
+  if (openAppearanceSettingsBtn) {
+    openAppearanceSettingsBtn.addEventListener('click', () => {
+      setProfileSettingsSubview('appearance');
+    });
+  }
+
+  const appearanceBackBtn = document.getElementById('appearanceBackBtn');
+  if (appearanceBackBtn) {
+    appearanceBackBtn.addEventListener('click', () => {
+      setProfileSettingsSubview('home');
+    });
+  }
 }
 
 function renderProfile() {
@@ -3362,6 +3387,7 @@ function renderProfile() {
   if (desktopRailAvatar) desktopRailAvatar.src = avatar;
   document.getElementById('nicknameInput').value = appState.currentUser.nickname || '';
   document.getElementById('signatureInput').value = appState.currentUser.signature || '';
+  setProfileSettingsSubview(appState.profileSettingsSubview || 'home');
   syncThemeSettingsPanel();
 }
 
