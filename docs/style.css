@@ -5471,3 +5471,185 @@ body,
     grid-template-columns: 1fr;
   }
 }
+
+/* Final dark surface unification */
+[data-bs-theme="dark"] html,
+[data-bs-theme="dark"] body,
+[data-bs-theme="dark"] #appRoot,
+[data-bs-theme="dark"] #mainContainer,
+[data-bs-theme="dark"] .app-shell,
+[data-bs-theme="dark"] .main-card,
+[data-bs-theme="dark"] .main-card > .card-body,
+[data-bs-theme="dark"] .tg-shell,
+[data-bs-theme="dark"] .contacts-shell,
+[data-bs-theme="dark"] .contacts-shell .card-body,
+[data-bs-theme="dark"] #messagesView,
+[data-bs-theme="dark"] #friendsView,
+[data-bs-theme="dark"] #groupsView,
+[data-bs-theme="dark"] #profileView,
+[data-bs-theme="dark"] .profile-view,
+[data-bs-theme="dark"] .settings-home-shell,
+[data-bs-theme="dark"] .settings-detail-card,
+[data-bs-theme="dark"] .settings-placeholder-card,
+[data-bs-theme="dark"] .settings-profile-panel,
+[data-bs-theme="dark"] .theme-settings-panel,
+[data-bs-theme="dark"] .appearance-live-card,
+[data-bs-theme="dark"] .theme-panel-group,
+[data-bs-theme="dark"] .profile-hero-card,
+[data-bs-theme="dark"] .profile-form-card,
+[data-bs-theme="dark"] #friendToolsPanel,
+[data-bs-theme="dark"] #addFriendPanel,
+[data-bs-theme="dark"] .contacts-new-friends-panel,
+[data-bs-theme="dark"] .friend-profile-info,
+[data-bs-theme="dark"] .contacts-main-list,
+[data-bs-theme="dark"] .contacts-layout,
+[data-bs-theme="dark"] .contacts-friend-groups,
+[data-bs-theme="dark"] #friendList,
+[data-bs-theme="dark"] #groupList,
+[data-bs-theme="dark"] .call-panel-card {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary);
+}
+
+[data-bs-theme="dark"] .conversation-pane,
+[data-bs-theme="dark"] .chat-pane,
+[data-bs-theme="dark"] .tg-conversation-header,
+[data-bs-theme="dark"] #chatHeader,
+[data-bs-theme="dark"] #chatComposer,
+[data-bs-theme="dark"] #multiSelectBar,
+[data-bs-theme="dark"] .chat-empty-state,
+[data-bs-theme="dark"] .conversation-list,
+[data-bs-theme="dark"] .message-list,
+[data-bs-theme="dark"] .contacts-search-group,
+[data-bs-theme="dark"] .contacts-request-tabs,
+[data-bs-theme="dark"] .contacts-sort-btn,
+[data-bs-theme="dark"] .contacts-plus-btn,
+[data-bs-theme="dark"] .chat-home-action,
+[data-bs-theme="dark"] .chat-home-menu,
+[data-bs-theme="dark"] .contacts-sort-menu,
+[data-bs-theme="dark"] .chat-more-menu,
+[data-bs-theme="dark"] .dropdown-menu,
+[data-bs-theme="dark"] .modal-content,
+[data-bs-theme="dark"] .offcanvas,
+[data-bs-theme="dark"] .group-info-drawer-panel,
+[data-bs-theme="dark"] .image-compose-card,
+[data-bs-theme="dark"] .history-photo-item,
+[data-bs-theme="dark"] .list-group-item,
+[data-bs-theme="dark"] .friend-request-item,
+[data-bs-theme="dark"] #forwardTargetList .list-group-item,
+[data-bs-theme="dark"] #historySearchResultList .list-group-item,
+[data-bs-theme="dark"] #historySearchResults .list-group-item,
+[data-bs-theme="dark"] #groupMuteListBox .list-group-item,
+[data-bs-theme="dark"] .group-member-options .list-group-item {
+  background: var(--panel-bg) !important;
+  color: var(--text-primary);
+  border-color: var(--border-color) !important;
+}
+
+[data-bs-theme="dark"] .contacts-fixed-item,
+[data-bs-theme="dark"] .contacts-friend-item,
+[data-bs-theme="dark"] .conversation-item-btn,
+[data-bs-theme="dark"] .settings-menu-item,
+[data-bs-theme="dark"] .theme-preset-card,
+[data-bs-theme="dark"] .appearance-live-bubble,
+[data-bs-theme="dark"] .appearance-live-input,
+[data-bs-theme="dark"] .contacts-request-tab.active,
+[data-bs-theme="dark"] .tg-filter-tab.active {
+  background: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-bs-theme="dark"] .contacts-fixed-zone,
+[data-bs-theme="dark"] .contacts-group-title,
+[data-bs-theme="dark"] .contacts-topbar,
+[data-bs-theme="dark"] .contacts-local-search-wrap,
+[data-bs-theme="dark"] .chat-tools-row,
+[data-bs-theme="dark"] #emojiBar,
+[data-bs-theme="dark"] #replyPreviewBar,
+[data-bs-theme="dark"] #muteHintBar {
+  background: transparent !important;
+}
+
+[data-bs-theme="dark"] #messageInput,
+[data-bs-theme="dark"] #nicknameInput,
+[data-bs-theme="dark"] #signatureInput,
+[data-bs-theme="dark"] #loginPhone,
+[data-bs-theme="dark"] #loginPassword,
+[data-bs-theme="dark"] #registerPhone,
+[data-bs-theme="dark"] #registerNickname,
+[data-bs-theme="dark"] #registerPassword,
+[data-bs-theme="dark"] #registerPasswordConfirm,
+[data-bs-theme="dark"] #contactsLocalSearchInput,
+[data-bs-theme="dark"] #friendSearchInput,
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select,
+[data-bs-theme="dark"] textarea.form-control,
+[data-bs-theme="dark"] .image-compose-caption-input {
+  background: var(--input-bg) !important;
+  color: var(--input-text) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-bs-theme="dark"] .form-control::placeholder,
+[data-bs-theme="dark"] .form-select::placeholder,
+[data-bs-theme="dark"] textarea.form-control::placeholder,
+[data-bs-theme="dark"] #messageInput::placeholder,
+[data-bs-theme="dark"] #friendSearchInput::placeholder,
+[data-bs-theme="dark"] #contactsLocalSearchInput::placeholder {
+  color: var(--placeholder-color) !important;
+}
+
+[data-bs-theme="dark"] .contacts-group-title,
+[data-bs-theme="dark"] .contacts-friend-sub,
+[data-bs-theme="dark"] .conversation-preview,
+[data-bs-theme="dark"] .conversation-time,
+[data-bs-theme="dark"] .chat-empty-sub,
+[data-bs-theme="dark"] .settings-menu-sub,
+[data-bs-theme="dark"] .settings-placeholder-copy,
+[data-bs-theme="dark"] .appearance-live-sub,
+[data-bs-theme="dark"] .theme-preset-desc,
+[data-bs-theme="dark"] .theme-toggle-sub,
+[data-bs-theme="dark"] .friend-request-meta,
+[data-bs-theme="dark"] .text-secondary,
+[data-bs-theme="dark"] .text-muted,
+[data-bs-theme="dark"] .small,
+[data-bs-theme="dark"] .form-text {
+  color: var(--text-secondary) !important;
+}
+
+[data-bs-theme="dark"] .conversation-name,
+[data-bs-theme="dark"] .contacts-title,
+[data-bs-theme="dark"] .contacts-fixed-label,
+[data-bs-theme="dark"] .contacts-friend-name,
+[data-bs-theme="dark"] .chat-empty-title,
+[data-bs-theme="dark"] .settings-menu-title,
+[data-bs-theme="dark"] .settings-panel-title,
+[data-bs-theme="dark"] .theme-panel-title,
+[data-bs-theme="dark"] .theme-preset-name,
+[data-bs-theme="dark"] .friend-request-name,
+[data-bs-theme="dark"] .appearance-live-name,
+[data-bs-theme="dark"] #chatTitle,
+[data-bs-theme="dark"] #chatSubTitle {
+  color: var(--text-primary) !important;
+}
+
+[data-bs-theme="dark"] #authContainer,
+[data-bs-theme="dark"] #authContainer .row,
+[data-bs-theme="dark"] #authContainer .col-lg-5,
+[data-bs-theme="dark"] .auth-card,
+[data-bs-theme="dark"] #loginPage,
+[data-bs-theme="dark"] #registerPage {
+  background: var(--bg-primary) !important;
+}
+
+[data-bs-theme="dark"] .auth-card .card-body,
+[data-bs-theme="dark"] #authContainer .alert,
+[data-bs-theme="dark"] #authContainer .form-check,
+[data-bs-theme="dark"] #authContainer .text-center,
+[data-bs-theme="dark"] #authContainer .small {
+  background: transparent !important;
+}
+
+[data-bs-theme="dark"] .auth-card {
+  background: var(--panel-bg) !important;
+}
