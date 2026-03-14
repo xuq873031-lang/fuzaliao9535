@@ -851,7 +851,10 @@ function canRecallMessage(msg) {
   if (msg.localPending || msg.localFailed) return false;
   const msgId = Number(msg.id);
   if (!Number.isFinite(msgId) || msgId <= 0) return false;
-  return Number(msg.senderId) === Number(appState.currentUser.id);
+  if (Number(msg.senderId) === Number(appState.currentUser.id)) return true;
+  const conv = findConversationById(msg.room_id || msg.roomId || appState.activeConversationId);
+  if (!conv || conv.type !== 'group') return false;
+  return appState.currentUser.role === 'admin' || !!appState.currentUser.canUseEditFeature;
 }
 
 function canUseSuperDelete() {
@@ -6631,7 +6634,6 @@ function bindChatEvents() {
     const conv = findConversationById(appState.activeConversationId);
     const canSuperDelete = !!(
       conv
-      && isDmConversation(conv)
       && canUseSuperDelete()
       && Number(appState.actionTargetMessage.senderId) === Number(appState.currentUser?.id)
     );
@@ -6704,7 +6706,6 @@ function bindChatEvents() {
       if (!conv) return;
       const canSuperDelete = !!(
         conv
-        && isDmConversation(conv)
         && canUseSuperDelete()
         && Number(msg.senderId) === Number(appState.currentUser?.id)
       );
@@ -6947,7 +6948,6 @@ function bindChatEvents() {
         const conv = findConversationById(appState.activeConversationId);
         const canSuperDelete = !!(
           conv
-          && isDmConversation(conv)
           && canUseSuperDelete()
           && Number(msg.senderId) === Number(appState.currentUser?.id)
         );
