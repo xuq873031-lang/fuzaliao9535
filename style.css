@@ -4679,4 +4679,52 @@ body.main-open #messageList,
     min-height: 0;
     overflow-y: auto;
   }
+
+  body.main-open:has(#messagesView:not(.d-none)) {
+    overflow: hidden;
+  }
+
+  body.main-open:has(#messagesView:not(.d-none)) #appRoot {
+    height: var(--app-dvh);
+    min-height: var(--app-dvh);
+    overflow: hidden;
+  }
+
+  body.main-open:has(#messagesView:not(.d-none)) #mainContainer {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden !important;
+    padding-bottom: 0 !important;
+    background: var(--bg-primary) !important;
+  }
+
+  body.main-open:has(#messagesView:not(.d-none)) .app-shell,
+  body.main-open:has(#messagesView:not(.d-none)) .main-card,
+  body.main-open:has(#messagesView:not(.d-none)) .main-card > .card-body,
+  body.main-open:has(#messagesView:not(.d-none)) #messagesView,
+  body.main-open:has(#messagesView:not(.d-none)) #messagesView > .row {
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.main-open:has(#messagesView:not(.d-none)) #messagesView {
+    min-height: 0 !important;
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.main-open:has(#messagesView:not(.d-none)) #messagesView .conversation-pane,
+  body.main-open:has(#messagesView:not(.d-none)) #messagesView .chat-pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden !important;
+  }
+
+  body.main-open:has(#messagesView:not(.d-none)) #messageList {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
 }
