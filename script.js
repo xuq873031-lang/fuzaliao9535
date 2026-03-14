@@ -3113,12 +3113,48 @@ function updateCallButtonsState() {
 // 登录/注册
 // ============================
 function bindAuthEvents() {
-  document.getElementById('toRegisterBtn').addEventListener('click', () => switchAuthPage('register'));
-  document.getElementById('toLoginBtn').addEventListener('click', () => switchAuthPage('login'));
+  const toRegisterBtn = document.getElementById('toRegisterBtn');
+  const toLoginBtn = document.getElementById('toLoginBtn');
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const loginSubmitBtn = document.getElementById('loginSubmitBtn');
+  const registerSubmitBtn = document.getElementById('registerSubmitBtn');
 
-  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  if (toRegisterBtn) toRegisterBtn.addEventListener('click', () => switchAuthPage('register'));
+  if (toLoginBtn) toLoginBtn.addEventListener('click', () => switchAuthPage('login'));
+
+  const requestFormSubmit = (form) => {
+    if (!form) return;
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+      return;
+    }
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  };
+
+  if (loginSubmitBtn) loginSubmitBtn.addEventListener('click', () => requestFormSubmit(loginForm));
+  if (registerSubmitBtn) registerSubmitBtn.addEventListener('click', () => requestFormSubmit(registerForm));
+
+  if (loginForm) {
+    loginForm.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        requestFormSubmit(loginForm);
+      }
+    });
+  }
+  if (registerForm) {
+    registerForm.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        requestFormSubmit(registerForm);
+      }
+    });
+  }
+
+  loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
+    const submitBtn = document.getElementById('loginSubmitBtn') || e.currentTarget.querySelector('button');
     const phone = document.getElementById('loginPhone').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
     const agreed = document.getElementById('loginAgree').checked;
@@ -3142,9 +3178,9 @@ function bindAuthEvents() {
     }
   });
 
-  document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
+    const submitBtn = document.getElementById('registerSubmitBtn') || e.currentTarget.querySelector('button');
     const phone = document.getElementById('regPhone').value.trim();
     const password = document.getElementById('regPassword').value.trim();
     const confirmPassword = document.getElementById('regPasswordConfirm').value.trim();
