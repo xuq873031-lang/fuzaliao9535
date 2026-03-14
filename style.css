@@ -3646,15 +3646,20 @@ html {
   --bg-secondary: #f8fafc;
   --panel-bg: #ffffff;
   --card-bg: #ffffff;
+  --surface-elevated: #ffffff;
+  --modal-bg: #ffffff;
+  --overlay-bg: rgba(15, 23, 42, 0.18);
   --text-primary: #111827;
   --text-secondary: #6b7280;
   --text-muted: #94a3b8;
+  --text-on-accent: #ffffff;
   --border-color: #e7edf4;
   --accent-color: #4c84ff;
   --accent-strong: #386ef0;
   --accent-soft: #dbe7ff;
   --input-bg: #ffffff;
   --input-text: #111827;
+  --placeholder-color: #8b97a8;
   --message-outgoing-bg: #edf4ff;
   --message-outgoing-text: #183b72;
   --message-incoming-bg: #ffffff;
@@ -3722,12 +3727,17 @@ html[data-bs-theme="dark"] {
   --bg-secondary: #111a25;
   --panel-bg: #121c27;
   --card-bg: #152130;
+  --surface-elevated: #182330;
+  --modal-bg: #182330;
+  --overlay-bg: rgba(3, 7, 18, 0.62);
   --text-primary: #e6edf5;
   --text-secondary: #98a6b8;
   --text-muted: #7f8da1;
+  --text-on-accent: #f8fbff;
   --border-color: #263446;
   --input-bg: #0f1722;
   --input-text: #ecf2f8;
+  --placeholder-color: #93a2b6;
   --message-outgoing-bg: #1f4468;
   --message-outgoing-text: #e5f2ff;
   --message-incoming-bg: #182431;
@@ -3812,7 +3822,7 @@ html[data-accent="pink"] {
 }
 
 #messageInput::placeholder {
-  color: var(--text-secondary);
+  color: var(--placeholder-color);
 }
 
 .msg-row.me .msg-bubble {
@@ -3879,7 +3889,197 @@ html[data-accent="pink"] {
 
 #profileView.profile-view:not(.d-none) #nicknameInput::placeholder,
 #profileView.profile-view:not(.d-none) #signatureInput::placeholder {
+  color: var(--placeholder-color);
+}
+
+.modal-backdrop {
+  --bs-backdrop-bg: 12, 18, 32;
+  --bs-backdrop-opacity: 0.42;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(2px);
+}
+
+[data-bs-theme="dark"] .modal-backdrop {
+  --bs-backdrop-opacity: 0.66;
+}
+
+.modal-content,
+.popover,
+.dropdown-menu,
+.group-info-drawer-panel,
+.offcanvas.mobile-drawer,
+.chat-more-menu,
+.contacts-plus-menu {
+  background: var(--modal-bg);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.modal-content,
+.popover,
+.dropdown-menu,
+.group-info-drawer-panel,
+.offcanvas.mobile-drawer {
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
+}
+
+.modal-header,
+.modal-footer,
+.group-info-drawer-header,
+.offcanvas.mobile-drawer .offcanvas-header {
+  border-color: var(--border-color) !important;
+}
+
+.modal-title,
+.offcanvas.mobile-drawer .offcanvas-title,
+.group-info-drawer-header h5,
+.dropdown-header,
+.popover-header {
+  color: var(--text-primary);
+}
+
+.modal-body,
+.modal-footer,
+.offcanvas.mobile-drawer .offcanvas-body,
+.group-info-drawer-body,
+.popover-body,
+.dropdown-item,
+.dropdown-menu .small,
+.dropdown-menu .text-secondary,
+.modal .text-secondary,
+.modal .small {
+  color: var(--text-secondary) !important;
+}
+
+.modal .form-label,
+.group-info-drawer .form-label,
+.popover .form-label,
+.offcanvas.mobile-drawer .form-label {
+  color: var(--text-primary);
+}
+
+.modal .form-control,
+.modal .form-select,
+.modal textarea.form-control,
+.group-info-drawer .form-control,
+.group-info-drawer .form-select,
+.offcanvas.mobile-drawer .form-control,
+.offcanvas.mobile-drawer .form-select,
+.popover .form-control,
+.popover .form-select {
+  background: var(--input-bg);
+  color: var(--input-text);
+  border-color: var(--border-color);
+}
+
+.modal .form-control::placeholder,
+.modal .form-select::placeholder,
+.group-info-drawer .form-control::placeholder,
+.offcanvas.mobile-drawer .form-control::placeholder,
+.popover .form-control::placeholder {
+  color: var(--placeholder-color);
+}
+
+.modal .form-control:focus,
+.modal .form-select:focus,
+.group-info-drawer .form-control:focus,
+.group-info-drawer .form-select:focus,
+.popover .form-control:focus,
+.popover .form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), 0.38);
+  box-shadow: 0 0 0 0.18rem rgba(var(--bs-primary-rgb), 0.16);
+}
+
+.modal .btn-secondary,
+.group-info-drawer .btn-outline-secondary,
+.group-info-drawer .btn-secondary,
+.dropdown-menu .dropdown-item,
+.offcanvas.mobile-drawer .btn {
+  color: var(--text-primary);
+}
+
+.modal .btn-secondary,
+.group-info-drawer .btn-outline-secondary,
+.group-info-drawer .btn-secondary {
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--panel-bg));
+  border-color: var(--border-color);
+}
+
+.modal .btn-primary,
+.modal .btn-success,
+.group-info-drawer .btn-primary,
+.group-info-drawer .btn-success,
+.popover .btn-primary,
+.popover .btn-success {
+  color: var(--text-on-accent);
+}
+
+.btn-close {
+  filter: none;
+  opacity: 0.72;
+}
+
+[data-bs-theme="dark"] .btn-close {
+  filter: invert(1) grayscale(1);
+  opacity: 0.88;
+}
+
+.btn-close:hover {
+  opacity: 1;
+}
+
+.dropdown-menu .dropdown-item {
+  border-radius: 10px;
+}
+
+.dropdown-menu .dropdown-item:hover,
+.dropdown-menu .dropdown-item:focus {
+  background: color-mix(in srgb, var(--accent-soft) 42%, var(--panel-bg));
+  color: var(--text-primary) !important;
+}
+
+.dropdown-divider {
+  border-color: var(--border-color);
+}
+
+.group-member-options,
+#groupMuteListBox,
+#historySearchResults,
+#forwardTargetList,
+#historyPhotoGrid {
+  color: var(--text-primary);
+}
+
+.group-member-options .list-group-item,
+#groupMuteListBox .list-group-item,
+#forwardTargetList .list-group-item,
+#historySearchResults .list-group-item {
+  background: color-mix(in srgb, var(--panel-bg) 84%, var(--bg-secondary));
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.history-photo-item {
+  border-color: var(--border-color);
+  background: var(--panel-bg);
+}
+
+.history-photo-meta {
   color: var(--text-secondary);
+}
+
+.history-photo-locate {
+  color: var(--accent-color);
+}
+
+.chat-more-menu .dropdown-item,
+.contacts-plus-menu .dropdown-item {
+  color: var(--text-primary);
+}
+
+.mobile-drawer-link.active {
+  background: color-mix(in srgb, var(--accent-soft) 44%, var(--panel-bg));
+  color: var(--text-primary);
 }
 
 .settings-subview {
