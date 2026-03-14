@@ -4730,3 +4730,176 @@ html[data-accent="pink"] {
     gap: 10px;
   }
 }
+
+/* ============================
+   Global Theme Consistency
+============================ */
+
+html,
+body,
+#appRoot,
+#mainContainer,
+.app-shell,
+.main-card,
+.main-card > .card-body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.sidebar-card,
+.main-card,
+.conversation-pane,
+.chat-pane,
+.contacts-shell,
+.contacts-fixed-zone,
+.contacts-friend-groups,
+.contacts-new-friends-panel,
+.friend-profile-info,
+.friend-request-item,
+.profile-hero-card,
+.profile-form-card,
+.settings-menu-panel,
+.settings-profile-panel,
+.settings-detail-card,
+.settings-placeholder-card,
+.theme-settings-panel,
+.history-photo-item,
+.image-compose-card,
+.call-panel-card {
+  background: var(--panel-bg);
+  color: var(--text-primary);
+  border-color: var(--border-color) !important;
+}
+
+.conversation-list,
+.message-list,
+.chat-empty-state,
+.contacts-group-title,
+.contacts-fixed-item,
+.contacts-friend-item,
+.contacts-request-tabs,
+.contacts-request-tab,
+.contacts-search-group .input-group-text,
+.contacts-local-search-btn,
+.contacts-plus-btn,
+.settings-menu-item,
+.settings-detail-back,
+.appearance-back-btn {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color) !important;
+}
+
+.contacts-fixed-item:hover,
+.contacts-friend-item:hover,
+.contacts-local-search-btn:hover,
+.contacts-plus-btn:hover,
+.settings-menu-item:hover,
+.settings-menu-item.active {
+  background: color-mix(in srgb, var(--bg-secondary) 70%, var(--accent-soft));
+}
+
+#mainContainer .form-control,
+#mainContainer .form-select,
+#mainContainer textarea.form-control {
+  background: var(--input-bg);
+  color: var(--input-text);
+  border-color: var(--border-color);
+}
+
+#mainContainer .form-control::placeholder,
+#mainContainer .form-select::placeholder,
+#mainContainer textarea.form-control::placeholder {
+  color: var(--placeholder-color);
+}
+
+#mainContainer .input-group-text,
+#mainContainer .form-label,
+#mainContainer .small,
+#mainContainer .text-secondary,
+#mainContainer .text-muted {
+  color: var(--text-secondary) !important;
+}
+
+#mainContainer h1,
+#mainContainer h2,
+#mainContainer h3,
+#mainContainer h4,
+#mainContainer h5,
+#mainContainer h6,
+#mainContainer .conversation-name,
+#mainContainer .contacts-title,
+#mainContainer .settings-menu-title,
+#mainContainer .theme-panel-title,
+#mainContainer .settings-placeholder-title,
+#mainContainer .appearance-live-name {
+  color: var(--text-primary);
+}
+
+#mainContainer .btn-secondary,
+#mainContainer .btn-outline-secondary,
+#mainContainer .btn-light {
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--panel-bg));
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+#mainContainer .btn-primary,
+#mainContainer .btn-success {
+  color: var(--text-on-accent);
+}
+
+.contacts-request-tabs,
+.tg-filter-tabs {
+  background: color-mix(in srgb, var(--bg-secondary) 78%, var(--panel-bg));
+}
+
+.contacts-request-tab.active,
+.tg-filter-tab.active,
+.mobile-tab.active,
+.mobile-drawer-link.active {
+  background: color-mix(in srgb, var(--card-bg) 70%, var(--accent-soft));
+  color: var(--text-primary);
+}
+
+.theme-preset-card {
+  background: var(--card-bg);
+  border-color: var(--border-color);
+}
+
+.theme-preset-name,
+.theme-preset-desc {
+  color: var(--text-primary);
+}
+
+.theme-preset-desc,
+.appearance-live-sub,
+.settings-placeholder-copy,
+.settings-menu-sub,
+.theme-toggle-sub {
+  color: var(--text-secondary);
+}
+
+[data-bs-theme="dark"] .theme-preset-card {
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+}
+
+[data-bs-theme="dark"] .theme-preset-status {
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fbff;
+}
+
+[data-bs-theme="dark"] .conversation-item-btn,
+[data-bs-theme="dark"] .contacts-fixed-item,
+[data-bs-theme="dark"] .contacts-friend-item,
+[data-bs-theme="dark"] .settings-menu-item,
+[data-bs-theme="dark"] .history-photo-item {
+  background: color-mix(in srgb, var(--panel-bg) 84%, var(--bg-secondary));
+}
+
+[data-bs-theme="dark"] .message-list,
+[data-bs-theme="dark"] .chat-empty-state,
+[data-bs-theme="dark"] .chat-pane,
+[data-bs-theme="dark"] .conversation-pane {
+  background-color: var(--bg-secondary);
+}
