@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="./icons/icon-192.png?v=20260308_1" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260312_ui10" />
+  <link rel="stylesheet" href="./style.css?v=20260313_ui11" />
   <script>
     // 前后端分离部署配置：前端固定静态域名，后端固定 API/WS 域名
     window.__CHAT_CONFIG = {
@@ -132,10 +132,10 @@
           <div class="card border-0 shadow-sm rounded-4 h-100 main-card tg-shell">
             <div class="card-body p-0 d-flex flex-column">
               <!-- 手机顶部栏 -->
-              <div class="d-md-none border-bottom p-2 d-flex justify-content-between align-items-center">
-                <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="offcanvas" data-bs-target="#mobileDrawer">菜单</button>
-                <strong>即时聊天</strong>
-                <button id="mobileLogoutBtn" class="btn btn-outline-danger btn-sm">退出</button>
+              <div class="mobile-topbar d-md-none border-bottom p-2 d-flex justify-content-between align-items-center">
+                <button class="btn btn-outline-secondary btn-sm mobile-topbar-btn" data-bs-toggle="offcanvas" data-bs-target="#mobileDrawer">菜单</button>
+                <strong class="mobile-topbar-title">即时聊天</strong>
+                <button id="mobileLogoutBtn" class="btn btn-outline-danger btn-sm mobile-topbar-btn">退出</button>
               </div>
 
               <!-- 消息页 -->
@@ -232,7 +232,7 @@
               </section>
 
               <!-- 好友页 -->
-              <section id="friendsView" class="view-section d-none p-3">
+              <section id="friendsView" class="view-section d-none p-3 contacts-view">
                 <div class="card border-0 shadow-sm rounded-4 contacts-shell">
                   <div class="card-body p-3 p-lg-4">
                     <div class="contacts-topbar mb-2">
@@ -320,11 +320,11 @@
               </section>
 
               <!-- 个人资料页 -->
-              <section id="profileView" class="view-section d-none p-3">
+              <section id="profileView" class="view-section d-none p-3 profile-view">
                 <div class="row g-3">
                   <div class="col-12 col-lg-4">
-                    <div class="card border-0 shadow-sm rounded-4 h-100">
-                      <div class="card-body text-center">
+                    <div class="card border-0 shadow-sm rounded-4 h-100 profile-hero-card">
+                      <div class="card-body text-center profile-hero-body">
                         <button id="avatarPickerBtn" class="avatar-picker-btn" type="button" title="点击更换头像">
                           <img id="profileAvatar" class="profile-avatar mb-2" alt="avatar" />
                           <span class="avatar-edit-hint">点击更换头像</span>
@@ -335,9 +335,9 @@
                     </div>
                   </div>
                   <div class="col-12 col-lg-8">
-                    <div class="card border-0 shadow-sm rounded-4 h-100">
-                      <div class="card-body">
-                        <h6 class="mb-3">资料编辑</h6>
+                    <div class="card border-0 shadow-sm rounded-4 h-100 profile-form-card">
+                      <div class="card-body profile-form-body">
+                        <h6 class="mb-3 profile-section-title">资料编辑</h6>
                         <div class="mb-3">
                           <label for="nicknameInput" class="form-label">昵称</label>
                           <input id="nicknameInput" class="form-control" />
@@ -363,31 +363,31 @@
       </div>
 
       <!-- 手机抽屉导航 -->
-      <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileDrawer">
+      <div class="offcanvas offcanvas-start mobile-drawer" tabindex="-1" id="mobileDrawer">
         <div class="offcanvas-header">
           <h5 class="offcanvas-title">导航</h5>
           <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
         </div>
-        <div class="offcanvas-body d-grid gap-2">
-          <button class="btn nav-btn text-start active" data-view="messagesView" data-mobile-nav="1">
-            消息 <span id="totalUnreadMobile" class="badge text-bg-danger ms-2">0</span>
+        <div class="offcanvas-body d-grid gap-2 mobile-drawer-body">
+          <button class="btn nav-btn text-start active mobile-drawer-link" data-view="messagesView" data-mobile-nav="1">
+            <span><i class="bi bi-chat-dots"></i> 消息</span><span id="totalUnreadMobile" class="badge text-bg-danger ms-2">0</span>
           </button>
-          <button class="btn nav-btn text-start" data-view="friendsView" data-mobile-nav="1">
-            好友 <span id="friendReqBadgeDrawer" class="badge text-bg-warning ms-2 d-none">0</span>
+          <button class="btn nav-btn text-start mobile-drawer-link" data-view="friendsView" data-mobile-nav="1">
+            <span><i class="bi bi-people"></i> 好友</span><span id="friendReqBadgeDrawer" class="badge text-bg-warning ms-2 d-none">0</span>
           </button>
-          <button class="btn nav-btn text-start" data-view="groupsView" data-mobile-nav="1">群组</button>
-          <button class="btn nav-btn text-start" data-view="profileView" data-mobile-nav="1">个人资料</button>
+          <button class="btn nav-btn text-start mobile-drawer-link" data-view="groupsView" data-mobile-nav="1"><span><i class="bi bi-collection"></i> 群组</span></button>
+          <button class="btn nav-btn text-start mobile-drawer-link" data-view="profileView" data-mobile-nav="1"><span><i class="bi bi-person"></i> 个人资料</span></button>
         </div>
       </div>
 
       <!-- 手机底部 tab -->
       <nav class="mobile-tabbar d-md-none">
-        <button class="mobile-tab active" data-view="messagesView">消息</button>
+        <button class="mobile-tab active" data-view="messagesView"><i class="bi bi-chat-dots"></i><span>消息</span></button>
         <button class="mobile-tab" data-view="friendsView">
-          好友 <span id="friendReqBadgeMobileTab" class="badge text-bg-warning d-none">0</span>
+          <i class="bi bi-people"></i><span>好友</span><span id="friendReqBadgeMobileTab" class="badge text-bg-warning d-none">0</span>
         </button>
-        <button class="mobile-tab" data-view="groupsView">群组</button>
-        <button class="mobile-tab" data-view="profileView">我</button>
+        <button class="mobile-tab" data-view="groupsView"><i class="bi bi-collection"></i><span>群组</span></button>
+        <button class="mobile-tab" data-view="profileView"><i class="bi bi-person"></i><span>我</span></button>
       </nav>
 
       <!-- 创建群聊弹窗 -->
