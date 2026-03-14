@@ -6246,6 +6246,56 @@ body.chat-split-resizing {
   margin: 0 auto;
 }
 
+/* Layout spacing tune */
+#mainContainer > .row.app-shell {
+  --bs-gutter-x: 0.35rem;
+}
+
+#mainContainer > .row.app-shell > aside {
+  padding-right: 2px;
+}
+
+#mainContainer > .row.app-shell > main {
+  padding-left: 2px;
+}
+
+.main-card {
+  margin-left: 0;
+}
+
+.tg-conversation-header {
+  padding: 11px 12px 7px !important;
+}
+
+.conversation-list {
+  padding: 0 4px 8px;
+}
+
+.conversation-item-btn {
+  padding: 13px 12px !important;
+}
+
+@media (max-width: 991.98px) {
+  #groupsView {
+    padding: 14px 14px calc(56px + env(safe-area-inset-bottom, 0px) + 8px) !important;
+    background: var(--bg-primary) !important;
+  }
+
+  #groupsView > .d-flex:first-child {
+    padding: 0 2px;
+    margin-bottom: 12px !important;
+  }
+
+  #groupList {
+    padding: 0 2px;
+  }
+
+  #groupList .text-secondary {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+}
+
 #authContainer .card-body,
 #loginPage,
 #registerPage,
