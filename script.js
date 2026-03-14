@@ -7323,9 +7323,10 @@ async function sendMessage() {
 // ============================
 function updateUnreadBadges() {
   const total = getUnreadTotal();
-  document.getElementById('totalUnreadDesktop').textContent = total;
-  document.getElementById('totalUnreadMobile').textContent = total;
-  document.getElementById('totalUnreadText').textContent = total;
+  ['totalUnreadDesktop', 'totalUnreadMobile', 'totalUnreadText'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = total;
+  });
 }
 
 function requestNotificationPermission() {
