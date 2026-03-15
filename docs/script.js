@@ -4419,7 +4419,7 @@ function renderFriendList() {
         </span>
       </span>
       <span class="contacts-friend-right">
-        <span class="badge ${f.online ? 'text-bg-success' : 'text-bg-secondary'}">${f.online ? '在线' : '最近'}</span>
+        <span class="contacts-friend-status ${f.online ? 'online' : 'recent'}">${f.online ? '在线' : '最近活跃'}</span>
         <i class="bi bi-chevron-right contacts-friend-chevron" aria-hidden="true"></i>
       </span>
     `;
@@ -5214,29 +5214,28 @@ function renderGroupList() {
 
   const groups = appState.conversations.filter((c) => c.type === 'group');
   if (!groups.length) {
-    box.innerHTML = '<div class="text-secondary">还没有群组，先创建一个吧。</div>';
+    box.innerHTML = '<div class="groups-empty-hint">还没有群组，点击右上角创建第一个群聊</div>';
     return;
   }
 
   groups.forEach((g) => {
     const item = document.createElement('button');
-    item.className = 'list-group-item list-group-item-action';
+    item.className = 'list-group-item list-group-item-action groups-list-item';
     const isOwner = Number(g.createdBy) === Number(appState.currentUser?.id);
     const memberCount = g.memberCount || (g.members || []).length;
     const introText = (g.description || '').trim() || '暂无群简介';
     item.innerHTML = `
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-2">
-          <img src="${getConversationAvatar(g)}" class="conversation-avatar" alt="group-avatar" />
-          <div class="text-start">
-            <div class="fw-semibold">${escapeHtml(g.title || g.name || '群聊')}</div>
-            <small class="text-secondary d-block">${memberCount} 人</small>
-            <small class="text-secondary d-block">${escapeHtml(introText)}</small>
+      <div class="groups-list-row">
+        <div class="groups-list-main">
+          <img src="${getConversationAvatar(g)}" class="conversation-avatar group-avatar" alt="group-avatar" />
+          <div class="groups-list-copy text-start">
+            <div class="groups-list-title">${escapeHtml(g.title || g.name || '群聊')}</div>
+            <small class="groups-list-meta">${memberCount} 人 · ${escapeHtml(introText)}</small>
           </div>
         </div>
-        <div class="d-flex align-items-center gap-2">
-          <button class="btn btn-sm btn-outline-secondary group-manage-btn" type="button">群资料</button>
-          ${isOwner ? '<span class="badge text-bg-warning">群主</span>' : ''}
+        <div class="groups-list-side">
+          ${isOwner ? '<span class="groups-owner-badge">群主</span>' : ''}
+          <button class="btn btn-sm btn-outline-secondary group-manage-btn groups-manage-btn" type="button" aria-label="群资料"><i class="bi bi-three-dots"></i></button>
         </div>
       </div>
     `;
