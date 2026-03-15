@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -52,11 +53,25 @@ from .schemas import (
 )
 from .security import create_access_token, hash_password, verify_access_token, verify_password
 
-app = FastAPI(title=settings.app_name)
 manager = ConnectionManager()
 call_sessions: dict[str, dict] = {}
 user_call_index: dict[int, str] = {}
 group_rate_last_sent_at: dict[tuple[int, int], datetime] = {}
+
+
+def utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    run_startup_tasks()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+
 def _resolve_upload_dir() -> Path:
     configured = Path(settings.upload_dir)
     if configured.is_absolute():
@@ -310,7 +325,7 @@ def check_group_rate_limit_or_raise(db: Session, room: ChatRoom, user_id: int):
         return
     if should_bypass_group_rate_limit(db, room.id, user_id):
         return
-    now = datetime.utcnow()
+    now = utc_now_naive()
     key = (room.id, user_id)
     last = group_rate_last_sent_at.get(key)
     if last:
@@ -379,7 +394,7 @@ def get_unread_count_for_room(db: Session, user_id: int, room_id: int) -> int:
 def mark_room_read(db: Session, user_id: int, room_id: int, last_read_message_id: int | None) -> int:
     final_last_read = last_read_message_id or get_room_latest_message_id(db, room_id)
     rr = get_user_room_read(db, user_id, room_id)
-    now = datetime.utcnow()
+    now = utc_now_naive()
     if rr:
         if final_last_read is not None:
             rr.last_read_message_id = final_last_read
@@ -429,7 +444,7 @@ def cascade_recall_messages(
     recalled: list[Message] = []
     queue: list[Message] = [root_message]
     seen: set[int] = set()
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
     while queue:
         current = queue.pop(0)
@@ -657,8 +672,7 @@ def ensure_message_indexes():
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_messages_room_created_at ON messages (room_id, created_at)"))
 
 
-@app.on_event("startup")
-def on_startup():
+def run_startup_tasks():
     validate_production_guardrails()
     Base.metadata.create_all(bind=engine)
     ensure_compatible_schema()
@@ -1129,7 +1143,7 @@ def _ensure_friendship_and_dm(db: Session, user_id: int, friend_id: int):
                 role="owner",
                 can_kick=False,
                 can_mute=False,
-                joined_at=datetime.utcnow(),
+                joined_at=utc_now_naive(),
             )
         )
         db.execute(
@@ -1139,7 +1153,7 @@ def _ensure_friendship_and_dm(db: Session, user_id: int, friend_id: int):
                 role="member",
                 can_kick=False,
                 can_mute=False,
-                joined_at=datetime.utcnow(),
+                joined_at=utc_now_naive(),
             )
         )
 
@@ -1233,7 +1247,7 @@ def accept_friend_request(
         return _serialize_friend_request(req)
 
     req.status = "accepted"
-    req.responded_at = datetime.utcnow()
+    req.responded_at = utc_now_naive()
     db.commit()
     _ensure_friendship_and_dm(db, req.from_user_id, req.to_user_id)
     db.refresh(req)
@@ -1255,7 +1269,7 @@ def reject_friend_request(
         return _serialize_friend_request(req)
 
     req.status = "rejected"
-    req.responded_at = datetime.utcnow()
+    req.responded_at = utc_now_naive()
     db.commit()
     db.refresh(req)
     return _serialize_friend_request(req)
@@ -1389,13 +1403,13 @@ def set_friend_remark(
     remark = (payload.remark or "").strip()
     if row:
         row.remark = remark
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utc_now_naive()
     else:
         row = FriendRemark(
             user_id=current_user.id,
             friend_id=friend_id,
             remark=remark,
-            updated_at=datetime.utcnow(),
+            updated_at=utc_now_naive(),
         )
         db.add(row)
     db.commit()
@@ -1462,7 +1476,7 @@ def _create_group_room_impl(
                 role=role,
                 can_kick=False,
                 can_mute=False,
-                joined_at=datetime.utcnow(),
+                joined_at=utc_now_naive(),
             )
         )
     db.commit()
@@ -1682,7 +1696,7 @@ async def add_room_member(
             can_mute=False,
             can_recall_others=False,
             can_super_delete=False,
-            joined_at=datetime.utcnow(),
+            joined_at=utc_now_naive(),
         )
     )
     db.commit()
@@ -2180,7 +2194,7 @@ async def edit_message(
 
     msg.content = new_content
     msg.edited_by_admin = bool(is_admin)
-    msg.updated_at = datetime.utcnow()
+    msg.updated_at = utc_now_naive()
     db.commit()
     db.refresh(msg)
 
@@ -2337,7 +2351,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             data = WsMessageIn(**raw)
 
             if data.action == "ping":
-                await websocket.send_json({"type": "pong", "payload": {"time": datetime.utcnow().isoformat()}})
+                await websocket.send_json({"type": "pong", "payload": {"time": utc_now_naive().isoformat()}})
                 continue
 
             if data.action == "send_message":
@@ -2444,7 +2458,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                         continue
 
                 msg.content = data.content.strip()
-                msg.updated_at = datetime.utcnow()
+                msg.updated_at = utc_now_naive()
                 msg.edited_by_admin = bool(is_admin)
                 db.commit()
                 db.refresh(msg)
@@ -2499,7 +2513,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     "room_id": data.room_id,
                     "call_type": data.call_type,
                     "status": "ringing",
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": utc_now_naive().isoformat(),
                 }
                 call_sessions[call_id] = call
                 user_call_index[user_id] = call_id
@@ -2540,7 +2554,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
                     await websocket.send_json({"type": "error", "payload": {"message": "No permission"}})
                     continue
                 call["status"] = "active"
-                call["accepted_at"] = datetime.utcnow().isoformat()
+                call["accepted_at"] = utc_now_naive().isoformat()
                 await manager.send_json_to_user(
                     int(call["caller_id"]),
                     {
@@ -2662,7 +2676,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
             user = db.get(User, user_id)
             if user:
                 user.is_online = False
-                user.last_seen_at = datetime.utcnow()
+                user.last_seen_at = utc_now_naive()
                 db.commit()
                 await manager.broadcast_global(
                     {
@@ -2690,7 +2704,7 @@ async def delete_room(room_id: int, db: Session = Depends(get_db), current_user:
             raise HTTPException(status_code=403, detail="Only owner can dissolve group")
         if not bool(room.is_dissolved):
             room.is_dissolved = True
-            room.dissolved_at = datetime.utcnow()
+            room.dissolved_at = utc_now_naive()
             db.commit()
 
         await manager.broadcast_to_room(

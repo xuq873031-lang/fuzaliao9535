@@ -49,3 +49,17 @@ class ConnectionManager:
 
     def connection_count(self, user_id: int) -> int:
         return len(self.user_sockets.get(user_id, []))
+
+    async def force_disconnect_user(self, user_id: int, payload: dict | None = None, code: int = 4001):
+        sockets = list(self.user_sockets.get(user_id, []))
+        for ws in sockets:
+            try:
+                if payload:
+                    await ws.send_json(payload)
+            except Exception:
+                pass
+            try:
+                await ws.close(code=code)
+            except Exception:
+                pass
+            self.disconnect(user_id, ws)

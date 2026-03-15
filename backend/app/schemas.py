@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RegisterIn(BaseModel):
@@ -21,6 +21,8 @@ class TokenOut(BaseModel):
 
 
 class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     email: str
@@ -39,9 +41,6 @@ class UserOut(BaseModel):
     can_super_delete_messages: bool = False
     can_use_edit_feature: bool = False
     can_use_super_delete: bool = False
-
-    class Config:
-        from_attributes = True
 
 
 class UserUpdateIn(BaseModel):

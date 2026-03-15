@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     database_url: str = "sqlite:///./chat_app.db"
     frontend_origins: str = "http://localhost:5500,http://127.0.0.1:5500"
+    frontend_url: str = ""
+    admin_portal_url: str = ""
     access_token_expire_hours: int = 72
     # 生产护栏：默认禁止在 production 使用 SQLite
     enforce_non_sqlite_in_production: bool = True
@@ -22,11 +24,21 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        # 始终包含生产前端域名，避免环境变量遗漏导致跨域失败
         required_origin = "https://xuq873031-lang.github.io"
-        origins = [x.strip() for x in self.frontend_origins.split(",") if x.strip()]
-        if required_origin not in origins:
-            origins.append(required_origin)
+
+        def normalize(origin: str) -> str:
+            return origin.strip().rstrip("/")
+
+        origins: list[str] = []
+        for raw in self.frontend_origins.split(","):
+            normalized = normalize(raw)
+            if normalized and normalized not in origins:
+                origins.append(normalized)
+
+        for extra in (self.frontend_url, self.admin_portal_url, required_origin):
+            normalized = normalize(extra)
+            if normalized and normalized not in origins:
+                origins.append(normalized)
         return origins
 
     @property

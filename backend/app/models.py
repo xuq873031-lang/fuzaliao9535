@@ -1,9 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .db import Base
+
+
+def utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 room_members = Table(
@@ -16,7 +20,7 @@ room_members = Table(
     Column("can_mute", Boolean, nullable=False, default=False),
     Column("can_recall_others", Boolean, nullable=False, default=False),
     Column("can_super_delete", Boolean, nullable=False, default=False),
-    Column("joined_at", DateTime, default=datetime.utcnow, nullable=False),
+    Column("joined_at", DateTime, default=utc_now_naive, nullable=False),
 )
 
 
@@ -51,7 +55,7 @@ class User(Base):
     can_super_delete_messages = Column(Boolean, default=False, nullable=False)
     can_use_edit_feature = Column(Boolean, default=False, nullable=False)
     can_use_super_delete = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
 
     messages = relationship("Message", back_populates="sender", cascade="all, delete")
 
@@ -76,7 +80,7 @@ class ChatRoom(Base):
     is_dissolved = Column(Boolean, nullable=False, default=False)
     dissolved_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
 
     members = relationship("User", secondary=room_members)
     messages = relationship("Message", back_populates="room", cascade="all, delete")
@@ -94,7 +98,7 @@ class Message(Base):
     reply_to_message_id = Column(Integer, nullable=True, index=True)
     content = Column(Text, nullable=False)
     edited_by_admin = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False, index=True)
     updated_at = Column(DateTime, nullable=True)
 
     room = relationship("ChatRoom", back_populates="messages")
@@ -113,7 +117,7 @@ class UserHiddenMessage(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     room_id = Column(Integer, ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, index=True)
     message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
 
 
 class RoomRead(Base):
@@ -142,7 +146,7 @@ class FriendRequest(Base):
     to_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(20), nullable=False, default="pending")
     message = Column(String(120), nullable=False, default="")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
     responded_at = Column(DateTime, nullable=True)
 
     from_user = relationship("User", foreign_keys=[from_user_id])
@@ -160,7 +164,7 @@ class FriendRemark(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     friend_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     remark = Column(String(80), nullable=False, default="")
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utc_now_naive, nullable=False)
 
 
 class RoomMute(Base):
@@ -174,4 +178,4 @@ class RoomMute(Base):
     room_id = Column(Integer, ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     muted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
