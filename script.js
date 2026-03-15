@@ -880,6 +880,38 @@ function summarizeMessageText(text) {
   return raw.replace(/\s+/g, ' ').slice(0, 36);
 }
 
+function canCurrentUserViewAdminSystemMessage(conv) {
+  if (!conv || conv.type !== 'group') return true;
+  if (isAdminUser()) return true;
+  const me = appState.roomMyMemberMetaByRoom[conv.id];
+  return !!(me && (
+    me.role === 'owner'
+    || me.canKick
+    || me.canMute
+    || me.canRecallOthers
+    || me.canSuperDelete
+  ));
+}
+
+function isAdminOnlySystemMessage(text) {
+  const raw = String(text || '');
+  if (!raw.startsWith('[system]')) return false;
+  return [
+    '移除了成员',
+    '禁言了成员',
+    '取消了成员',
+    '调整了',
+    '删除了成员',
+    '设置了群发言频率'
+  ].some((keyword) => raw.includes(keyword));
+}
+
+function canRenderMessageForCurrentUser(msg, conv) {
+  if (!msg) return false;
+  if (!isAdminOnlySystemMessage(msg.text)) return true;
+  return canCurrentUserViewAdminSystemMessage(conv);
+}
+
 function canEditOwnMessage(msg) {
   if (!msg) return false;
   if (!appState.currentUser?.canUseEditFeature) return false;
@@ -7408,7 +7440,7 @@ function renderConversationList() {
   }
 
   list.forEach((conv) => {
-    const lastMsg = (conv.messages || []).reduce((latest, curr) => {
+    const lastMsg = (conv.messages || []).filter((msg) => canRenderMessageForCurrentUser(msg, conv)).reduce((latest, curr) => {
       if (!latest) return curr;
       const lt = Number(latest.createdAt || 0);
       const ct = Number(curr.createdAt || 0);
@@ -7724,12 +7756,14 @@ function appendMessagesToView(conv, messages, options = {}) {
   const { autoScroll = true, stickToBottom = null } = options;
   const listEl = getMessageScrollContainer() || normalizeChatScrollContainer();
   if (!listEl || !messages.length) return;
+  const visibleMessages = messages.filter((msg) => canRenderMessageForCurrentUser(msg, conv));
+  if (!visibleMessages.length) return;
   const prevScrollTop = listEl.scrollTop;
   const wasNearBottom = isNearBottom(listEl, 220);
   const shouldStick = typeof stickToBottom === 'boolean' ? stickToBottom : wasNearBottom;
 
   const frag = document.createDocumentFragment();
-  messages.forEach((msg) => frag.appendChild(safeBuildMessageRow(msg, conv)));
+  visibleMessages.forEach((msg) => frag.appendChild(safeBuildMessageRow(msg, conv)));
   listEl.appendChild(frag);
   trimMessageDomIfNeeded(listEl);
 
@@ -7891,7 +7925,7 @@ function renderMessages(options = {}) {
   }
   if (appState.localTypingActive) setLocalTypingHint(true);
 
-  appendMessagesToView(conv, getRenderableMessages(conv), { autoScroll });
+  appendMessagesToView(conv, getRenderableMessages(conv).filter((msg) => canRenderMessageForCurrentUser(msg, conv)), { autoScroll });
   if (forceBottom) {
     appState.userNearBottom = true;
     scrollMessagesToBottom({ force: true });
