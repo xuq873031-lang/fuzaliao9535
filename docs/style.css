@@ -1441,6 +1441,25 @@ body.main-open #messageList {
 }
 
 @media (max-width: 991.98px) {
+  #messagesView .conversation-pane,
+  #messagesView .tg-conversation-pane,
+  #messagesView .chat-pane {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #messagesView .conversation-pane.border-end,
+  #messagesView .tg-conversation-pane.border-end {
+    border-right: 0 !important;
+  }
+
+  #chatSplitHandle {
+    display: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
   #messagesView .conversation-pane {
     display: block !important;
   }
