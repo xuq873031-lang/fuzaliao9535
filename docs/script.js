@@ -2570,7 +2570,7 @@ function handleWsEvent(evt) {
     const conv = findConversationById(msg.room_id);
     if (!conv) return;
 
-    const target = conv.messages.find((m) => m.id === msg.id);
+    const target = conv.messages.find((m) => Number(m.id) === Number(msg.id));
     if (target) {
       target.text = msg.text;
       target.updatedAt = msg.updatedAt;
@@ -2583,7 +2583,10 @@ function handleWsEvent(evt) {
 
     if (String(msg.text || '').startsWith('[已撤回]')) handleRecalledMessageUiState(msg);
     scheduleConversationListRender();
-    if (appState.activeConversationId === conv.id && target) updateMessageRowInView(conv, target);
+    if (appState.activeConversationId === conv.id) {
+      if (target) updateMessageRowInView(conv, target);
+      else renderMessages({ autoScroll: false });
+    }
     return;
   }
 
