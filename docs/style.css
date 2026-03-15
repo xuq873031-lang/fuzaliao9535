@@ -6359,3 +6359,46 @@ body.main-open .mobile-tabbar {
   background: color-mix(in srgb, var(--panel-bg) 94%, var(--bg-primary)) !important;
   border-color: color-mix(in srgb, var(--border-color) 70%, transparent) !important;
 }
+
+@media (min-width: 992px) {
+  #chatSplitHandle {
+    display: block !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #chatSplitHandle::before {
+    background: color-mix(in srgb, var(--border-color) 78%, transparent) !important;
+  }
+
+  #messagesView .conversation-pane,
+  #messagesView .tg-conversation-pane {
+    border-right: 1px solid var(--border-color) !important;
+  }
+
+  #messagesView .conversation-pane.border-end,
+  #messagesView .tg-conversation-pane.border-end {
+    border-right: 1px solid var(--border-color) !important;
+  }
+}
+
+@media (max-width: 991.98px) {
+  #messagesView .conversation-pane,
+  #messagesView .tg-conversation-pane,
+  #messagesView .chat-pane {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #messagesView .conversation-pane.border-end,
+  #messagesView .tg-conversation-pane.border-end {
+    border-right: 0 !important;
+  }
+
+  #chatSplitHandle {
+    display: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+}

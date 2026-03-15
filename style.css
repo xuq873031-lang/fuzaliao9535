@@ -6955,6 +6955,28 @@ h1, h2, h3, h4, h5, h6,
   color: var(--text-primary) !important;
 }
 
+@media (min-width: 992px) {
+  #chatSplitHandle {
+    display: block !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #chatSplitHandle::before {
+    background: color-mix(in srgb, var(--border-color) 78%, transparent) !important;
+  }
+
+  #messagesView .conversation-pane,
+  #messagesView .tg-conversation-pane {
+    border-right: 1px solid var(--border-color) !important;
+  }
+
+  #messagesView .conversation-pane.border-end,
+  #messagesView .tg-conversation-pane.border-end {
+    border-right: 1px solid var(--border-color) !important;
+  }
+}
+
 .contacts-quick-entry-item,
 #friendToolsPanel .list-group-item,
 #addFriendPanel .list-group-item,
