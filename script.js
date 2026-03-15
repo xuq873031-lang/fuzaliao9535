@@ -3442,7 +3442,7 @@ function bindChatSplitResize() {
   const rightPane = document.querySelector('#messagesView .chat-pane');
   const handle = document.getElementById('chatSplitHandle');
   if (!layout || !leftPane || !rightPane || !handle) return;
-  const isDesktopLike = () => !window.matchMedia('(max-width: 991.98px), (pointer: coarse)').matches;
+  const isDesktopLike = () => !window.matchMedia('(max-width: 680.98px)').matches;
 
   const getBounds = () => {
     const total = layout.clientWidth || window.innerWidth || 1200;

@@ -7417,3 +7417,84 @@ hr,
     box-shadow: none !important;
   }
 }
+
+@media (min-width: 681px) {
+  #messagesView .chat-layout-row,
+  #messagesView > .row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  #messagesView .conversation-pane,
+  #messagesView .tg-conversation-pane {
+    display: block !important;
+    flex: 0 0 var(--chat-split-width) !important;
+    width: var(--chat-split-width) !important;
+    min-width: 280px !important;
+    max-width: 560px !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04) !important;
+  }
+
+  #messagesView .conversation-pane.border-end,
+  #messagesView .tg-conversation-pane.border-end {
+    border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
+  }
+
+  #messagesView .chat-pane {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    min-width: 320px !important;
+    width: auto !important;
+    border-left: 0 !important;
+  }
+
+  #chatSplitHandle {
+    display: block !important;
+    width: 12px !important;
+    min-width: 12px !important;
+    flex: 0 0 12px !important;
+    align-self: stretch !important;
+    position: relative !important;
+    z-index: 4 !important;
+    pointer-events: auto !important;
+    touch-action: none !important;
+    cursor: col-resize !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #chatSplitHandle::before {
+    display: block !important;
+    content: "" !important;
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 50% !important;
+    width: 2px !important;
+    transform: translateX(-50%) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-radius: 999px !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (max-width: 680.98px) {
+  #chatSplitHandle,
+  #chatSplitHandle::before {
+    display: none !important;
+  }
+
+  #messagesView .conversation-pane,
+  #messagesView .tg-conversation-pane,
+  #messagesView .conversation-pane.border-end,
+  #messagesView .tg-conversation-pane.border-end,
+  #messagesView .chat-pane {
+    border-right: 0 !important;
+    border-left: 0 !important;
+    box-shadow: none !important;
+  }
+}
