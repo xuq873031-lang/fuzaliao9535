@@ -426,6 +426,14 @@ function goBackOneLevelFromChat() {
   renderMessages({ autoScroll: false });
 }
 
+function syncMessagesViewChrome() {
+  const mobileTopbar = document.querySelector('.mobile-topbar');
+  const mobileTabbar = document.querySelector('.mobile-tabbar');
+  const inActiveChat = appState.currentView === 'messagesView' && !!appState.activeConversationId;
+  if (mobileTopbar) mobileTopbar.classList.toggle('d-none', inActiveChat);
+  if (mobileTabbar) mobileTabbar.classList.toggle('d-none', inActiveChat);
+}
+
 function activateConversation(roomId, options = {}) {
   const autoScroll = options.autoScroll !== false;
   const conv = findConversationById(roomId);
@@ -441,6 +449,7 @@ function activateConversation(roomId, options = {}) {
       renderMessages({ autoScroll, forceBottom: autoScroll });
       setTimeout(() => focusMessageInputForDesktop(), 100);
       startRoomPolling(conv.id);
+      syncMessagesViewChrome();
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
     })
@@ -450,6 +459,7 @@ function activateConversation(roomId, options = {}) {
       renderMessages({ autoScroll, forceBottom: autoScroll });
       setTimeout(() => focusMessageInputForDesktop(), 100);
       startRoomPolling(conv.id);
+      syncMessagesViewChrome();
     });
 }
 
@@ -1254,6 +1264,8 @@ function switchView(viewId, options = {}) {
   document.querySelectorAll('.mobile-tab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.view === viewId);
   });
+
+  syncMessagesViewChrome();
 
   if (viewId === 'messagesView') {
     renderConversationList();
@@ -3413,6 +3425,14 @@ function bindNavigationEvents() {
 
   document.getElementById('logoutBtn').addEventListener('click', logout);
   document.getElementById('mobileLogoutBtn').addEventListener('click', logout);
+  const desktopRailAvatar = document.getElementById('desktopRailAvatar');
+  if (desktopRailAvatar) {
+    desktopRailAvatar.style.cursor = 'pointer';
+    desktopRailAvatar.addEventListener('click', () => {
+      renderProfile();
+      switchView('profileView');
+    });
+  }
 
   const conversationSearchFocusBtn = document.getElementById('conversationSearchFocusBtn');
   if (conversationSearchFocusBtn) {
@@ -3476,6 +3496,8 @@ function bindNavigationEvents() {
       }
     });
   }
+
+  window.addEventListener('resize', syncMessagesViewChrome, { passive: true });
 }
 
 function bindChatSplitResize() {
@@ -7552,6 +7574,31 @@ function buildMessageRow(msg, conv) {
           console.warn('打开成员管理菜单失败', err.message);
         });
     });
+    let avatarLongPressTimer = null;
+    let avatarLongPressTriggered = false;
+    avatar.addEventListener('touchstart', (e) => {
+      if (conv.type !== 'group') return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      avatarLongPressTriggered = false;
+      avatarLongPressTimer = setTimeout(() => {
+        avatarLongPressTriggered = true;
+        openGroupMemberContextMenu(t.clientX, t.clientY, conv.id, msg.senderId)
+          .catch((err) => {
+            console.warn('打开成员管理菜单失败', err.message);
+          });
+      }, 550);
+    }, { passive: true });
+    ['touchmove', 'touchend', 'touchcancel'].forEach((ev) => {
+      avatar.addEventListener(ev, (e) => {
+        if (avatarLongPressTimer) clearTimeout(avatarLongPressTimer);
+        avatarLongPressTimer = null;
+        if (avatarLongPressTriggered) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      });
+    });
     row.appendChild(avatar);
   }
 
@@ -7770,9 +7817,11 @@ function renderMessages(options = {}) {
     hideMentionSuggestions();
     updateCallButtonsState();
     setLocalTypingHint(false);
+    syncMessagesViewChrome();
     return;
   }
   setChatPaneVisible(true);
+  syncMessagesViewChrome();
   if (chatHeader) chatHeader.classList.remove('d-none');
   if (emptyStateEl) emptyStateEl.classList.add('d-none');
   listEl.classList.remove('d-none');
