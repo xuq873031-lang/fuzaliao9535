@@ -6426,24 +6426,63 @@ body.main-open .mobile-tabbar {
     display: block !important;
     border: 0 !important;
     box-shadow: none !important;
+    background: transparent !important;
   }
 
   #chatSplitHandle::before {
-    background: color-mix(in srgb, var(--border-color) 78%, transparent) !important;
+    background: rgba(255, 255, 255, 0.14) !important;
   }
 
   #messagesView .conversation-pane,
   #messagesView .tg-conversation-pane {
-    border-right: 1px solid var(--border-color) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
   }
 
   #messagesView .conversation-pane.border-end,
   #messagesView .tg-conversation-pane.border-end {
-    border-right: 1px solid var(--border-color) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
   }
 }
 
 @media (max-width: 991.98px) {
+  .tg-conversation-header {
+    padding: 10px 12px !important;
+  }
+
+  .chat-home-topbar {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .chat-home-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .chat-home-actions {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .chat-home-action,
+  #conversationSearchFocusBtn,
+  #conversationCreateBtn {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
   #messagesView .conversation-pane,
   #messagesView .tg-conversation-pane,
   #messagesView .chat-pane {
