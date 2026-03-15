@@ -431,7 +431,11 @@ function syncMessagesViewChrome() {
   const mobileTabbar = document.querySelector('.mobile-tabbar');
   const inActiveChat = appState.currentView === 'messagesView' && !!appState.activeConversationId;
   const mobileChatOpen = inActiveChat && window.matchMedia('(max-width: 991.98px)').matches;
-  if (mobileTopbar) mobileTopbar.classList.toggle('d-none', inActiveChat);
+  if (mobileTopbar) {
+    mobileTopbar.classList.toggle('d-none', inActiveChat);
+    if (inActiveChat) mobileTopbar.style.setProperty('display', 'none', 'important');
+    else mobileTopbar.style.removeProperty('display');
+  }
   if (mobileTabbar) mobileTabbar.classList.toggle('d-none', inActiveChat);
   document.body.classList.toggle('mobile-chat-open', mobileChatOpen);
 }
