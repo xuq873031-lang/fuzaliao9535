@@ -990,6 +990,8 @@ function updateFriendRequestBadges() {
 function normalizeMessage(raw) {
   return {
     id: raw.id,
+    roomId: raw.room_id,
+    room_id: raw.room_id,
     senderId: raw.sender_id,
     replyToMessageId: raw.reply_to_message_id || null,
     replyToSenderId: raw.reply_to_sender_id || null,
