@@ -144,45 +144,82 @@ const THEME_ACCENTS = ['blue', 'red', 'orange', 'yellow', 'green', 'cyan', 'purp
 // ============================
 // 工具方法
 // ============================
+function getBrowserStorage() {
+  try {
+    const storage = window.localStorage;
+    if (!storage || typeof storage.getItem !== 'function') return null;
+    return storage;
+  } catch (_) {
+    return null;
+  }
+}
+
+function storageGetItem(key) {
+  try {
+    const storage = getBrowserStorage();
+    return storage ? storage.getItem(key) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function storageSetItem(key, value) {
+  try {
+    const storage = getBrowserStorage();
+    if (storage) storage.setItem(key, value);
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+
+function storageRemoveItem(key) {
+  try {
+    const storage = getBrowserStorage();
+    if (storage) storage.removeItem(key);
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+
 function getToken() {
-  return localStorage.getItem(STORAGE_KEYS.token);
+  return storageGetItem(STORAGE_KEYS.token);
 }
 
 function getStrictUserToken() {
-  return String(appState.sessionToken || localStorage.getItem(STORAGE_KEYS.token) || '').trim();
+  return String(appState.sessionToken || storageGetItem(STORAGE_KEYS.token) || '').trim();
 }
 
 function setToken(token) {
   const safe = String(token || '').trim();
   if (!safe || safe === 'undefined' || safe === 'null') {
     appState.sessionToken = '';
-    localStorage.removeItem(STORAGE_KEYS.token);
-    localStorage.removeItem('token');
+    storageRemoveItem(STORAGE_KEYS.token);
+    storageRemoveItem('token');
     return;
   }
   appState.sessionToken = safe;
-  localStorage.setItem(STORAGE_KEYS.token, safe);
-  localStorage.removeItem('token');
+  storageSetItem(STORAGE_KEYS.token, safe);
+  storageRemoveItem('token');
 }
 
 function clearToken() {
   appState.sessionToken = '';
-  localStorage.removeItem(STORAGE_KEYS.token);
-  localStorage.removeItem('token');
+  storageRemoveItem(STORAGE_KEYS.token);
+  storageRemoveItem('token');
 }
 
 function getApiBase() {
-  const stored = String(localStorage.getItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
+  const stored = String(storageGetItem(STORAGE_KEYS.apiBase) || '').trim().replace(/\/$/, '');
   if (stored !== DEFAULT_API_BASE) {
-    localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
+    storageSetItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
   }
   return DEFAULT_API_BASE;
 }
 
 function getWsBase() {
-  const stored = String(localStorage.getItem(STORAGE_KEYS.wsBase) || '').trim().replace(/\/$/, '');
+  const stored = String(storageGetItem(STORAGE_KEYS.wsBase) || '').trim().replace(/\/$/, '');
   if (stored !== DEFAULT_WS_BASE) {
-    localStorage.setItem(STORAGE_KEYS.wsBase, DEFAULT_WS_BASE);
+    storageSetItem(STORAGE_KEYS.wsBase, DEFAULT_WS_BASE);
   }
   return DEFAULT_WS_BASE;
 }
@@ -190,8 +227,8 @@ function getWsBase() {
 function setApiBase(base) {
   const normalized = String(base || '').trim().replace(/\/$/, '');
   if (!/^https?:\/\//i.test(normalized)) return;
-  localStorage.setItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
-  localStorage.setItem(STORAGE_KEYS.wsBase, DEFAULT_WS_BASE);
+  storageSetItem(STORAGE_KEYS.apiBase, DEFAULT_API_BASE);
+  storageSetItem(STORAGE_KEYS.wsBase, DEFAULT_WS_BASE);
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
@@ -231,7 +268,7 @@ function getPinnedMessageStorageKey() {
 
 function loadPinnedRoomOrder() {
   try {
-    const raw = localStorage.getItem(getPinnedStorageKey());
+    const raw = storageGetItem(getPinnedStorageKey());
     const arr = JSON.parse(raw || '[]');
     appState.pinnedRoomOrder = Array.isArray(arr)
       ? arr.map((x) => Number(x)).filter((x) => Number.isFinite(x))
@@ -243,7 +280,7 @@ function loadPinnedRoomOrder() {
 
 function savePinnedRoomOrder() {
   try {
-    localStorage.setItem(getPinnedStorageKey(), JSON.stringify(appState.pinnedRoomOrder));
+    storageSetItem(getPinnedStorageKey(), JSON.stringify(appState.pinnedRoomOrder));
   } catch (_) {
     // ignore storage errors
   }
@@ -251,7 +288,7 @@ function savePinnedRoomOrder() {
 
 function loadPinnedMessageState() {
   try {
-    const raw = localStorage.getItem(getPinnedMessageStorageKey());
+    const raw = storageGetItem(getPinnedMessageStorageKey());
     const parsed = JSON.parse(raw || '{}');
     appState.pinnedMessageByRoom = parsed && typeof parsed === 'object' ? parsed : {};
   } catch (_) {
@@ -261,7 +298,7 @@ function loadPinnedMessageState() {
 
 function savePinnedMessageState() {
   try {
-    localStorage.setItem(getPinnedMessageStorageKey(), JSON.stringify(appState.pinnedMessageByRoom || {}));
+    storageSetItem(getPinnedMessageStorageKey(), JSON.stringify(appState.pinnedMessageByRoom || {}));
   } catch (_) {
     // ignore storage errors
   }
@@ -269,7 +306,7 @@ function savePinnedMessageState() {
 
 function loadConversationMuteState() {
   try {
-    const raw = localStorage.getItem(getMuteStorageKey());
+    const raw = storageGetItem(getMuteStorageKey());
     const arr = JSON.parse(raw || '[]');
     appState.mutedRoomIds = new Set(
       Array.isArray(arr)
@@ -283,7 +320,7 @@ function loadConversationMuteState() {
 
 function saveConversationMuteState() {
   try {
-    localStorage.setItem(getMuteStorageKey(), JSON.stringify([...appState.mutedRoomIds]));
+    storageSetItem(getMuteStorageKey(), JSON.stringify([...appState.mutedRoomIds]));
   } catch (_) {
     // ignore storage errors
   }
@@ -897,7 +934,7 @@ function getRtcConfiguration() {
     if (Array.isArray(window.CHAT_ICE_SERVERS) && window.CHAT_ICE_SERVERS.length) {
       return { iceServers: window.CHAT_ICE_SERVERS };
     }
-    const raw = localStorage.getItem('chat_ice_servers');
+    const raw = storageGetItem('chat_ice_servers');
     if (!raw) return { iceServers: fallback };
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || !parsed.length) return { iceServers: fallback };
@@ -1015,10 +1052,10 @@ function markLatestPendingAsFailed(roomId) {
 }
 
 function getThemeSettings() {
-  const preset = localStorage.getItem(STORAGE_KEYS.themePreset) || 'classic';
-  const accent = localStorage.getItem(STORAGE_KEYS.themeAccent) || THEME_PRESETS[preset]?.accent || 'blue';
-  const theme = localStorage.getItem(STORAGE_KEYS.theme) || THEME_PRESETS[preset]?.mode || 'light';
-  const bubble = localStorage.getItem(STORAGE_KEYS.themeBubble) || THEME_PRESETS[preset]?.bubble || 'off';
+  const preset = storageGetItem(STORAGE_KEYS.themePreset) || 'classic';
+  const accent = storageGetItem(STORAGE_KEYS.themeAccent) || THEME_PRESETS[preset]?.accent || 'blue';
+  const theme = storageGetItem(STORAGE_KEYS.theme) || THEME_PRESETS[preset]?.mode || 'light';
+  const bubble = storageGetItem(STORAGE_KEYS.themeBubble) || THEME_PRESETS[preset]?.bubble || 'off';
   return {
     preset: THEME_PRESETS[preset] ? preset : 'classic',
     accent: THEME_ACCENTS.includes(accent) ? accent : 'blue',
@@ -1092,10 +1129,10 @@ function applyThemeSettings(nextSettings, persist = true) {
   root.setAttribute('data-accent', THEME_ACCENTS.includes(settings.accent) ? settings.accent : 'blue');
   root.setAttribute('data-bubble-mode', settings.bubble === 'on' ? 'on' : 'off');
   if (persist) {
-    localStorage.setItem(STORAGE_KEYS.theme, settings.theme);
-    localStorage.setItem(STORAGE_KEYS.themePreset, settings.preset);
-    localStorage.setItem(STORAGE_KEYS.themeAccent, settings.accent);
-    localStorage.setItem(STORAGE_KEYS.themeBubble, settings.bubble);
+    storageSetItem(STORAGE_KEYS.theme, settings.theme);
+    storageSetItem(STORAGE_KEYS.themePreset, settings.preset);
+    storageSetItem(STORAGE_KEYS.themeAccent, settings.accent);
+    storageSetItem(STORAGE_KEYS.themeBubble, settings.bubble);
   }
   updateThemeMetaColor(settings.theme, settings.accent);
   syncThemeSettingsPanel();
@@ -3459,13 +3496,13 @@ function bindChatSplitResize() {
     const width = Math.max(min, Math.min(max, Number(rawWidth) || min));
     document.documentElement.style.setProperty('--chat-split-width', `${width}px`);
     try {
-      localStorage.setItem(STORAGE_KEYS.chatSplitWidth, String(width));
+      storageSetItem(STORAGE_KEYS.chatSplitWidth, String(width));
     } catch (_) {
       // ignore storage errors
     }
   };
 
-  const saved = Number(localStorage.getItem(STORAGE_KEYS.chatSplitWidth) || 0);
+  const saved = Number(storageGetItem(STORAGE_KEYS.chatSplitWidth) || 0);
   if (saved > 0 && isDesktopLike()) applyWidth(saved);
 
   let dragging = false;
@@ -8031,7 +8068,7 @@ async function init() {
   window.addEventListener('resize', updateAppViewportHeight, { passive: true });
   window.visualViewport?.addEventListener('resize', updateAppViewportHeight, { passive: true });
 
-  localStorage.removeItem('token');
+  storageRemoveItem('token');
 
   applyThemeSettings(getThemeSettings(), false);
 
