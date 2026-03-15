@@ -7434,13 +7434,13 @@ hr,
     width: var(--chat-split-width) !important;
     min-width: 280px !important;
     max-width: 560px !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04) !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
   }
 
   #messagesView .conversation-pane.border-end,
   #messagesView .tg-conversation-pane.border-end {
-    border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-right: 0 !important;
   }
 
   #messagesView .chat-pane {
@@ -7496,5 +7496,42 @@ hr,
     border-right: 0 !important;
     border-left: 0 !important;
     box-shadow: none !important;
+  }
+}
+
+@media (min-width: 681px) {
+  .sidebar-card.tg-rail-shell {
+    background: linear-gradient(180deg, #1c1d21 0%, #191a1e 100%) !important;
+  }
+
+  .tg-rail-btn,
+  .tg-rail-btn-logout {
+    color: rgba(240, 240, 240, 0.56) !important;
+    background: transparent !important;
+    border-color: transparent !important;
+  }
+
+  .tg-rail-btn:hover,
+  .tg-rail-btn-logout:hover {
+    color: rgba(240, 240, 240, 0.78) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  .tg-rail-btn.active {
+    color: rgba(240, 240, 240, 0.92) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .tg-rail-btn .tg-rail-icon,
+  .tg-rail-btn-logout .tg-rail-icon {
+    opacity: 0.82;
+    filter: saturate(0.78) brightness(0.92);
+  }
+
+  .tg-rail-btn.active .tg-rail-icon {
+    opacity: 0.96;
+    filter: saturate(0.88) brightness(0.98);
   }
 }
