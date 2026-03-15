@@ -7108,3 +7108,238 @@ body.main-open .mobile-tabbar {
     display: none !important;
   }
 }
+
+/* Settings/Profile page refinement */
+#profileView.profile-view {
+  padding: 20px !important;
+}
+
+#profileView .row.g-3 {
+  --bs-gutter-x: 1rem;
+  --bs-gutter-y: 1rem;
+}
+
+#profileView .profile-hero-card,
+#profileView .profile-form-card,
+#profileView .settings-profile-panel,
+#profileView .settings-detail-card,
+#profileView .settings-placeholder-card,
+#profileView .theme-settings-panel,
+#profileView .appearance-live-card {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: none !important;
+}
+
+#profileView .profile-hero-card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-bg) 92%, white 2%), var(--panel-bg)) !important;
+  border-radius: 26px !important;
+}
+
+#profileView .profile-hero-body {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 28px 24px !important;
+  text-align: center;
+}
+
+#profileView .avatar-picker-btn {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#profileView .profile-avatar {
+  width: 96px !important;
+  height: 96px !important;
+  border-radius: 50% !important;
+  border: 2px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+}
+
+#profileView .avatar-edit-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+#profileView .profile-hero-body small.text-secondary {
+  display: inline-block;
+  max-width: 220px;
+  line-height: 1.6;
+  color: var(--text-muted) !important;
+}
+
+#profileView .profile-form-card {
+  background: var(--panel-bg) !important;
+  border-radius: 28px !important;
+}
+
+#profileView .profile-form-body {
+  padding: 22px 22px 24px !important;
+}
+
+#profileView .settings-home-shell {
+  gap: 14px;
+}
+
+#profileView .settings-header-block {
+  margin-bottom: 0;
+  padding: 2px 2px 4px;
+}
+
+#profileView .profile-section-title,
+#profileView .theme-panel-title {
+  letter-spacing: -0.02em;
+}
+
+#profileView .settings-header-sub,
+#profileView .theme-panel-sub,
+#profileView .settings-placeholder-copy {
+  color: var(--text-muted) !important;
+}
+
+#profileView .settings-menu-panel {
+  padding: 4px 0;
+  border-radius: 22px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#profileView .settings-menu-item {
+  min-height: 76px;
+  padding: 14px 18px;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+#profileView .settings-menu-item:first-child {
+  border-top-left-radius: 20px !important;
+  border-top-right-radius: 20px !important;
+}
+
+#profileView .settings-menu-item:last-child {
+  border-bottom: 0 !important;
+  border-bottom-left-radius: 20px !important;
+  border-bottom-right-radius: 20px !important;
+}
+
+#profileView .settings-menu-item:hover,
+#profileView .settings-menu-item.active {
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+#profileView .settings-menu-item.settings-menu-item-primary {
+  background: rgba(var(--bs-primary-rgb), 0.08) !important;
+}
+
+#profileView .settings-menu-leading {
+  gap: 12px;
+}
+
+#profileView .settings-menu-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#profileView .settings-menu-title,
+#profileView .settings-panel-title,
+#profileView .settings-placeholder-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+#profileView .settings-menu-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+#profileView .settings-menu-trailing,
+#profileView .settings-menu-item i {
+  color: rgba(255, 255, 255, 0.46) !important;
+}
+
+#profileView .settings-profile-panel,
+#profileView .settings-detail-card,
+#profileView .settings-placeholder-card,
+#profileView .theme-settings-panel,
+#profileView .appearance-live-card {
+  padding: 18px !important;
+  border-radius: 22px !important;
+  background: color-mix(in srgb, var(--panel-bg) 94%, white 2%) !important;
+}
+
+#profileView .settings-detail-head,
+#profileView .appearance-page-head {
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+#profileView .settings-detail-back,
+#profileView .appearance-back-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.035) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+#profileView .theme-settings-panel .theme-panel-group + .theme-panel-group {
+  margin-top: 18px;
+}
+
+#profileView .theme-panel-label {
+  margin-bottom: 8px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+#profileView .theme-preset-grid {
+  gap: 12px;
+}
+
+#profileView .theme-preset-card {
+  border-radius: 18px;
+}
+
+#profileView .appearance-live-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.03)) !important;
+}
+
+@media (max-width: 991.98px) {
+  #profileView.profile-view {
+    padding: 14px 12px calc(env(safe-area-inset-bottom, 0px) + 18px) !important;
+  }
+
+  #profileView .profile-hero-body,
+  #profileView .profile-form-body {
+    padding: 18px !important;
+  }
+
+  #profileView .settings-menu-item {
+    min-height: 70px;
+    padding: 13px 15px;
+  }
+}
