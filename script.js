@@ -439,6 +439,7 @@ function activateConversation(roomId, options = {}) {
     .then(() => {
       renderConversationList();
       renderMessages({ autoScroll, forceBottom: autoScroll });
+      setTimeout(() => focusMessageInputForDesktop(), 100);
       startRoomPolling(conv.id);
       updateUnreadBadges();
       markCurrentRoomRead().catch((err) => console.warn('标记已读失败', err.message));
@@ -447,6 +448,7 @@ function activateConversation(roomId, options = {}) {
       console.warn('刷新禁言状态失败', err.message);
       renderConversationList();
       renderMessages({ autoScroll, forceBottom: autoScroll });
+      setTimeout(() => focusMessageInputForDesktop(), 100);
       startRoomPolling(conv.id);
     });
 }
@@ -2297,12 +2299,10 @@ function handleConversationContextSwitch() {
 }
 
 function enqueueWsNewMessage(payload) {
-  const normalized = normalizeMessage(payload || {});
-  if (!normalized?.room_id) return;
-
-  const roomId = Number(normalized.room_id);
+  const roomId = Number(payload?.room_id || payload?.roomId || 0);
+  if (!roomId) return;
   if (!appState.wsMessageBatchByRoom[roomId]) appState.wsMessageBatchByRoom[roomId] = [];
-  appState.wsMessageBatchByRoom[roomId].push(normalized);
+  appState.wsMessageBatchByRoom[roomId].push(payload);
 
   if (appState.wsMessageBatchTimer) return;
   appState.wsMessageBatchTimer = setTimeout(flushWsNewMessageBatch, 80);
@@ -5677,6 +5677,13 @@ function renderComposerState() {
   const text = document.getElementById('replyPreviewText');
   const sendBtn = document.getElementById('sendMessageBtn');
   if (!bar || !title || !text || !sendBtn) return;
+  const syncComposerScroll = () => {
+    setTimeout(() => {
+      if (appState.currentView === 'messagesView' && appState.activeConversationId) {
+        scrollMessagesToBottom({ force: false, stickToBottom: appState.userNearBottom, reason: 'composer-state' });
+      }
+    }, 0);
+  };
 
   if (appState.editingOwnMessageId) {
     const conv = findConversationById(appState.activeConversationId);
@@ -5685,6 +5692,7 @@ function renderComposerState() {
     title.textContent = '编辑消息';
     text.textContent = summarizeMessageText(msg?.text || '');
     sendBtn.textContent = '保存';
+    syncComposerScroll();
     return;
   }
 
@@ -5694,11 +5702,13 @@ function renderComposerState() {
     title.textContent = `回复 ${getDisplayNameByUserId(m.senderId)}`;
     text.textContent = summarizeMessageText(m.text);
     sendBtn.textContent = '发送';
+    syncComposerScroll();
     return;
   }
 
   bar.classList.add('d-none');
   sendBtn.textContent = '发送';
+  syncComposerScroll();
 }
 
 function clearReplyAndEditState(options = {}) {
@@ -6679,7 +6689,9 @@ function bindChatEvents() {
     hideMentionSuggestions();
   });
   if (msgInput) msgInput.addEventListener('focus', () => {
-    setTimeout(() => scrollMessagesToBottom({ force: false }), 120);
+    [120, 240].forEach((ms) => {
+      setTimeout(() => scrollMessagesToBottom({ force: false, stickToBottom: true, reason: 'input-focus' }), ms);
+    });
   });
   if (msgList) {
     msgList.addEventListener('click', (e) => {
