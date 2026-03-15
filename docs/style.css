@@ -1441,6 +1441,13 @@ body.main-open #messageList {
 }
 
 @media (min-width: 992px) {
+  #messagesView .chat-layout-row,
+  #messagesView > .row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+  }
+
   #chatSplitHandle {
     display: block !important;
     border: 0 !important;
@@ -1455,6 +1462,7 @@ body.main-open #messageList {
   #messagesView .conversation-pane,
   #messagesView .tg-conversation-pane {
     border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
   }
 
   #messagesView .conversation-pane.border-end,
@@ -1464,6 +1472,28 @@ body.main-open #messageList {
 }
 
 @media (max-width: 991.98px) {
+  .mobile-topbar {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px;
+    padding: 10px 12px !important;
+  }
+
+  .mobile-topbar-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .mobile-topbar-btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 12px !important;
+  }
+
   .tg-conversation-header {
     padding: 10px 12px !important;
   }
@@ -1473,7 +1503,7 @@ body.main-open #messageList {
     align-items: center !important;
     justify-content: space-between !important;
     width: 100%;
-    gap: 10px;
+    gap: 8px;
   }
 
   .chat-home-title {
@@ -1482,6 +1512,7 @@ body.main-open #messageList {
     text-align: left;
     font-size: 18px;
     line-height: 1.2;
+    margin: 0 !important;
   }
 
   .chat-home-actions {
@@ -1519,6 +1550,28 @@ body.main-open #messageList {
     display: none !important;
     border: 0 !important;
     box-shadow: none !important;
+  }
+
+  #messagesView .chat-layout-row,
+  #messagesView > .row {
+    display: block !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  #messagesView .conversation-pane {
+    display: block !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    flex: none !important;
+  }
+
+  #messagesView .chat-pane {
+    min-width: 0 !important;
+    min-width: 100% !important;
+    width: 100% !important;
+    flex: none !important;
   }
 
   #messagesView .conversation-pane {
@@ -6422,65 +6475,106 @@ body.main-open .mobile-tabbar {
 }
 
 @media (min-width: 992px) {
+  #messagesView > .chat-layout-row {
+    position: relative;
+  }
+
   #chatSplitHandle {
     display: block !important;
+    width: 12px !important;
+    min-width: 12px !important;
+    flex: 0 0 12px !important;
+    align-self: stretch !important;
     border: 0 !important;
     box-shadow: none !important;
     background: transparent !important;
   }
 
   #chatSplitHandle::before {
-    background: rgba(255, 255, 255, 0.14) !important;
+    content: "" !important;
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 50% !important;
+    width: 2px !important;
+    transform: translateX(-50%) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-radius: 999px !important;
   }
 
   #messagesView .conversation-pane,
   #messagesView .tg-conversation-pane {
-    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04) !important;
   }
 
   #messagesView .conversation-pane.border-end,
   #messagesView .tg-conversation-pane.border-end {
-    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
   }
 }
 
 @media (max-width: 991.98px) {
+  .mobile-topbar {
+    display: grid !important;
+    grid-template-columns: minmax(64px, max-content) 1fr minmax(64px, max-content) !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+
+  .mobile-topbar-title {
+    width: 100% !important;
+    margin: 0 !important;
+    text-align: center !important;
+    justify-self: center !important;
+  }
+
+  .mobile-topbar-btn:first-child {
+    justify-self: start !important;
+  }
+
+  .mobile-topbar-btn:last-child {
+    justify-self: end !important;
+  }
+
   .tg-conversation-header {
     padding: 10px 12px !important;
   }
 
-  .chat-home-topbar {
+  #messagesView .chat-home-topbar {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    width: 100%;
-    gap: 10px;
+    width: 100% !important;
+    gap: 10px !important;
   }
 
-  .chat-home-title {
-    flex: 1 1 auto;
-    min-width: 0;
-    text-align: left;
-    font-size: 18px;
-    line-height: 1.2;
+  #messagesView .chat-home-title {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    text-align: left !important;
+    font-size: 18px !important;
+    line-height: 1.2 !important;
   }
 
-  .chat-home-actions {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-left: auto;
+  #messagesView .chat-home-actions {
+    flex: 0 0 auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    margin-left: auto !important;
   }
 
-  .chat-home-action,
-  #conversationSearchFocusBtn,
-  #conversationCreateBtn {
-    min-width: 40px;
-    width: 40px;
-    height: 40px;
-    padding: 0;
+  #messagesView .chat-home-action,
+  #messagesView #conversationSearchFocusBtn,
+  #messagesView #conversationCreateBtn {
+    min-width: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
   }
 
   #messagesView .conversation-pane,
@@ -6496,7 +6590,8 @@ body.main-open .mobile-tabbar {
     border-right: 0 !important;
   }
 
-  #chatSplitHandle {
+  #chatSplitHandle,
+  #chatSplitHandle::before {
     display: none !important;
     border: 0 !important;
     box-shadow: none !important;
