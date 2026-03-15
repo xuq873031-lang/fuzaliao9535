@@ -6789,3 +6789,116 @@ body.main-open .mobile-tabbar {
     filter: saturate(0.88) brightness(0.98);
   }
 }
+
+@media (max-width: 991.98px) {
+  body.mobile-chat-open #mainContainer {
+    padding-bottom: 0 !important;
+  }
+
+  body.mobile-chat-open #messagesView,
+  body.mobile-chat-open #messagesView.mobile-chat-active,
+  body.mobile-chat-open #messagesView.mobile-chat-active > .chat-layout-row,
+  body.mobile-chat-open #messagesView.mobile-chat-active .chat-pane,
+  body.mobile-chat-open #messagesView.mobile-chat-active #messageList {
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  body.mobile-chat-open #messagesView.mobile-chat-active #chatHeader {
+    padding: 10px 12px !important;
+  }
+
+  body.mobile-chat-open #messagesView.mobile-chat-active #chatHeader .chat-header-main {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  body.mobile-chat-open #messagesView.mobile-chat-active #chatTitle {
+    font-size: 15px !important;
+    line-height: 1.25 !important;
+    margin-bottom: 2px !important;
+  }
+
+  body.mobile-chat-open #messagesView.mobile-chat-active #chatSubTitle {
+    display: block !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+  }
+
+  body.mobile-chat-open #messagesView.mobile-chat-active #mobileBackToListBtn,
+  body.mobile-chat-open #messagesView.mobile-chat-active #mobileChatMoreBtn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    padding: 0 !important;
+  }
+
+  body.mobile-chat-open #messagesView.mobile-chat-active #chatGroupMenuWrap,
+  body.mobile-chat-open #messagesView.mobile-chat-active #loadMoreBtn {
+    display: none !important;
+  }
+
+  body.mobile-chat-open #messagesView.mobile-chat-active #chatComposer {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+  }
+}
+
+@media (min-width: 681px) {
+  #messagesView .chat-layout-row,
+  #messagesView > .row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  #messagesView .conversation-pane,
+  #messagesView .tg-conversation-pane {
+    display: block !important;
+    flex: 0 0 var(--chat-split-width) !important;
+    width: var(--chat-split-width) !important;
+    min-width: 280px !important;
+    max-width: 560px !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #chatSplitHandle {
+    display: block !important;
+    width: 12px !important;
+    min-width: 12px !important;
+    flex: 0 0 12px !important;
+    align-self: stretch !important;
+    position: relative !important;
+    z-index: 4 !important;
+    pointer-events: auto !important;
+    touch-action: none !important;
+    cursor: col-resize !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #chatSplitHandle::before {
+    display: block !important;
+    content: "" !important;
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 50% !important;
+    width: 2px !important;
+    transform: translateX(-50%) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-radius: 999px !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (max-width: 680.98px) {
+  #chatSplitHandle,
+  #chatSplitHandle::before {
+    display: none !important;
+  }
+}

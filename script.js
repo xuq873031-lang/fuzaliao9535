@@ -430,8 +430,10 @@ function syncMessagesViewChrome() {
   const mobileTopbar = document.querySelector('.mobile-topbar');
   const mobileTabbar = document.querySelector('.mobile-tabbar');
   const inActiveChat = appState.currentView === 'messagesView' && !!appState.activeConversationId;
+  const mobileChatOpen = inActiveChat && window.matchMedia('(max-width: 991.98px)').matches;
   if (mobileTopbar) mobileTopbar.classList.toggle('d-none', inActiveChat);
   if (mobileTabbar) mobileTabbar.classList.toggle('d-none', inActiveChat);
+  document.body.classList.toggle('mobile-chat-open', mobileChatOpen);
 }
 
 function activateConversation(roomId, options = {}) {
@@ -542,8 +544,8 @@ async function openGroupMemberContextMenu(x, y, roomId, targetUserId) {
 
   const actor = {
     isOwner: me.role === 'owner',
-    canKick: !!appState.currentUser?.canKickMembers && !!(me.role === 'owner' || me.can_kick),
-    canMute: !!appState.currentUser?.canMuteMembers && !!(me.role === 'owner' || me.can_mute)
+    canKick: !!(me.role === 'owner' || me.can_kick || appState.currentUser?.canKickMembers),
+    canMute: !!(me.role === 'owner' || me.can_mute || appState.currentUser?.canMuteMembers)
   };
   const isSelf = Number(target.user_id) === Number(appState.currentUser?.id);
   const targetDelegated = !!(target.can_kick || target.can_mute);
@@ -556,7 +558,7 @@ async function openGroupMemberContextMenu(x, y, roomId, targetUserId) {
   const muteText = target.muted ? '解除禁言' : '禁言';
   menu.innerHTML = `
     ${canMuteTarget ? `<button class="dropdown-item" type="button" data-action="mute">${muteText}</button>` : ''}
-    ${canKickTarget ? '<button class="dropdown-item text-danger" type="button" data-action="remove">移除出群</button>' : ''}
+    ${canKickTarget ? '<button class="dropdown-item text-danger" type="button" data-action="remove">踢出群</button>' : ''}
   `;
   appState.groupMemberMenuState = {
     roomId: Number(roomId),
@@ -6664,6 +6666,8 @@ function bindChatEvents() {
   const forwardTargetSearchInput = document.getElementById('forwardTargetSearchInput');
   const chatHeaderMain = document.getElementById('chatHeaderMain');
   const chatAvatar = document.getElementById('chatAvatar');
+  const mobileBackToListBtn = document.getElementById('mobileBackToListBtn');
+  const mobileChatMoreBtn = document.getElementById('mobileChatMoreBtn');
   const emojiToggleBtn = document.getElementById('emojiToggleBtn');
   const directDetailsHistorySearchBtn = document.getElementById('directDetailsHistorySearchBtn');
   const directDetailsHistoryPhotosBtn = document.getElementById('directDetailsHistoryPhotosBtn');
@@ -7144,6 +7148,27 @@ function bindChatEvents() {
       if (conv.type === 'group') {
         openChatDetailsPanel();
       }
+    });
+  }
+  if (mobileBackToListBtn) {
+    mobileBackToListBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      goBackOneLevelFromChat();
+    });
+  }
+  if (mobileChatMoreBtn) {
+    mobileChatMoreBtn.addEventListener('click', (e) => {
+      const conv = findConversationById(appState.activeConversationId);
+      e.preventDefault();
+      e.stopPropagation();
+      if (!conv) return;
+      if (conv.type === 'group') {
+        openChatDetailsPanel();
+        return;
+      }
+      const friend = getOtherUserInPrivateConversation(conv);
+      if (friend) openFriendProfileModal(friend.id);
     });
   }
 
@@ -7783,6 +7808,7 @@ function renderMessages(options = {}) {
   const chatHeaderMain = document.getElementById('chatHeaderMain');
   const chatGroupMenuWrap = document.getElementById('chatGroupMenuWrap');
   const chatGroupMenuBtn = document.getElementById('chatGroupMenuBtn');
+  const mobileChatMoreBtn = document.getElementById('mobileChatMoreBtn');
   if (!listEl || !titleEl || !subEl || !loadMoreBtn || !composer) return;
   normalizeChatScrollContainer();
   handleConversationContextSwitch();
@@ -7804,6 +7830,7 @@ function renderMessages(options = {}) {
     if (avatarEl) avatarEl.src = DEFAULT_AVATAR;
     if (chatHeader) chatHeader.classList.add('d-none');
     if (pinnedBar) pinnedBar.classList.add('d-none');
+    if (mobileChatMoreBtn) mobileChatMoreBtn.classList.add('d-none');
     if (emptyStateEl) emptyStateEl.classList.remove('d-none');
     listEl.classList.add('d-none');
     if (chatGroupMenuWrap) chatGroupMenuWrap.classList.add('d-none');
@@ -7823,6 +7850,7 @@ function renderMessages(options = {}) {
   setChatPaneVisible(true);
   syncMessagesViewChrome();
   if (chatHeader) chatHeader.classList.remove('d-none');
+  if (mobileChatMoreBtn) mobileChatMoreBtn.classList.toggle('d-none', !window.matchMedia('(max-width: 991.98px)').matches);
   if (emptyStateEl) emptyStateEl.classList.add('d-none');
   listEl.classList.remove('d-none');
   updateMultiSelectBar();
