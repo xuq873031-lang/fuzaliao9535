@@ -3475,7 +3475,22 @@ function bindNavigationEvents() {
   const conversationSearchFocusBtn = document.getElementById('conversationSearchFocusBtn');
   if (conversationSearchFocusBtn) {
     conversationSearchFocusBtn.addEventListener('click', () => {
-      openGlobalSearchModal();
+      const input = document.getElementById('conversationSearchInput');
+      if (input) {
+        input.focus();
+        input.select?.();
+      } else {
+        openGlobalSearchModal();
+      }
+    });
+  }
+
+  const conversationSearchInput = document.getElementById('conversationSearchInput');
+  if (conversationSearchInput) {
+    conversationSearchInput.value = appState.conversationSearchKeyword || '';
+    conversationSearchInput.addEventListener('input', () => {
+      appState.conversationSearchKeyword = conversationSearchInput.value.trim();
+      renderConversationList();
     });
   }
 
@@ -7438,7 +7453,7 @@ function renderConversationList() {
   });
 
   if (!list.length) {
-    box.innerHTML = '<div class="conversation-empty-hint"><div class="conversation-empty-copy">暂无聊天</div></div>';
+    box.innerHTML = '<div class="conversation-empty-hint"><div class="conversation-empty-copy">还没有会话</div></div>';
     renderMessages();
     return;
   }
@@ -7451,8 +7466,8 @@ function renderConversationList() {
       return ct >= lt ? curr : latest;
     }, null);
     const lastPreview = lastMsg
-      ? (isImageMessageText(lastMsg.text) ? '[图片]' : lastMsg.text.slice(0, 18))
-      : '';
+      ? (isImageMessageText(lastMsg.text) ? '[图片]' : lastMsg.text.slice(0, 24))
+      : '暂无消息';
     const lastTime = lastMsg ? formatConversationTime(lastMsg.createdAt) : '';
     const avatar = getConversationAvatar(conv);
     const isPinned = isConversationPinned(conv);
@@ -7460,14 +7475,8 @@ function renderConversationList() {
     btn.className = `list-group-item list-group-item-action conversation-item-btn ${appState.activeConversationId === conv.id ? 'active' : ''} ${isPinned ? 'tg-pinned' : ''}`;
 
     const badge = conv.unreadCount > 0 ? `<span class="unread-dot">${conv.unreadCount > 99 ? '99+' : conv.unreadCount}</span>` : '';
-    const muteBadge = isConversationMuted(conv.id) ? '<span class="badge text-bg-secondary">免打扰</span>' : '';
-    const onlineText = conv.type === 'group'
-      ? `${conv.memberCount || conv.members.length}人群聊`
-      : (() => {
-        const other = getOtherUserInPrivateConversation(conv);
-        const on = !!other?.online;
-        return `<span class="online-dot ${on ? 'on' : 'off'}"></span>${on ? '在线' : '离线'}`;
-      })();
+    const muteBadge = isConversationMuted(conv.id) ? '<i class="bi bi-bell-slash conversation-flag" title="免打扰"></i>' : '';
+    const pinBadge = isPinned ? '<i class="bi bi-pin-angle-fill conversation-flag" title="已置顶"></i>' : '';
     btn.innerHTML = `
       <div class="conversation-item">
         <img src="${avatar}" class="conversation-avatar" alt="avatar" />
@@ -7478,10 +7487,10 @@ function renderConversationList() {
           </div>
           <div class="conversation-bottom">
             <div class="conversation-preview ${appState.activeConversationId === conv.id ? 'text-light' : 'text-secondary'}">
-              ${onlineText}${lastPreview ? ` · ${lastPreview}` : ''}
+              ${escapeHtml(lastPreview)}
             </div>
             <div class="d-flex align-items-center gap-2">
-              ${isPinned ? '<span class="pin-badge" title="已置顶">置顶</span>' : ''}
+              ${pinBadge}
               ${muteBadge}
               ${badge}
             </div>

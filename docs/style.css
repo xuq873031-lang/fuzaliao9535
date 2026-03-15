@@ -5409,8 +5409,8 @@ body,
 /* Chat home and contacts refresh */
 .chat-home-topbar,
 .contacts-topbar {
-  display: grid;
-  grid-template-columns: 80px 1fr 80px;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
 }
@@ -5423,10 +5423,10 @@ body,
 
 .chat-home-title,
 .contacts-title {
-  text-align: center;
-  font-size: 20px;
+  text-align: left;
+  font-size: 21px;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
@@ -5478,7 +5478,39 @@ body,
 }
 
 .tg-conversation-header {
-  padding: 12px 14px 8px !important;
+  padding: 14px 14px 10px !important;
+}
+
+.conversation-home-search {
+  margin-top: 12px;
+}
+
+#messagesView .conversation-home-search .input-group {
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel-bg) 76%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
+}
+
+#messagesView .conversation-home-search .input-group-text,
+#messagesView .conversation-home-search .form-control {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#messagesView .conversation-home-search .input-group-text {
+  padding-left: 14px;
+  color: var(--text-secondary);
+}
+
+#messagesView .conversation-home-search .form-control {
+  padding: 11px 14px 11px 4px;
+  color: var(--text-primary);
+}
+
+#messagesView .conversation-home-search .form-control::placeholder {
+  color: var(--text-muted);
 }
 
 .tg-filter-tabs {
@@ -5491,26 +5523,26 @@ body,
 }
 
 .conversation-list {
-  padding: 2px 8px 12px;
+  padding: 6px 8px 12px;
 }
 
 .conversation-item-btn {
   position: relative;
-  margin-bottom: 8px;
-  padding: 14px !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 18px !important;
-  background: color-mix(in srgb, var(--card-bg) 82%, var(--panel-bg)) !important;
+  margin-bottom: 2px;
+  padding: 12px 10px !important;
+  border: 0 !important;
+  border-radius: 16px !important;
+  background: transparent !important;
 }
 
 .conversation-item-btn:hover {
-  background: color-mix(in srgb, var(--card-bg) 72%, var(--accent-soft)) !important;
+  background: color-mix(in srgb, var(--card-bg) 70%, transparent) !important;
 }
 
 .conversation-item-btn.active,
 .conversation-item-btn.active.tg-pinned {
-  background: color-mix(in srgb, var(--card-bg) 64%, var(--accent-soft)) !important;
-  border-color: rgba(var(--bs-primary-rgb), 0.28) !important;
+  background: color-mix(in srgb, var(--card-bg) 78%, var(--accent-soft)) !important;
+  border-color: transparent !important;
 }
 
 .conversation-item {
@@ -5520,7 +5552,7 @@ body,
 .conversation-avatar {
   width: 52px;
   height: 52px;
-  border-radius: 18px;
+  border-radius: 50%;
 }
 
 .conversation-name {
@@ -5530,12 +5562,14 @@ body,
 
 .conversation-preview {
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.35;
+  color: var(--text-secondary);
 }
 
 .conversation-time {
   font-size: 12px;
   font-weight: 600;
+  color: var(--text-muted);
 }
 
 .unread-dot {
@@ -5546,7 +5580,7 @@ body,
 }
 
 .conversation-empty-hint {
-  padding: 24px 16px;
+  padding: 22px 16px;
   text-align: center;
 }
 
@@ -5557,10 +5591,16 @@ body,
 }
 
 .conversation-empty-copy {
-  margin-top: 6px;
-  color: var(--text-secondary);
+  margin-top: 0;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.conversation-flag {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1;
 }
 
 .contacts-shell {
@@ -5853,15 +5893,19 @@ body,
 
 @media (max-width: 991.98px) {
   .chat-home-topbar {
-    grid-template-columns: 1fr auto;
+    gap: 10px;
   }
 
   .chat-home-actions {
     gap: 8px;
   }
 
+  #messagesView .conversation-home-search {
+    margin-top: 10px;
+  }
+
   .conversation-item-btn {
-    padding: 13px 14px !important;
+    padding: 12px 8px !important;
   }
 }
 
