@@ -6340,3 +6340,778 @@ body.main-open .mobile-tabbar {
   background: color-mix(in srgb, var(--panel-bg) 94%, var(--bg-primary)) !important;
   border-color: color-mix(in srgb, var(--border-color) 70%, transparent) !important;
 }
+
+/* ============================
+   Telegram Official Dark Theme Override
+   Scope: visual layer only
+   ============================ */
+:root,
+[data-bs-theme="light"],
+[data-bs-theme="dark"] {
+  --tg-telegram-bg: #171717;
+  --tg-telegram-sidebar: #1e1e1e;
+  --tg-telegram-topbar: #212121;
+  --tg-telegram-input: #242424;
+  --tg-telegram-bubble-out: #267bc4;
+  --tg-telegram-bubble-in: #2b2b2b;
+  --tg-telegram-text: #f0f0f0;
+  --tg-telegram-text-soft: #999999;
+  --tg-telegram-danger: #ff4b4b;
+  --tg-telegram-line: #333333;
+  --tg-telegram-hover: #262626;
+  --tg-telegram-elevated: #202020;
+  --tg-telegram-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+
+  --bg-primary: var(--tg-telegram-bg);
+  --bg-secondary: var(--tg-telegram-sidebar);
+  --bg-tertiary: var(--tg-telegram-topbar);
+  --panel-bg: var(--tg-telegram-sidebar);
+  --surface-elevated: var(--tg-telegram-elevated);
+  --card-bg: var(--tg-telegram-sidebar);
+  --chat-bg: var(--tg-telegram-bg);
+  --composer-bg: var(--tg-telegram-topbar);
+  --modal-bg: var(--tg-telegram-sidebar);
+  --overlay-bg: rgba(0, 0, 0, 0.62);
+  --input-bg: var(--tg-telegram-input);
+  --border-color: var(--tg-telegram-line);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --accent-color: #267bc4;
+  --accent-hover: #2e8adb;
+  --accent-strong: #267bc4;
+  --accent-soft: rgba(38, 123, 196, 0.18);
+  --accent-ghost: rgba(38, 123, 196, 0.1);
+  --message-outgoing-bg: var(--tg-telegram-bubble-out);
+  --message-incoming-bg: var(--tg-telegram-bubble-in);
+  --text-primary: var(--tg-telegram-text);
+  --text-secondary: #b2b2b2;
+  --text-muted: var(--tg-telegram-text-soft);
+  --text-on-accent: #f0f0f0;
+  --placeholder-color: #8b8b8b;
+
+  --tg-primary: var(--accent-color);
+  --tg-primary-strong: var(--accent-hover);
+  --tg-secondary: #5b9fda;
+  --tg-accent: #5b9fda;
+  --tg-bg: var(--bg-primary);
+  --tg-surface: var(--panel-bg);
+  --tg-surface-soft: var(--surface-elevated);
+  --tg-line: var(--border-color);
+  --tg-text: var(--text-primary);
+  --tg-text-soft: var(--text-secondary);
+  --tg-bubble-in: var(--message-incoming-bg);
+  --tg-bubble-out: var(--message-outgoing-bg);
+}
+
+html,
+body {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+body,
+body * {
+  scrollbar-color: #4a4a4a #1a1a1a;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #5b5b5b;
+}
+
+.app-gradient,
+#appRoot,
+#mainContainer,
+.app-shell,
+.main-card,
+.main-card > .card-body,
+.tg-shell,
+#messagesView,
+#friendsView,
+#groupsView,
+#profileView,
+.chat-pane,
+.conversation-pane,
+.contacts-shell,
+.settings-home-shell,
+.settings-detail-card,
+.settings-profile-panel,
+.theme-settings-panel,
+.appearance-live-card,
+#friendToolsPanel,
+#addFriendPanel,
+.contacts-new-friends-panel,
+.friend-profile-info,
+.search-panel-content,
+.search-panel-results,
+.chat-empty-state,
+.message-list,
+.conversation-list {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.main-card,
+.sidebar-card,
+.auth-card,
+.theme-settings-panel,
+.settings-detail-card,
+.settings-profile-panel,
+.profile-hero-card,
+.profile-form-card,
+#friendToolsPanel,
+#addFriendPanel,
+.contacts-new-friends-panel,
+.friend-profile-info,
+.appearance-live-card,
+.search-panel-content,
+.modal-content,
+.dropdown-menu,
+.offcanvas,
+.offcanvas.mobile-drawer,
+.group-info-drawer-panel {
+  background: var(--panel-bg) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: var(--tg-telegram-shadow) !important;
+  color: var(--text-primary) !important;
+}
+
+.auth-card,
+.main-card,
+.sidebar-card,
+.theme-settings-panel,
+.settings-detail-card,
+.settings-profile-panel,
+.profile-hero-card,
+.profile-form-card {
+  border: 1px solid var(--border-color) !important;
+}
+
+.mobile-topbar,
+.mobile-tabbar,
+.tg-conversation-header,
+#chatHeader,
+#chatComposer,
+.contacts-topbar,
+.chat-home-topbar,
+.contacts-quick-entry,
+.contacts-sort-menu,
+.settings-home-header,
+.settings-detail-header,
+.modal-header,
+.modal-footer,
+.offcanvas-header {
+  background: var(--tg-telegram-topbar) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+.sidebar-card.tg-rail-shell,
+.tg-conversation-pane,
+.contacts-shell .card-body,
+.contacts-list-wrap,
+.group-list-shell,
+.profile-view .profile-form-body,
+.profile-view .profile-hero-body {
+  background: var(--tg-telegram-sidebar) !important;
+}
+
+.conversation-list,
+.message-list,
+#groupList,
+#friendList,
+#groupMemberManageList,
+#historySearchResultList,
+#historyPhotosList,
+#forwardTargetList {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+.conversation-item-btn,
+.contact-list-item,
+.contacts-quick-entry-item,
+.group-member-preview-item,
+.list-group-item,
+.search-result-item,
+.settings-menu-item,
+.theme-preset-card,
+.theme-entry-btn,
+.theme-toggle-item,
+.message-bubble,
+.friend-request-item {
+  background: transparent !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.conversation-item-btn:hover,
+.contact-list-item:hover,
+.contacts-quick-entry-item:hover,
+.list-group-item:hover,
+.settings-menu-item:hover,
+.theme-entry-btn:hover,
+.theme-toggle-item:hover,
+.dropdown-item:hover,
+.dropdown-item:focus,
+.search-result-item:hover {
+  background: var(--tg-telegram-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.conversation-item-btn.active,
+.conversation-item-btn.active.tg-pinned,
+.settings-menu-item.active,
+.theme-preset-card.active,
+.theme-preset-card.selected,
+.tg-filter-tab.active,
+.mobile-tab.active,
+.tg-rail-btn.active {
+  background: rgba(38, 123, 196, 0.18) !important;
+  border-color: rgba(38, 123, 196, 0.4) !important;
+  color: var(--text-primary) !important;
+}
+
+.tg-rail-btn,
+.tg-rail-btn-logout,
+.mobile-tab,
+.mobile-topbar-btn,
+.chat-home-action,
+.tg-create-btn,
+.contacts-sort-btn,
+.contacts-add-btn,
+.btn-outline-secondary,
+.btn-outline-primary,
+.btn-outline-danger,
+.btn-outline-warning {
+  background: var(--tg-telegram-input) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+.tg-rail-btn:hover,
+.tg-rail-btn-logout:hover,
+.mobile-tab:hover,
+.mobile-topbar-btn:hover,
+.chat-home-action:hover,
+.tg-create-btn:hover,
+.contacts-sort-btn:hover,
+.contacts-add-btn:hover,
+.btn-outline-secondary:hover,
+.btn-outline-primary:hover,
+.btn-outline-danger:hover,
+.btn-outline-warning:hover {
+  background: var(--tg-telegram-hover) !important;
+  color: var(--text-primary) !important;
+  border-color: #3b3b3b !important;
+}
+
+.btn-primary,
+.btn-success,
+#sendMessageBtn {
+  background: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
+  color: var(--text-on-accent) !important;
+  box-shadow: none !important;
+}
+
+.btn-primary:hover,
+.btn-success:hover,
+#sendMessageBtn:hover {
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+}
+
+.btn:disabled,
+button:disabled,
+.form-control:disabled,
+.form-select:disabled {
+  opacity: 0.58 !important;
+  cursor: not-allowed !important;
+}
+
+.form-control,
+.form-select,
+textarea.form-control,
+input.form-control,
+#messageInput,
+#conversationSearchInput,
+#contactSearchInput,
+#friendSearchInput,
+#historySearchInput,
+#globalSearchInput,
+#loginPhone,
+#loginPassword,
+#regPhone,
+#regPassword,
+#regPasswordConfirm,
+#nicknameInput,
+#signatureInput {
+  background: var(--tg-telegram-input) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+.form-control:focus,
+.form-select:focus,
+textarea.form-control:focus,
+input.form-control:focus,
+#messageInput:focus {
+  background: var(--tg-telegram-input) !important;
+  border-color: rgba(38, 123, 196, 0.55) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 0 0 0.14rem rgba(38, 123, 196, 0.22) !important;
+}
+
+.form-control::placeholder,
+.form-select::placeholder,
+textarea.form-control::placeholder,
+input.form-control::placeholder,
+#messageInput::placeholder {
+  color: var(--placeholder-color) !important;
+  opacity: 1 !important;
+}
+
+.form-label,
+.modal-title,
+.offcanvas-title,
+h1, h2, h3, h4, h5, h6,
+.chat-home-title,
+.mobile-topbar-title,
+.contacts-page-title,
+.settings-title,
+.theme-panel-title,
+#chatTitle,
+.tg-conversation-header h5,
+.tg-conversation-header h6 {
+  color: var(--text-primary) !important;
+}
+
+.text-secondary,
+.small,
+.chat-empty-sub,
+.chat-subtitle,
+.contact-status,
+.conversation-snippet,
+.search-result-sub,
+.settings-menu-desc,
+.theme-panel-sub,
+.theme-entry-desc,
+#chatSubTitle,
+.form-text,
+.form-check-label.small.text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+.text-muted,
+.message-meta,
+.message-time,
+.conversation-time,
+.placeholder,
+.helper-text,
+.search-panel-empty,
+.empty-note {
+  color: var(--text-muted) !important;
+}
+
+.tg-search-wrap,
+.contacts-search-group,
+.search-panel-box,
+.search-panel-input,
+.search-panel-tabs,
+.contacts-quick-entry,
+.theme-entry-btn,
+.theme-toggle-item,
+.settings-menu-item,
+.theme-preset-card,
+.messageActionMenu,
+.pinned-message-bar,
+.chat-image-compose-card {
+  background: var(--surface-elevated) !important;
+  border-color: var(--border-color) !important;
+}
+
+.tg-search-wrap .input-group-text,
+.contacts-search-group .input-group-text,
+.search-panel-icon {
+  background: transparent !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.tg-search-wrap .bi-search,
+.contacts-search-group .bi-search,
+.chat-home-action i,
+.tg-create-btn i,
+.mobile-tab i,
+.tg-rail-icon i,
+.theme-entry-icon,
+.settings-menu-icon,
+.contacts-quick-entry-icon i {
+  color: inherit !important;
+}
+
+.tg-rail-btn[data-view="messagesView"] .tg-rail-icon,
+.mobile-tab[data-view="messagesView"] i,
+.chat-home-action.search i,
+.settings-menu-item[data-settings-section="appearance"] .settings-menu-icon {
+  color: #5aa9ff !important;
+}
+
+.tg-rail-btn[data-view="friendsView"] .tg-rail-icon,
+.mobile-tab[data-view="friendsView"] i,
+.contacts-add-btn i,
+.contacts-quick-entry-item.new-friends .contacts-quick-entry-icon i {
+  color: #63d48f !important;
+}
+
+.tg-rail-btn[data-view="groupsView"] .tg-rail-icon,
+.mobile-tab[data-view="groupsView"] i,
+.chat-home-action.plus i,
+.contacts-quick-entry-item.groups .contacts-quick-entry-icon i {
+  color: #f3b34a !important;
+}
+
+.tg-rail-btn[data-view="profileView"] .tg-rail-icon,
+.mobile-tab[data-view="profileView"] i,
+.settings-menu-item .settings-menu-icon {
+  color: #b089ff !important;
+}
+
+#friendReqBadgeDesktop,
+#friendReqBadgeMobile,
+.tg-rail-badge,
+.unread-badge,
+.message-unread-badge,
+.search-result-badge-danger {
+  background: var(--tg-telegram-danger) !important;
+  color: #fff !important;
+  border: 0 !important;
+}
+
+.conversation-avatar,
+.tg-rail-avatar,
+.chat-header-avatar,
+.contact-avatar,
+.friend-avatar,
+.message-avatar,
+.group-avatar {
+  border-radius: 999px !important;
+  object-fit: cover !important;
+}
+
+.message-row {
+  gap: 8px;
+}
+
+.message-bubble,
+.bubble,
+.msg-bubble,
+.message-content {
+  border-radius: 20px !important;
+  box-shadow: none !important;
+}
+
+.message-outgoing .message-bubble,
+.message-outgoing .bubble,
+.message-row.outgoing .message-bubble,
+.msg-out .msg-bubble {
+  background: var(--message-outgoing-bg) !important;
+  color: var(--text-on-accent) !important;
+}
+
+.message-incoming .message-bubble,
+.message-incoming .bubble,
+.message-row.incoming .message-bubble,
+.msg-in .msg-bubble,
+.message-bubble {
+  background: var(--message-incoming-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+.message-outgoing .message-meta,
+.message-outgoing .message-time,
+.message-row.outgoing .message-time {
+  color: rgba(240, 240, 240, 0.72) !important;
+}
+
+.message-incoming .message-meta,
+.message-incoming .message-time,
+.message-row.incoming .message-time {
+  color: var(--text-muted) !important;
+}
+
+#chatComposer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  background: var(--tg-telegram-topbar) !important;
+}
+
+.chat-tools-row .btn,
+#uploadImageBtn,
+#emojiToggleBtn,
+#voiceCallBtn,
+#videoCallBtn {
+  background: var(--tg-telegram-input) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.chat-tools-row .btn:hover,
+#uploadImageBtn:hover,
+#emojiToggleBtn:hover,
+#voiceCallBtn:hover,
+#videoCallBtn:hover {
+  background: var(--tg-telegram-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.chat-empty-state,
+#chatEmptyState,
+#welcomeState,
+.empty-state {
+  background: var(--bg-primary) !important;
+  color: var(--text-secondary) !important;
+}
+
+.chat-empty-icon,
+.chat-empty-icon i {
+  color: #5aa9ff !important;
+  background: rgba(38, 123, 196, 0.14) !important;
+}
+
+.chat-empty-title {
+  color: var(--text-primary) !important;
+}
+
+.conversation-pane {
+  width: var(--chat-split-width);
+  max-width: var(--chat-split-width);
+  flex: 0 0 var(--chat-split-width);
+}
+
+.chat-pane {
+  flex: 1 1 auto;
+}
+
+.chat-layout-row,
+#messagesView > .row {
+  gap: 0 !important;
+}
+
+.chat-split-handle {
+  background: var(--border-color) !important;
+}
+
+.chat-split-handle:hover,
+.chat-split-handle.dragging {
+  background: #4a4a4a !important;
+}
+
+.mobile-topbar,
+.mobile-tabbar {
+  backdrop-filter: none !important;
+}
+
+.mobile-tab {
+  color: var(--text-secondary) !important;
+}
+
+.mobile-tab.active {
+  color: var(--text-primary) !important;
+}
+
+.contacts-quick-entry-item,
+#friendToolsPanel .list-group-item,
+#addFriendPanel .list-group-item,
+#groupsView .list-group-item,
+#friendsView .list-group-item,
+#profileView .list-group-item {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+#groupsView,
+#friendsView,
+#profileView,
+#messagesView {
+  background: var(--bg-primary) !important;
+}
+
+#groupsView .btn,
+#friendsView .btn,
+#profileView .btn,
+#authContainer .btn {
+  box-shadow: none !important;
+}
+
+#authContainer,
+#authContainer .row,
+#authContainer .col-12,
+#authContainer .col-md-8,
+#authContainer .col-lg-6 {
+  background: transparent !important;
+}
+
+#authContainer .auth-card,
+#authContainer .card,
+#authContainer .card-body {
+  background: var(--panel-bg) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+#authContainer .alert,
+#authContainer .form-check,
+#authContainer .text-center,
+#authContainer .small {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+}
+
+#authContainer .btn-link,
+#authContainer a {
+  color: #78b8ff !important;
+}
+
+.modal-backdrop {
+  background: var(--overlay-bg) !important;
+}
+
+.modal-backdrop.show {
+  opacity: 1 !important;
+}
+
+.dropdown-item,
+.modal-body,
+.modal-footer,
+.offcanvas-body {
+  color: var(--text-primary) !important;
+}
+
+.dropdown-divider,
+hr,
+.border-top,
+.border-bottom,
+.border-start,
+.border-end {
+  border-color: var(--border-color) !important;
+}
+
+.search-panel-tab {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  border-color: transparent !important;
+}
+
+.search-panel-tab.active {
+  background: rgba(38, 123, 196, 0.18) !important;
+  border-color: rgba(38, 123, 196, 0.35) !important;
+  color: var(--text-primary) !important;
+}
+
+.pinned-message-bar {
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.pinned-message-accent {
+  color: #5aa9ff !important;
+}
+
+.pinned-message-clear {
+  color: var(--text-secondary) !important;
+}
+
+.pinned-message-clear:hover {
+  color: var(--text-primary) !important;
+}
+
+.messageActionMenu,
+#messageActionMenu {
+  background: var(--panel-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--tg-telegram-shadow) !important;
+}
+
+.messageActionMenu .dropdown-item,
+#messageActionMenu .dropdown-item {
+  color: var(--text-primary) !important;
+}
+
+.messageActionMenu .dropdown-item.text-danger,
+#messageActionMenu .dropdown-item.text-danger {
+  color: #ff8080 !important;
+}
+
+@media (max-width: 991.98px) {
+  #appRoot {
+    padding: 0 !important;
+  }
+
+  #mainContainer {
+    padding: 0 !important;
+  }
+
+  .main-card {
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    margin: 0 !important;
+  }
+
+  .sidebar-card.tg-rail-shell,
+  .chat-split-handle {
+    display: none !important;
+  }
+
+  #messagesView .chat-layout-row,
+  #messagesView > .row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+  }
+
+  #messagesView .conversation-pane {
+    min-width: 100% !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  #messagesView .chat-pane {
+    min-width: 100% !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  #messagesView.mobile-chat-active .conversation-pane {
+    display: none !important;
+  }
+
+  #messagesView.mobile-chat-active .chat-pane {
+    display: flex !important;
+  }
+
+  .mobile-topbar,
+  .mobile-tabbar {
+    background: var(--tg-telegram-topbar) !important;
+  }
+
+  #chatComposer {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+  }
+}
