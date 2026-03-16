@@ -1759,6 +1759,7 @@ function roomToConversation(room) {
     allowMemberInvite: !!room.allow_member_invite,
     inviteNeedApproval: room.invite_need_approval !== false,
     globalMute: !!room.global_mute,
+    peerLastReadMessageId: 0,
     hasMore: true
   };
 }
@@ -2645,7 +2646,17 @@ function handleWsEvent(evt) {
   }
 
   if (evt.type === 'read_receipt') {
-    // 可选事件：当前版本不展示“谁已读到哪里”，保留入口以便后续扩展
+    const roomId = Number(evt.room_id);
+    const readerId = Number(evt.user_id);
+    const lastReadMessageId = Number(evt.last_read_message_id || 0);
+    if (!roomId || !readerId || !lastReadMessageId) return;
+    if (readerId === Number(appState.currentUser?.id)) return;
+    const conv = findConversationById(roomId);
+    if (!conv) return;
+    conv.peerLastReadMessageId = Math.max(Number(conv.peerLastReadMessageId || 0), lastReadMessageId);
+    if (appState.activeConversationId === conv.id) {
+      renderMessages({ autoScroll: false });
+    }
     return;
   }
 
@@ -5052,6 +5063,8 @@ function bindGroupEvents() {
     });
   }
   const muteListBtn = document.getElementById('groupMuteListBtn');
+  const groupBottomExitBtn = document.getElementById('groupBottomExitBtn');
+  const groupBottomDissolveBtn = document.getElementById('groupBottomDissolveBtn');
   if (muteListBtn) {
     muteListBtn.addEventListener('click', async () => {
       const groupId = appState.managingGroupId;
@@ -5094,6 +5107,11 @@ function bindGroupEvents() {
   if (groupTopExitItem) groupTopExitItem.addEventListener('click', () => {
     handleExitGroup().catch((err) => console.warn('退出群失败', err.message));
   });
+  if (groupBottomExitBtn) {
+    groupBottomExitBtn.addEventListener('click', () => {
+      handleExitGroup().catch((err) => console.warn('退出群失败', err.message));
+    });
+  }
   const groupAvatarInput = document.getElementById('groupAvatarInput');
   if (groupAvatarInput) {
     groupAvatarInput.addEventListener('change', async (e) => {
@@ -5152,6 +5170,9 @@ function bindGroupEvents() {
         alert(`解散群失败：${err.message}`);
       }
     });
+  }
+  if (groupBottomDissolveBtn) {
+    groupBottomDissolveBtn.addEventListener('click', () => groupTopDissolveItem?.click());
   }
   const manageModalEl = document.getElementById('groupManageModal');
   if (manageModalEl) {
@@ -5427,6 +5448,8 @@ async function refreshGroupManageModal(groupId) {
   const topOpenSettingsItem = document.getElementById('groupTopOpenSettingsItem');
   const topMuteListItem = document.getElementById('groupTopMuteListItem');
   const topDissolveItem = document.getElementById('groupTopDissolveItem');
+  const groupBottomExitBtn = document.getElementById('groupBottomExitBtn');
+  const groupBottomDissolveBtn = document.getElementById('groupBottomDissolveBtn');
   if (select) {
     const current = Number(conv?.rateLimitSeconds || 0);
     select.value = String([0, 3, 5, 10].includes(current) ? current : 0);
@@ -5441,6 +5464,11 @@ async function refreshGroupManageModal(groupId) {
   if (topOpenSettingsItem) topOpenSettingsItem.disabled = false;
   if (topMuteListItem) topMuteListItem.disabled = !actor.canMute;
   if (topDissolveItem) topDissolveItem.disabled = !actor.isOwner;
+  if (groupBottomExitBtn) groupBottomExitBtn.disabled = false;
+  if (groupBottomDissolveBtn) {
+    groupBottomDissolveBtn.disabled = !actor.isOwner;
+    groupBottomDissolveBtn.classList.toggle('d-none', !actor.isOwner);
+  }
 }
 
 function renderGroupAddMemberOptions(groupId, members, isOwner) {
@@ -7681,6 +7709,11 @@ function buildMessageRow(msg, conv) {
   const messageContent = renderMessageContent(msg.text);
   const replySenderName = msg.replyToSenderId ? getDisplayNameByUserId(msg.replyToSenderId) : '';
   const replyText = msg.replyToContent ? summarizeMessageText(msg.replyToContent) : '';
+  const showDeliveryState = me && !isSystem && !msg.localPending && !msg.localFailed && !isRecalled;
+  const isRead = showDeliveryState && Number(conv?.peerLastReadMessageId || 0) >= Number(msg.id);
+  const statusIcon = showDeliveryState
+    ? `<span class="msg-status ${isRead ? 'msg-status-read' : 'msg-status-sent'}" aria-label="${isRead ? '已读' : '未读'}"><i class="bi ${isRead ? 'bi-check2-all' : 'bi-check2'}"></i></span>`
+    : '';
   const replyBlock = !isRecalled && msg.replyToMessageId
     ? `<div class="msg-reply-preview" data-reply-to-id="${msg.replyToMessageId}"><div class="fw-semibold">${escapeHtml(replySenderName || '消息')}</div><div>${escapeHtml(replyText || '引用消息')}</div></div>`
     : '';
@@ -7691,7 +7724,11 @@ function buildMessageRow(msg, conv) {
     ${senderName}
     ${replyBlock}
     <div>${messageContent}</div>
-    <div class="msg-meta">${formatTime(msg.createdAt)} ${stateText ? ` · ${stateText}` : ''}</div>
+    <div class="msg-meta">
+      <span class="msg-meta-time">${formatTime(msg.createdAt)}</span>
+      ${statusIcon}
+      ${stateText ? `<span class="msg-meta-state">${stateText}</span>` : ''}
+    </div>
   `;
   const replyPreviewEl = bubble.querySelector('.msg-reply-preview');
   if (replyPreviewEl && msg.replyToMessageId) {

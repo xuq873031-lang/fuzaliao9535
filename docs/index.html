@@ -785,8 +785,8 @@
             <h5 class="mb-0" id="groupManageTitle">群信息</h5>
             <div class="d-flex align-items-center gap-2">
               <div class="dropdown">
-                <button id="groupTopActionsBtn" class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  设置
+                <button id="groupTopActionsBtn" class="btn btn-sm btn-outline-secondary dropdown-toggle group-top-actions-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  更多
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                   <li><button id="groupTopOpenProfileItem" class="dropdown-item" type="button">群资料</button></li>
@@ -810,7 +810,7 @@
             </div>
           </div>
           <div class="group-info-drawer-body">
-            <div class="d-flex align-items-center gap-2 mb-3">
+            <div class="d-flex align-items-center gap-2 mb-3 group-manage-summary">
               <img id="groupManageAvatar" class="chat-header-avatar" alt="group-avatar" />
               <div>
                 <div id="groupManageName" class="fw-semibold">群聊</div>
@@ -818,7 +818,7 @@
               </div>
             </div>
 
-            <div class="border rounded-3 p-3 mb-3">
+            <div class="border rounded-3 p-3 mb-3 group-manage-section group-manage-member-preview">
               <div class="d-flex align-items-center justify-content-between mb-2">
                 <div class="small text-secondary">群成员</div>
                 <div class="d-flex gap-2">
@@ -829,7 +829,7 @@
               <div id="groupMemberPreviewList" class="d-flex flex-wrap gap-2"></div>
             </div>
 
-            <div class="border rounded-3 p-3 mb-3 bg-body-tertiary">
+            <div class="border rounded-3 p-3 mb-3 bg-body-tertiary group-manage-section">
               <div class="d-flex align-items-center justify-content-between mb-2">
                 <div class="small text-secondary">群简介</div>
                 <div class="d-flex gap-2">
@@ -842,7 +842,7 @@
               <textarea id="groupDescriptionEditor" class="form-control mt-2 d-none" rows="3" maxlength="300" placeholder="输入群简介（最多 300 字）"></textarea>
             </div>
 
-            <div class="border rounded-3 p-3 mb-3 bg-body-tertiary">
+            <div class="border rounded-3 p-3 mb-3 bg-body-tertiary group-manage-section">
               <div class="d-flex align-items-center justify-content-between mb-2">
                 <div class="small text-secondary">群公告</div>
                 <div class="d-flex gap-2">
@@ -855,7 +855,7 @@
               <textarea id="groupNoticeEditor" class="form-control mt-2 d-none" rows="3" maxlength="300" placeholder="输入群公告（最多 300 字）"></textarea>
             </div>
 
-            <div class="border rounded-3 p-3 mb-3">
+            <div class="border rounded-3 p-3 mb-3 group-manage-section group-manage-meta-section">
               <div class="small text-secondary mb-2">群基础信息</div>
               <div class="mb-2">
                 <div class="small text-secondary">群主</div>
@@ -872,7 +872,7 @@
             </div>
 
             <div id="groupMemberSection" class="collapse mb-3">
-              <div class="border rounded-3 p-3">
+              <div class="border rounded-3 p-3 group-manage-section">
                 <div class="mb-3">
                   <label for="groupMemberSearchInput" class="form-label">搜索群成员</label>
                   <input id="groupMemberSearchInput" class="form-control" placeholder="输入昵称搜索" />
@@ -892,7 +892,7 @@
             </div>
 
             <div id="groupSettingsSection" class="collapse">
-              <div class="border rounded-3 p-3">
+              <div class="border rounded-3 p-3 group-manage-section">
                 <div class="form-check form-switch mb-2">
                   <input class="form-check-input" type="checkbox" id="groupAllowFriendAddSwitch" />
                   <label class="form-check-label" for="groupAllowFriendAddSwitch">群内互加好友</label>
@@ -926,6 +926,11 @@
                   <button id="groupSettingsSaveBtn" class="btn btn-primary btn-sm" type="button">保存群设置</button>
                 </div>
               </div>
+            </div>
+
+            <div class="group-manage-danger-zone">
+              <button id="groupBottomExitBtn" class="btn btn-outline-danger btn-sm" type="button">退出群聊</button>
+              <button id="groupBottomDissolveBtn" class="btn btn-outline-danger btn-sm" type="button">解散群聊</button>
             </div>
 
             <input id="groupAvatarInput" type="file" accept="image/*" class="d-none" />

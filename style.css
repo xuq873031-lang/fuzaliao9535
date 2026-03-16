@@ -7479,6 +7479,163 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
+/* Chat light theme visibility */
+[data-bs-theme="light"] #chatHeader,
+[data-bs-theme="light"] #chatComposer {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(16px);
+}
+
+[data-bs-theme="light"] .tg-chat-pane,
+[data-bs-theme="light"] #messageList,
+[data-bs-theme="light"] .message-list {
+  background-color: #eef3f9 !important;
+  background-image:
+    radial-gradient(circle at 24px 24px, rgba(153, 170, 191, 0.16) 0, rgba(153, 170, 191, 0.16) 1.2px, transparent 1.2px),
+    radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.55) 0, rgba(255, 255, 255, 0.55) 1px, transparent 1px);
+  background-size: 32px 32px, 32px 32px;
+}
+
+@media (min-width: 681px) {
+  [data-bs-theme="light"] #chatSplitHandle::before {
+    width: 1px !important;
+    background: rgba(97, 113, 135, 0.38) !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28) !important;
+  }
+}
+
+/* Telegram-like sent/read ticks */
+.msg-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.msg-meta-time,
+.msg-meta-state {
+  display: inline-flex;
+  align-items: center;
+}
+
+.msg-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.msg-status-sent {
+  color: rgba(240, 240, 240, 0.66);
+}
+
+.msg-status-read {
+  color: #8fd3ff;
+}
+
+.msg-row.me .msg-status-sent {
+  color: rgba(247, 251, 255, 0.76);
+}
+
+.msg-row.me .msg-status-read {
+  color: #d8efff;
+}
+
+/* Group profile simplification */
+.group-info-drawer-panel {
+  width: min(420px, calc(100vw - 24px)) !important;
+  border-radius: 26px 0 0 26px !important;
+}
+
+.group-info-drawer-header {
+  padding: 18px 18px 14px !important;
+}
+
+.group-top-actions-btn {
+  min-width: 0 !important;
+  padding-inline: 12px !important;
+}
+
+.group-info-drawer-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px !important;
+}
+
+.group-manage-summary {
+  padding: 2px 2px 8px;
+  margin-bottom: 0 !important;
+}
+
+.group-manage-section {
+  margin-bottom: 0 !important;
+  padding: 16px !important;
+  border-radius: 18px !important;
+  background: color-mix(in srgb, var(--panel-bg) 94%, white 2%) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: none !important;
+}
+
+.group-manage-section .small.text-secondary,
+.group-manage-section .form-label,
+.group-manage-meta-section .small.text-secondary {
+  color: var(--text-muted) !important;
+}
+
+.group-manage-member-preview .btn,
+#groupMemberSection .input-group .btn,
+#groupSettingsSection .btn {
+  min-height: 34px;
+}
+
+#groupMemberPreviewList {
+  gap: 8px !important;
+}
+
+.group-member-preview-item {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+#groupMemberSection .border-top {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+#groupMemberManageList {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.group-manage-danger-zone {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.group-manage-danger-zone .btn {
+  justify-content: center;
+}
+
+@media (max-width: 991.98px) {
+  .group-info-drawer-panel {
+    width: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  .group-info-drawer-header {
+    padding: 14px 14px 12px !important;
+  }
+
+  .group-info-drawer-body {
+    padding: 0 14px calc(env(safe-area-inset-bottom, 0px) + 14px) !important;
+  }
+
+  .group-manage-section {
+    padding: 14px !important;
+    border-radius: 16px !important;
+  }
+}
+
 .modal-backdrop {
   background: var(--overlay-bg) !important;
 }
