@@ -7500,3 +7500,36 @@ body.main-open .mobile-tabbar {
     border-radius: 16px !important;
   }
 }
+
+/* Message receipt polish */
+.msg-meta {
+  gap: 4px;
+}
+
+.msg-status {
+  margin-left: 1px;
+  transform: translateY(0.5px);
+}
+
+.msg-status i {
+  font-size: 12px;
+}
+
+/* Group drawer simplify to current group context */
+.group-info-drawer .dropdown-menu #groupTopOpenProfileItem,
+.group-info-drawer .dropdown-menu #groupTopEditNameItem,
+.group-info-drawer .dropdown-menu #groupTopEditDescriptionItem,
+.group-info-drawer .dropdown-menu #groupTopEditNoticeItem,
+.group-info-drawer .dropdown-menu #groupTopAvatarItem,
+.group-info-drawer .dropdown-menu #groupTopHistorySearchItem,
+.group-info-drawer .dropdown-menu #groupTopHistoryPhotosItem {
+  display: none !important;
+}
+
+.group-info-drawer #groupManageQr {
+  display: none !important;
+}
+
+.group-info-drawer .group-manage-meta-section > div:last-child {
+  display: none !important;
+}

@@ -444,6 +444,9 @@ function activateConversation(roomId, options = {}) {
   const autoScroll = options.autoScroll !== false;
   const conv = findConversationById(roomId);
   if (!conv) return Promise.resolve();
+  if (Number(appState.managingGroupId || 0) && Number(appState.managingGroupId || 0) !== Number(conv.id)) {
+    closeGroupInfoDrawer();
+  }
   appState.activeConversationId = conv.id;
   appState.multiSelectMode = false;
   appState.multiSelectedMessageIds = new Set();
@@ -617,9 +620,19 @@ function closeGroupInfoDrawer() {
   if (topBtn) bootstrap.Dropdown.getOrCreateInstance(topBtn).hide();
   drawer.classList.remove('open');
   drawer.setAttribute('aria-hidden', 'true');
+  appState.managingGroupId = null;
   syncGroupDrawerLayout();
   drawer.dispatchEvent(new Event('drawer:closed'));
   return true;
+}
+
+function syncGroupDrawerContext() {
+  const conv = findConversationById(appState.activeConversationId);
+  const shouldStayOpen = appState.currentView === 'messagesView'
+    && !!conv
+    && conv.type === 'group'
+    && Number(appState.managingGroupId || 0) === Number(conv.id);
+  if (!shouldStayOpen) closeGroupInfoDrawer();
 }
 
 function applyConversationLocalState() {
@@ -1292,6 +1305,7 @@ function switchView(viewId, options = {}) {
   }
 
   appState.currentView = viewId;
+  if (viewId !== 'messagesView') closeGroupInfoDrawer();
   document.querySelectorAll('.view-section').forEach((el) => el.classList.add('d-none'));
   document.getElementById(viewId).classList.remove('d-none');
 
@@ -1306,6 +1320,7 @@ function switchView(viewId, options = {}) {
   syncMessagesViewChrome();
 
   if (viewId === 'messagesView') {
+    syncGroupDrawerContext();
     renderConversationList();
     renderMessages();
     if (appState.activeConversationId) startRoomPolling(appState.activeConversationId);
@@ -7931,6 +7946,7 @@ function renderMessages(options = {}) {
     return;
   }
   setChatPaneVisible(true);
+  syncGroupDrawerContext();
   syncMessagesViewChrome();
   if (chatHeader) chatHeader.classList.remove('d-none');
   if (mobileChatMoreBtn) mobileChatMoreBtn.classList.toggle('d-none', !window.matchMedia('(max-width: 991.98px)').matches);
